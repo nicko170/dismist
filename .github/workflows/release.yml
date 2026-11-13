@@ -66,12 +66,13 @@ jobs:
             os=${target%/*}
             arch=${target#*/}
             stage="staging/${os}-${arch}"
-            mkdir -p "$stage/juniper/tools" "$stage/docs" "$stage/ops/kubernetes"
+            mkdir -p "$stage/docs/juniper/tools" "$stage/docs/juniper/images" "$stage/ops/kubernetes"
             cp "dist/dismist-${os}-${arch}" "$stage/dismist"
             cp "dist/dismistd-${os}-${arch}" "$stage/dismistd"
             cp README.md LICENSE prepare_rw_overlay.py "$stage/"
-            cp juniper/AP33.md "$stage/juniper/"
-            cp juniper/tools/serial_response.py "$stage/juniper/tools/"
+            cp docs/juniper/AP33.md "$stage/docs/juniper/"
+            cp docs/juniper/tools/serial_response.py "$stage/docs/juniper/tools/"
+            cp docs/juniper/images/ap33-uart.png "$stage/docs/juniper/images/"
             cp docs/{deployment,onboarding,sites-and-history,config-surface,kubernetes}.md "$stage/docs/"
             cp ops/dismistd.service "$stage/ops/"
             cp ops/kubernetes/* "$stage/ops/kubernetes/"

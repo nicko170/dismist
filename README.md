@@ -9,7 +9,7 @@ prepares local credentials. A site contains APs, WLANs, clients, events, and
 history. See [deployment](docs/deployment.md) for installation, AP preparation,
 service operation, and backups. For a new AP, follow
 [AP onboarding](docs/onboarding.md); for AP33 hardware, use the
-[Juniper AP33 walkthrough](juniper/AP33.md).
+[Juniper AP33 walkthrough](docs/juniper/AP33.md).
 
 Prometheus metrics are available at `http://127.0.0.1:9090/metrics` on the
 controller host. Site Settings can send validated SSH public keys to all APs
@@ -33,7 +33,7 @@ sudo "$(go env GOPATH)/bin/dismistd"
 and WSS certificate, writes the bundled AP33 base configuration, and prints
 the new admin token. Open `http://SERVER_IP:8088/`, sign in, and create a site
 with its country, then add a WLAN. Follow the
-[AP33 rooting and onboarding guide](juniper/AP33.md) to prepare and register
+[AP33 rooting and onboarding guide](docs/juniper/AP33.md) to prepare and register
 each physical AP. The site supplies the country, SSID, VLAN, and passphrase;
 you do not need to write an AP config JSON file.
 
@@ -68,7 +68,7 @@ provision an unprepared factory AP.
 
 - [Deployment and backups](docs/deployment.md)
 - [AP onboarding](docs/onboarding.md)
-- [Juniper AP33 onboarding](juniper/AP33.md)
+- [Juniper AP33 onboarding](docs/juniper/AP33.md)
 - [Sites and history](docs/sites-and-history.md)
 - [Config field surface](docs/config-surface.md)
 - [Kubernetes deployment](docs/kubernetes.md)

@@ -59,7 +59,7 @@ the per-AP authentication secret.
 
 ## Vendor preparation
 
-- [Juniper AP33 onboarding](../juniper/AP33.md)
+- [Juniper AP33 onboarding](juniper/AP33.md)
 
 An AP's identity, secret, and trust material must be prepared for that
 specific unit before its WSS connection can begin. Do not copy credentials
