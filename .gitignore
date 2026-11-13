@@ -1,0 +1,15 @@
+/evidence/
+/data/
+/references/
+__pycache__/
+/web/node_modules/
+/web/*.tsbuildinfo
+/.worktrees/
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.token
+*.db

@@ -1,0 +1,180 @@
+# Observed AP33 configuration surface
+
+The paths below were extracted from the private AP33 0.8 firmware config template. They are field names and value types only; no passphrases, keys, claim codes, or device secrets appear here. The controller preserves unknown JSON fields and applies site, AP, and WLAN advanced patches before typed fields. Newer firmware may add or change fields.
+
+## Top-level sections
+
+`APRecovery`, `AVS`, `AppDef`, `BlackList`, `CnaHostnames`, `Country`, `Dnsmasq`, `Hostname`, `HttpRedirector`, `ID`, `IrqBalance`, `L2TPTunnels`, `LED`, `Monitor`, `Name`, `OrgID`, `OurOUIs`, `PACE_KernelModCounters`, `PAPIOpaque`, `PoePwrConstrained`, `ProxyArp`, `Radios`, `RootAuthorizedSSHKeys`, `SSH`, `SVIs`, `SiteID`, `SiteName`, `Stats`, `Steer`, `SwitchPorts`, `Timestamp`, `UUID`, `VLANNames`, `WIDS`, `WLANs`, `_errors`
+
+## Leaf paths
+
+| Path | Observed type |
+| --- | --- |
+| `APRecovery.Disabled` | bool |
+| `AVS.MarginFast` | int |
+| `AVS.MarginSlow` | int |
+| `AppDef[]` | array (empty) |
+| `BlackList.WCMacs[]` | array (empty) |
+| `CnaHostnames[]` | str |
+| `Country` | str |
+| `Dnsmasq.Enabled` | bool |
+| `Hostname` | str |
+| `HttpRedirector.Enabled` | bool |
+| `ID` | str |
+| `IrqBalance.Enabled` | bool |
+| `IrqBalance.Interval` | float |
+| `L2TPTunnels[]` | array (empty) |
+| `LED.Brightness` | int |
+| `Monitor.CCRev` | str |
+| `Monitor.Enabled` | bool |
+| `Monitor.EthUplink.Device` | str |
+| `Monitor.EthUplink.Enabled` | bool |
+| `Monitor.LowTxPowerDetect.RequestMitigation` | bool |
+| `Monitor.NonDFSIdleProbeAssist` | bool |
+| `Monitor.PcapWLAN.ClientFirstBkgrdEnabled` | bool |
+| `Monitor.Radiotap` | bool |
+| `Monitor.RadiotapScan` | bool |
+| `Monitor.SteerEnabled` | bool |
+| `Monitor.Utilization.ScanEnabled` | bool |
+| `Name` | str |
+| `OrgID` | str |
+| `OurOUIs[]` | str |
+| `PACE_KernelModCounters.Enabled` | bool |
+| `PAPIOpaque` | str |
+| `PoePwrConstrained.EnableOn304` | bool |
+| `PoePwrConstrained.EnableRadios` | bool |
+| `ProxyArp.Disable_ReqSpoofCheck` | bool |
+| `ProxyArp.Disable_RespSpoofCheck` | bool |
+| `ProxyArp.Enabled` | bool |
+| `Radios[].Band` | str |
+| `Radios[].CCRev` | str |
+| `Radios[].CCRevSP` | str |
+| `Radios[].Channel` | int |
+| `Radios[].NonAggrRegulate.Disabled` | bool |
+| `Radios[].NonAggrRegulate.Enabled` | bool |
+| `Radios[].Power` | int |
+| `Radios[].PreambleLength` | int |
+| `Radios[].ProbeControl.ProbeReqSW` | bool |
+| `Radios[].ProbeControl.ProbeRespSW` | bool |
+| `Radios[].QOS.Dscp2Ac[].AC` | int |
+| `Radios[].QOS.Dscp2Ac[].DSCP` | int |
+| `Radios[].RRM.Channel` | int |
+| `Radios[].RRM.Power` | int |
+| `Radios[].RRM.Width` | int |
+| `Radios[].Width` | int |
+| `RootAuthorizedSSHKeys[]` | str |
+| `SSH.AuthorizedKeys[]` | str |
+| `SSH.Disabled` | bool |
+| `SSH.External` | bool |
+| `SVIs[].DHCP.Enabled` | bool |
+| `SVIs[].DHCP.Hostname` | str |
+| `SVIs[].DHCP_Ena` | bool |
+| `SVIs[].MTU` | int |
+| `SVIs[].Vlan_ID` | str |
+| `SVIs[].dhcp_enabled` | bool |
+| `SiteID` | str |
+| `SiteName` | str |
+| `Stats.FullInterval` | int |
+| `Stats.Interval` | float |
+| `Stats.MemInterval` | int |
+| `Stats.SplitWifiAndBleRssiStats` | bool |
+| `Stats.UseSeparateBLEScanTopic` | bool |
+| `Stats.UseSeparateWifiScanTopic` | bool |
+| `Steer.ProbeRequest.ClientPkts` | bool |
+| `Steer.ProbeRequest.ClientPktsSiteOnly` | bool |
+| `Steer.ProbeRequest.Enabled` | bool |
+| `Steer.ProbeRequest.RogueDetectOnly` | bool |
+| `Steer.ProbeRequest.StatsAgeOutRandom` | bool |
+| `SwitchPorts[].Name` | str |
+| `SwitchPorts[].PortVlanID` | str |
+| `SwitchPorts[].Vlans[]` | str |
+| `Timestamp` | float |
+| `UUID` | str |
+| `VLANNames` | object (empty) |
+| `WIDS[]` | array (empty) |
+| `WLANs[].AMPDU.RST` | bool |
+| `WLANs[].Acct_Interim_Interval` | int |
+| `WLANs[].Auth.AKM.WPA2_PSK` | bool |
+| `WLANs[].Auth.AKM.WPA3_PSK` | bool |
+| `WLANs[].Auth.GroupMasterRekeyIntervalSec` | int |
+| `WLANs[].Auth.GroupRekeyIntervalSec` | int |
+| `WLANs[].Auth.MultiPSK` | NoneType |
+| `WLANs[].Auth.PSK` | str |
+| `WLANs[].Auth.Pairwise.CCMP` | bool |
+| `WLANs[].Auth.Pairwise.TKIP` | bool |
+| `WLANs[].Auth.Pairwise.WPA1.CCMP` | bool |
+| `WLANs[].Auth.Pairwise.WPA1.TKIP` | bool |
+| `WLANs[].Auth.SAEAntiCloggTokenThreshold` | int |
+| `WLANs[].Auth.Type` | str |
+| `WLANs[].Auth.WEP` | NoneType |
+| `WLANs[].BandConfigs[].BSSIDIndex` | int |
+| `WLANs[].BandConfigs[].Band` | str |
+| `WLANs[].BandConfigs[].Steer.DenyDot11Auth` | bool |
+| `WLANs[].BandConfigs[].Steer.DenyDot11AuthConsecNum` | int |
+| `WLANs[].BandConfigs[].Steer.DenyDot11AuthDualBandOnly` | bool |
+| `WLANs[].BandConfigs[].Steer.DenyDot11AuthRSSIThresh` | int |
+| `WLANs[].BandConfigs[].Steer.NoProbeRespAll` | bool |
+| `WLANs[].Bands[]` | str |
+| `WLANs[].BcastFilter.AllowDHCPtoWirelessBridge` | bool |
+| `WLANs[].BcastFilter.AllowICMPv6NeighborDiscovery` | bool |
+| `WLANs[].BcastFilter.Arp` | bool |
+| `WLANs[].BcastFilter.DHCPBcast2UnicastResponse` | bool |
+| `WLANs[].BcastFilter.Dhcp` | bool |
+| `WLANs[].BcastFilter.DropDHCPUnknownResponse` | bool |
+| `WLANs[].BcastFilter.Mcast` | bool |
+| `WLANs[].BcastFilter.Mdns_allow` | bool |
+| `WLANs[].BcastFilter.Ssdp_allow` | bool |
+| `WLANs[].BlackList.Cloud.Enabled` | bool |
+| `WLANs[].BlackList.Cloud.MgmtTypeWLC` | bool |
+| `WLANs[].BlackList.Enabled` | bool |
+| `WLANs[].DTIM.Period` | int |
+| `WLANs[].DhcpOption82` | bool |
+| `WLANs[].DhcpOption82Data` | NoneType |
+| `WLANs[].DisableRsnCapValidation` | bool |
+| `WLANs[].DisableV1RoamNotifications` | bool |
+| `WLANs[].DisableV2RoamNotifications` | bool |
+| `WLANs[].DisabledIEs` | object (empty) |
+| `WLANs[].Dot11w.Enabled` | bool |
+| `WLANs[].Dot11w.Required` | bool |
+| `WLANs[].Dot11w.SA_Query_Attempts` | int |
+| `WLANs[].Dot11w.SA_Query_Timeout` | int |
+| `WLANs[].Enabled` | bool |
+| `WLANs[].ForFTM` | bool |
+| `WLANs[].ForMesh` | bool |
+| `WLANs[].Hidden` | bool |
+| `WLANs[].ID` | str |
+| `WLANs[].Isolation` | bool |
+| `WLANs[].KeyCache.KeyEncryptKey` | str |
+| `WLANs[].KeyCache.LocalAPkeyCache` | bool |
+| `WLANs[].KeyCache.WLCkeyCache` | bool |
+| `WLANs[].MacAuth.Enabled` | bool |
+| `WLANs[].MaxStaAllowed` | int |
+| `WLANs[].NetIsolation` | bool |
+| `WLANs[].NoStaticIP` | bool |
+| `WLANs[].QOS.AccessClass` | int |
+| `WLANs[].QOS.Enabled` | bool |
+| `WLANs[].RateLimit.ClientDown` | int |
+| `WLANs[].RateLimit.ClientUp` | int |
+| `WLANs[].RateLimit.WlanDown` | int |
+| `WLANs[].RateLimit.WlanUp` | int |
+| `WLANs[].RateSets[].Band` | str |
+| `WLANs[].RateSets[].BasicRates[]` | int |
+| `WLANs[].RateSets[].HEMCSRateMask` | str |
+| `WLANs[].RateSets[].HTMCSRateMask` | str |
+| `WLANs[].RateSets[].LegacyRates[]` | int |
+| `WLANs[].RateSets[].VHTMCSRateMask` | str |
+| `WLANs[].RestrictDNS.FromDHCP` | bool |
+| `WLANs[].SSID` | str |
+| `WLANs[].Vlans[]` | str |
+| `WLANs[].WCInactivity.ReclaimTimeoutSec` | int |
+| `WLANs[].WCInactivity.SilentDeauthTimeout` | bool |
+| `WLANs[].WCInactivity.TimeoutSec` | int |
+| `WLANs[].WNM.BSSLoad` | bool |
+| `WLANs[].WNM.BSSTransitionManagement.Active` | bool |
+| `WLANs[].WNM.BSSTransitionManagement.Passive` | bool |
+| `WLANs[].WNM.CoLocatedReducedNeighborReport` | bool |
+| `WLANs[].WNM.NeighborReport` | bool |
+| `WLANs[].WNM.ReducedNeighborReport` | bool |
+| `WLANs[].Wxlan.AllowAllFlows` | bool |
+| `WLANs[].roamMode` | str |
+| `_errors[]` | array (empty) |

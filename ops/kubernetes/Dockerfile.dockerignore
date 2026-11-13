@@ -1,0 +1,16 @@
+**
+!go.mod
+!go.sum
+!webassets.go
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+!web/
+!web/package.json
+!web/package-lock.json
+!web/index.html
+!web/tsconfig.json
+!web/vite.config.ts
+!web/src/
+!web/src/**

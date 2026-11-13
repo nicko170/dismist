@@ -1,0 +1,1116 @@
+[
+  {
+    "path": "APRecovery.Disabled",
+    "type": "bool"
+  },
+  {
+    "path": "AVS.MarginFast",
+    "type": "int"
+  },
+  {
+    "path": "AVS.MarginSlow",
+    "type": "int"
+  },
+  {
+    "path": "AppDef[]",
+    "type": "array"
+  },
+  {
+    "path": "BLE.AcceleroPollInterval",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.AdvType",
+    "type": "uint16",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.AntennaDwellMaxJitterMsec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.AntennaDwellMsec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.BeaconEnabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.BeaconRate",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.BeaconType",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.BkgrdScanEnabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.BkgrdScanRateDwellMsec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.BkgrdScanRateSec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.ClientPkt",
+    "type": "config.ClientPktConfig",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.Connection",
+    "type": "config.BLEConnection",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.DisableTroubleCode",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.DisableTroubleCodeScan",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.Disabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneUIDBeams",
+    "type": "[]int32",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneUIDCalibRssi",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneUIDEnabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneUIDFreqMsec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneUIDInstance",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneUIDNamespace",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneURLBeams",
+    "type": "[]int32",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneURLCalibRssi",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneURLEnabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneURLEncodedURL",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneURLFreqMsec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.EddystoneURLPrefix",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.FillRssiScan",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.Filters",
+    "type": "[]config.BLEStatsFilter",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconBeams",
+    "type": "[]int32",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconCycleNum",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconCycleTime",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconCyclical",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconEnabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconFreqMsec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconMajor",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconMeasuredRssi",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconMinor",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.IBeaconUUID",
+    "type": "uuid.UUID",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.LogTimeSec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.Major",
+    "type": "uint16",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.Minors",
+    "type": "[]int32",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.OUIList",
+    "type": "[]ethernet.MAC",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.Power",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.PowerLevel",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.RandAddrEnabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.ReportRandAddr",
+    "type": "config.ReportRandAddr",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.ScanDwellMsec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.ScanEnabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.ScanFilter",
+    "type": "config.BloomFilter",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.ScanRateDwellMsec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.ScanRateSec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.ScanType",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.StatsThresholds",
+    "type": "config.BLEStatsThresholds",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.Telemetry",
+    "type": "config.BLETelemetry",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.TrackDevAddr",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.TrackOuiAPs",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.TrackSiteAPs",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.TroubleCode",
+    "type": "uint8",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.UUID",
+    "type": "uuid.UUID",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.WiliotBeaconBeams",
+    "type": "[]int32",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.WiliotBeaconEnabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.WiliotBeaconFrame",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.WiliotBeaconFreqMsec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.WiliotPktExpireTime",
+    "type": "float64",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BLE.WiliotPktTimeoutSec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "BlackList.WCMacs[]",
+    "type": "array"
+  },
+  {
+    "path": "CnaHostnames[]",
+    "type": "str"
+  },
+  {
+    "path": "Country",
+    "type": "str"
+  },
+  {
+    "path": "Dnsmasq.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "Hostname",
+    "type": "str"
+  },
+  {
+    "path": "HttpRedirector.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "ID",
+    "type": "str"
+  },
+  {
+    "path": "IrqBalance.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "IrqBalance.Interval",
+    "type": "float"
+  },
+  {
+    "path": "L2TPTunnels[]",
+    "type": "array"
+  },
+  {
+    "path": "LED.Brightness",
+    "type": "int"
+  },
+  {
+    "path": "MQTT.Broker",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.ClientID",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.ConnectTimeoutSec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.DefaultTopic",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.Enabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.MaxReconnectAttempts",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.ParseData",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.Password",
+    "type": "config.secret",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.PublishTimeoutSec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.QoS",
+    "type": "uint8",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.RateLimitPerSec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.ReconnectIntervalSec",
+    "type": "int",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TLSEnabled",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TLSInsecureSkipVerify",
+    "type": "bool",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TopicFilters",
+    "type": "[]config.MQTTTopicFilter",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TopicFilters[].ActiveFields",
+    "type": "uint32",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TopicFilters[].CompanyID",
+    "type": "uint16",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TopicFilters[].EddystoneUID",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TopicFilters[].EddystoneURL",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TopicFilters[].IBeaconMajor",
+    "type": "uint16",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TopicFilters[].IBeaconUUID",
+    "type": "uuid.UUID",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TopicFilters[].ServiceUUID",
+    "type": "uuid.UUID",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.TopicFilters[].Topic",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "MQTT.Username",
+    "type": "string",
+    "source": "0.15 type metadata"
+  },
+  {
+    "path": "Monitor.CCRev",
+    "type": "str"
+  },
+  {
+    "path": "Monitor.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "Monitor.EthUplink.Device",
+    "type": "str"
+  },
+  {
+    "path": "Monitor.EthUplink.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "Monitor.LowTxPowerDetect.RequestMitigation",
+    "type": "bool"
+  },
+  {
+    "path": "Monitor.NonDFSIdleProbeAssist",
+    "type": "bool"
+  },
+  {
+    "path": "Monitor.PcapWLAN.ClientFirstBkgrdEnabled",
+    "type": "bool"
+  },
+  {
+    "path": "Monitor.Radiotap",
+    "type": "bool"
+  },
+  {
+    "path": "Monitor.RadiotapScan",
+    "type": "bool"
+  },
+  {
+    "path": "Monitor.SteerEnabled",
+    "type": "bool"
+  },
+  {
+    "path": "Monitor.Utilization.ScanEnabled",
+    "type": "bool"
+  },
+  {
+    "path": "Name",
+    "type": "str"
+  },
+  {
+    "path": "OrgID",
+    "type": "str"
+  },
+  {
+    "path": "OurOUIs[]",
+    "type": "str"
+  },
+  {
+    "path": "PACE_KernelModCounters.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "PAPIOpaque",
+    "type": "str"
+  },
+  {
+    "path": "PoePwrConstrained.EnableOn304",
+    "type": "bool"
+  },
+  {
+    "path": "PoePwrConstrained.EnableRadios",
+    "type": "bool"
+  },
+  {
+    "path": "ProxyArp.Disable_ReqSpoofCheck",
+    "type": "bool"
+  },
+  {
+    "path": "ProxyArp.Disable_RespSpoofCheck",
+    "type": "bool"
+  },
+  {
+    "path": "ProxyArp.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "Radios[].Band",
+    "type": "str"
+  },
+  {
+    "path": "Radios[].CCRev",
+    "type": "str"
+  },
+  {
+    "path": "Radios[].CCRevSP",
+    "type": "str"
+  },
+  {
+    "path": "Radios[].Channel",
+    "type": "int"
+  },
+  {
+    "path": "Radios[].NonAggrRegulate.Disabled",
+    "type": "bool"
+  },
+  {
+    "path": "Radios[].NonAggrRegulate.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "Radios[].Power",
+    "type": "int"
+  },
+  {
+    "path": "Radios[].PreambleLength",
+    "type": "int"
+  },
+  {
+    "path": "Radios[].ProbeControl.ProbeReqSW",
+    "type": "bool"
+  },
+  {
+    "path": "Radios[].ProbeControl.ProbeRespSW",
+    "type": "bool"
+  },
+  {
+    "path": "Radios[].QOS.Dscp2Ac[].AC",
+    "type": "int"
+  },
+  {
+    "path": "Radios[].QOS.Dscp2Ac[].DSCP",
+    "type": "int"
+  },
+  {
+    "path": "Radios[].RRM.Channel",
+    "type": "int"
+  },
+  {
+    "path": "Radios[].RRM.Power",
+    "type": "int"
+  },
+  {
+    "path": "Radios[].RRM.Width",
+    "type": "int"
+  },
+  {
+    "path": "Radios[].Width",
+    "type": "int"
+  },
+  {
+    "path": "RootAuthorizedSSHKeys[]",
+    "type": "str"
+  },
+  {
+    "path": "SSH.AuthorizedKeys[]",
+    "type": "str"
+  },
+  {
+    "path": "SSH.Disabled",
+    "type": "bool"
+  },
+  {
+    "path": "SSH.External",
+    "type": "bool"
+  },
+  {
+    "path": "SVIs[].DHCP.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "SVIs[].DHCP.Hostname",
+    "type": "str"
+  },
+  {
+    "path": "SVIs[].DHCP_Ena",
+    "type": "bool"
+  },
+  {
+    "path": "SVIs[].MTU",
+    "type": "int"
+  },
+  {
+    "path": "SVIs[].Vlan_ID",
+    "type": "str"
+  },
+  {
+    "path": "SVIs[].dhcp_enabled",
+    "type": "bool"
+  },
+  {
+    "path": "SiteID",
+    "type": "str"
+  },
+  {
+    "path": "SiteName",
+    "type": "str"
+  },
+  {
+    "path": "Stats.FullInterval",
+    "type": "int"
+  },
+  {
+    "path": "Stats.Interval",
+    "type": "float"
+  },
+  {
+    "path": "Stats.MemInterval",
+    "type": "int"
+  },
+  {
+    "path": "Stats.SplitWifiAndBleRssiStats",
+    "type": "bool"
+  },
+  {
+    "path": "Stats.UseSeparateBLEScanTopic",
+    "type": "bool"
+  },
+  {
+    "path": "Stats.UseSeparateWifiScanTopic",
+    "type": "bool"
+  },
+  {
+    "path": "Steer.ProbeRequest.ClientPkts",
+    "type": "bool"
+  },
+  {
+    "path": "Steer.ProbeRequest.ClientPktsSiteOnly",
+    "type": "bool"
+  },
+  {
+    "path": "Steer.ProbeRequest.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "Steer.ProbeRequest.RogueDetectOnly",
+    "type": "bool"
+  },
+  {
+    "path": "Steer.ProbeRequest.StatsAgeOutRandom",
+    "type": "bool"
+  },
+  {
+    "path": "SwitchPorts[].Name",
+    "type": "str"
+  },
+  {
+    "path": "SwitchPorts[].PortVlanID",
+    "type": "str"
+  },
+  {
+    "path": "SwitchPorts[].Vlans[]",
+    "type": "str"
+  },
+  {
+    "path": "Timestamp",
+    "type": "float"
+  },
+  {
+    "path": "UUID",
+    "type": "str"
+  },
+  {
+    "path": "WIDS[]",
+    "type": "array"
+  },
+  {
+    "path": "WLANs[].AMPDU.RST",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Acct_Interim_Interval",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].Auth.AKM.WPA2_PSK",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Auth.AKM.WPA3_PSK",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Auth.GroupMasterRekeyIntervalSec",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].Auth.GroupRekeyIntervalSec",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].Auth.MultiPSK",
+    "type": "NoneType"
+  },
+  {
+    "path": "WLANs[].Auth.PSK",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].Auth.Pairwise.CCMP",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Auth.Pairwise.TKIP",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Auth.Pairwise.WPA1.CCMP",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Auth.Pairwise.WPA1.TKIP",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Auth.SAEAntiCloggTokenThreshold",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].Auth.Type",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].Auth.WEP",
+    "type": "NoneType"
+  },
+  {
+    "path": "WLANs[].BandConfigs[].BSSIDIndex",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].BandConfigs[].Band",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].BandConfigs[].Steer.DenyDot11Auth",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BandConfigs[].Steer.DenyDot11AuthConsecNum",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].BandConfigs[].Steer.DenyDot11AuthDualBandOnly",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BandConfigs[].Steer.DenyDot11AuthRSSIThresh",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].BandConfigs[].Steer.NoProbeRespAll",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Bands[]",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].BcastFilter.AllowDHCPtoWirelessBridge",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BcastFilter.AllowICMPv6NeighborDiscovery",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BcastFilter.Arp",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BcastFilter.DHCPBcast2UnicastResponse",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BcastFilter.Dhcp",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BcastFilter.DropDHCPUnknownResponse",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BcastFilter.Mcast",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BcastFilter.Mdns_allow",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BcastFilter.Ssdp_allow",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BlackList.Cloud.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BlackList.Cloud.MgmtTypeWLC",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].BlackList.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].DTIM.Period",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].DhcpOption82",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].DhcpOption82Data",
+    "type": "NoneType"
+  },
+  {
+    "path": "WLANs[].DisableRsnCapValidation",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].DisableV1RoamNotifications",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].DisableV2RoamNotifications",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Dot11w.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Dot11w.Required",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Dot11w.SA_Query_Attempts",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].Dot11w.SA_Query_Timeout",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].ForFTM",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].ForMesh",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Hidden",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].ID",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].Isolation",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].KeyCache.KeyEncryptKey",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].KeyCache.LocalAPkeyCache",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].KeyCache.WLCkeyCache",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].MacAuth.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].MaxStaAllowed",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].NetIsolation",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].NoStaticIP",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].QOS.AccessClass",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].QOS.Enabled",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].RateLimit.ClientDown",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].RateLimit.ClientUp",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].RateLimit.WlanDown",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].RateLimit.WlanUp",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].RateSets[].Band",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].RateSets[].BasicRates[]",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].RateSets[].HEMCSRateMask",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].RateSets[].HTMCSRateMask",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].RateSets[].LegacyRates[]",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].RateSets[].VHTMCSRateMask",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].RestrictDNS.FromDHCP",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].SSID",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].Vlans[]",
+    "type": "str"
+  },
+  {
+    "path": "WLANs[].WCInactivity.ReclaimTimeoutSec",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].WCInactivity.SilentDeauthTimeout",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].WCInactivity.TimeoutSec",
+    "type": "int"
+  },
+  {
+    "path": "WLANs[].WNM.BSSLoad",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].WNM.BSSTransitionManagement.Active",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].WNM.BSSTransitionManagement.Passive",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].WNM.CoLocatedReducedNeighborReport",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].WNM.NeighborReport",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].WNM.ReducedNeighborReport",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].Wxlan.AllowAllFlows",
+    "type": "bool"
+  },
+  {
+    "path": "WLANs[].roamMode",
+    "type": "str"
+  },
+  {
+    "path": "_errors[]",
+    "type": "array"
+  }
+]

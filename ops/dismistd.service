@@ -1,0 +1,23 @@
+[Unit]
+Description=Dismist AP controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dismist
+Group=dismist
+WorkingDirectory=/var/lib/dismist
+ExecStart=/usr/local/bin/dismistd -db /var/lib/dismist/controller.db -ap-config /var/lib/dismist/ap-config.json -tls-cert /var/lib/dismist/tls.crt -tls-key /var/lib/dismist/tls.key -admin-token-file /var/lib/dismist/admin.token
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/dismist
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
