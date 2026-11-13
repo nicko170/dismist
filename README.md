@@ -16,32 +16,44 @@ controller host. Site Settings can send validated SSH public keys to all APs
 in a site after they authenticate. Multiple APs per site are supported; mesh
 backhaul is not yet validated. See [monitoring and SSH operations](docs/deployment.md).
 
-## Build and run
+## Quick start
 
-Requires Go 1.27 and Node/npm to build the embedded UI:
+Install both commands with Go 1.27, or download the binaries from
+[GitHub Releases](https://github.com/nicko170/dismist/releases):
 
 ```sh
-cd web
-npm ci
-npm run build
-cd ..
-go test ./...
-go build -o dismist ./cmd/dismist
-go build -o dismistd ./cmd/dismistd
-./dismist init --data-dir ./data
-# Place a firmware-compatible AP config template at data/ap-config.json.
-./dismistd -controller-ip 192.0.2.10
+go install github.com/nicko170/dismist/cmd/...@latest
+export PATH="$(go env GOPATH)/bin:$PATH"
+mkdir -p dismist && cd dismist
+dismist init
+sudo "$(go env GOPATH)/bin/dismistd"
 ```
 
-Replace the example address with the server's IPv4 address reachable from APs.
-The address can be omitted if the server has exactly one usable IPv4 address.
-The default listeners are UI `0.0.0.0:8088`, AP WSS `0.0.0.0:443`, and AP
-DNS UDP/TCP `0.0.0.0:53`. Ports 443 and 53 require appropriate OS privilege
-or service capabilities. `-h` lists listener and file overrides. Before the
-first start, supply `data/ap-config.json` as described in the deployment guide.
-`dismist init` creates `data/tls.crt`, `data/tls.key`, `data/ca.crt`,
-`data/ca.key`, and `data/admin.token` with private permissions. It does not
-contact an AP or Mist cloud. State is kept in `data/controller.db`.
+`dismist init` creates a private `data/` directory, generates the local CA
+and WSS certificate, writes the bundled AP33 base configuration, and prints
+the new admin token. Open `http://SERVER_IP:8088/`, sign in, and create a site
+with its country, then add a WLAN. Follow the
+[AP33 rooting and onboarding guide](juniper/AP33.md) to prepare and register
+each physical AP. The site supplies the country, SSID, VLAN, and passphrase;
+you do not need to write an AP config JSON file.
+
+For a release archive, download the file matching your OS and CPU, verify it
+against `SHA256SUMS`, and extract it. Run `./dismist init` and
+`sudo ./dismistd` from the extracted directory; the archive also contains the
+AP33 guide. The binary embeds the React UI and AP33 template, so no Node/npm
+installation is needed on the server.
+
+The daemon listens on UI `0.0.0.0:8088`, AP WSS `0.0.0.0:443`, and AP DNS
+UDP/TCP `0.0.0.0:53`. Ports 443 and 53 need suitable OS privilege or service
+capabilities. If the server has multiple usable IPv4 addresses, pass
+`-controller-ip` with the address APs can reach. The example command uses
+`sudo` for a quick test; [deployment](docs/deployment.md) covers a dedicated
+service account, HTTPS for the UI, and backups.
+
+The repository is currently private; downloading releases or installing a
+version from GitHub requires access until it is made public. From a source
+checkout, run `npm --prefix web ci`, `npm --prefix web run build`, then
+`go test ./...` and `go build ./cmd/dismistd`.
 
 The AP management LAN must use the controller as DNS. For registered AP
 source addresses, it maps `ep-terminator.mistsys.net` to the advertised

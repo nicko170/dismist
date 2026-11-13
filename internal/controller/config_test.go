@@ -54,6 +54,78 @@ func TestBuildConfigRejectsMissingWLANTemplate(t *testing.T) {
 	}
 }
 
+func TestBuildSiteConfigAppliesTypedCountry(t *testing.T) {
+	base := []byte(`{"Country":"GB","WLANs":[{"Auth":{"Type":"psk","PSK":"example-passphrase"}}]}`)
+	site := model.Site{ID: "site-a", Country: "US"}
+	ap := model.APRecord{ID: "02-aa-00-00-00-03", SiteID: "site-a", Advanced: json.RawMessage(`{"Country":"CA"}`)}
+	raw, err := BuildSiteConfig(base, site, ap, nil, time.Unix(1, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Country string `json:"Country"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Country != "US" {
+		t.Fatalf("AP received country %q instead of its typed site country", got.Country)
+	}
+}
+
+func TestBuildSiteConfigAppliesTypedSiteName(t *testing.T) {
+	base := []byte(`{"SiteName":"old","WLANs":[{"Auth":{"Type":"psk","PSK":"example-passphrase"}}]}`)
+	site := model.Site{ID: "site-a", Name: "Office"}
+	ap := model.APRecord{ID: "02-aa-00-00-00-03", SiteID: "site-a", Advanced: json.RawMessage(`{"SiteName":"wrong"}`)}
+	raw, err := BuildSiteConfig(base, site, ap, nil, time.Unix(1, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		SiteName string `json:"SiteName"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.SiteName != site.Name {
+		t.Fatalf("AP received site name %q instead of %q", got.SiteName, site.Name)
+	}
+}
+
+func TestSiteSSHKeyEnablesExternalSSHOnBundledTemplate(t *testing.T) {
+	base := []byte(`{"SSH":{"Disabled":true,"External":false,"AuthorizedKeys":[]},"RootAuthorizedSSHKeys":[],"WLANs":[{"Auth":{"Type":"psk","PSK":"example-passphrase"}}]}`)
+	ap := model.APRecord{ID: "02-aa-00-00-00-03", SiteID: "site-a"}
+	for _, test := range []struct {
+		name         string
+		keys         []string
+		wantDisabled bool
+		wantExternal bool
+	}{
+		{"no site key", nil, true, false},
+		{"site key", []string{"ssh-ed25519 example-site-key"}, false, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			raw, err := BuildSiteConfig(base, model.Site{ID: "site-a", SSHPublicKeys: test.keys}, ap, nil, time.Unix(1, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got struct {
+				SSH struct {
+					Disabled       bool
+					External       bool
+					AuthorizedKeys []string
+				}
+			}
+			if err := json.Unmarshal(raw, &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.SSH.Disabled != test.wantDisabled || got.SSH.External != test.wantExternal || len(got.SSH.AuthorizedKeys) != len(test.keys) {
+				t.Fatalf("SSH config with %d site keys: %+v", len(test.keys), got.SSH)
+			}
+		})
+	}
+}
+
 func TestBuildSiteConfigAppendsSiteSSHKeysWithoutLosingTemplateKeys(t *testing.T) {
 	base := []byte(`{"RootAuthorizedSSHKeys":["ssh-ed25519 base-root"],"SSH":{"Disabled":false,"External":true,"AuthorizedKeys":["ssh-ed25519 base-ssh"]},"WLANs":[{"Auth":{"Type":"psk","PSK":"example-passphrase-15"}}]}`)
 	var site model.Site

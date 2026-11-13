@@ -59,6 +59,16 @@ func BuildSiteConfig(base []byte, site model.Site, ap model.APRecord, networks [
 	if err := setJSON(root, "SiteID", siteID); err != nil {
 		return nil, err
 	}
+	if site.Name != "" {
+		if err := setJSON(root, "SiteName", site.Name); err != nil {
+			return nil, err
+		}
+	}
+	if country := strings.ToUpper(strings.TrimSpace(site.Country)); country != "" {
+		if err := setJSON(root, "Country", country); err != nil {
+			return nil, err
+		}
+	}
 	if compactMAC := strings.ReplaceAll(ap.ID, "-", ""); len(compactMAC) == 12 {
 		if err := setJSON(root, "UUID", "00000000-0000-0000-1000-"+compactMAC); err != nil {
 			return nil, err
@@ -173,6 +183,12 @@ func appendSiteSSHKeys(root map[string]json.RawMessage, siteKeys []string) error
 		return err
 	}
 	if err := setJSON(sshConfig, "AuthorizedKeys", sshKeys); err != nil {
+		return err
+	}
+	if err := setJSON(sshConfig, "Disabled", false); err != nil {
+		return err
+	}
+	if err := setJSON(sshConfig, "External", true); err != nil {
 		return err
 	}
 	return setJSON(root, "SSH", sshConfig)

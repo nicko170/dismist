@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ func TestInitCreatesPrivateVerifiableCredentials(t *testing.T) {
 	if err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
 		t.Fatalf("data directory is not private: %v %v", info, err)
 	}
-	for _, name := range []string{"admin.token", "ca.crt", "ca.key", "tls.crt", "tls.key"} {
+	for _, name := range []string{"admin.token", "ap-config.json", "ca.crt", "ca.key", "tls.crt", "tls.key"} {
 		path := filepath.Join(dir, name)
 		info, err := os.Lstat(path)
 		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
@@ -39,8 +40,16 @@ func TestInitCreatesPrivateVerifiableCredentials(t *testing.T) {
 	if raw, err := hex.DecodeString(strings.TrimSpace(string(token))); err != nil || len(raw) != 32 {
 		t.Fatal("admin token is not 32 random bytes in hex")
 	}
-	if strings.Contains(output.String(), strings.TrimSpace(string(token))) {
-		t.Fatal("CLI printed the administrator token")
+	if !strings.Contains(output.String(), strings.TrimSpace(string(token))) {
+		t.Fatal("CLI did not print the newly generated administrator token")
+	}
+	var config struct{ WLANs []json.RawMessage }
+	configRaw, err := os.ReadFile(filepath.Join(dir, "ap-config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(configRaw, &config); err != nil || len(config.WLANs) != 1 {
+		t.Fatalf("init did not write a usable AP33 config: %v", err)
 	}
 	caPEM, err := os.ReadFile(filepath.Join(dir, "ca.crt"))
 	if err != nil {
@@ -82,15 +91,19 @@ func TestInitIsIdempotentAndNeverOverwritesCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := make(map[string][]byte)
-	for _, name := range []string{"admin.token", "ca.crt", "ca.key", "tls.crt", "tls.key"} {
+	for _, name := range []string{"admin.token", "ap-config.json", "ca.crt", "ca.key", "tls.crt", "tls.key"} {
 		var err error
 		before[name], err = os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := run([]string{"init", "--data-dir", dir}, &bytes.Buffer{}); err != nil {
+	var repeatOutput bytes.Buffer
+	if err := run([]string{"init", "--data-dir", dir}, &repeatOutput); err != nil {
 		t.Fatal(err)
+	}
+	if strings.Contains(repeatOutput.String(), strings.TrimSpace(string(before["admin.token"]))) {
+		t.Fatal("repeat init reprinted an existing administrator token")
 	}
 	for name, original := range before {
 		current, err := os.ReadFile(filepath.Join(dir, name))
@@ -107,6 +120,23 @@ func TestInitIsIdempotentAndNeverOverwritesCredentials(t *testing.T) {
 	current, err := os.ReadFile(filepath.Join(dir, "tls.key"))
 	if err != nil || string(current) != "invalid" {
 		t.Fatalf("invalid existing key was overwritten: %v", err)
+	}
+}
+
+func TestInitDefaultsToDataDirectory(t *testing.T) {
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previous) })
+	if err := run([]string{"init"}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join("data", "ap-config.json")); err != nil {
+		t.Fatalf("zero-argument init did not create the default AP config: %v", err)
 	}
 }
 

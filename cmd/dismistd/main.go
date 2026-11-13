@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nicko170/dismist/internal/aptemplate"
 	"github.com/nicko170/dismist/internal/dnsserver"
 	"github.com/nicko170/dismist/internal/httpapi"
 	"github.com/nicko170/dismist/internal/metrics"
@@ -49,6 +50,12 @@ func main() {
 	udpProbeSendTest := flag.Bool("udp-probe-send-test", false, "send a padded UDP test message during the local protocol probe")
 	udpProbeRekeyDelay := flag.Duration("udp-probe-rekey-delay", 0, "delay AP UDP test until upstream rekey can be relayed")
 	flag.Parse()
+	customAPConfig := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "ap-config" {
+			customAPConfig = true
+		}
+	})
 	var interfaceAddresses []net.IP
 	if *controllerIP == "" {
 		var err error
@@ -97,7 +104,7 @@ func main() {
 			}
 		}
 	}
-	base, err := os.ReadFile(*configPath)
+	base, err := loadAPConfig(*configPath, !customAPConfig)
 	if err != nil {
 		log.Fatalf("read AP config template %q (-ap-config): %v", *configPath, err)
 	}
@@ -252,6 +259,14 @@ func main() {
 	if metricsServer != nil {
 		_ = metricsServer.Shutdown(ctx)
 	}
+}
+
+func loadAPConfig(path string, allowBundledFallback bool) ([]byte, error) {
+	base, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) && allowBundledFallback {
+		return aptemplate.Default(), nil
+	}
+	return base, err
 }
 
 func loadSecret(path string) ([32]byte, error) {

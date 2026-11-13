@@ -58,9 +58,8 @@ kubectl create namespace dismist
 ```
 
 Prepare a private working directory off the Git checkout. Run `dismist init
---data-dir DIR` there to create the CA, WSS leaf pair, and admin token, then
-place a full firmware-compatible `ap-config.json` alongside them. The template
-may contain WLAN secrets and belongs in the Kubernetes Secret. Keep `ca.key`
+--data-dir DIR` there to create the CA, WSS leaf pair, admin token, and bundled
+AP33 `ap-config.json`. Keep `ca.key`
 and `ca.crt` in an encrypted backup outside the cluster; only the WSS leaf
 pair is needed by the daemon. Never generate a new EEPROM secret to replace an
 existing AP's secret.

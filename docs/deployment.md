@@ -46,12 +46,13 @@ The default private data paths are relative to the working directory:
 | Path | Purpose |
 | --- | --- |
 | `data/controller.db` | bbolt sites, AP records, WLANs, and history |
-| `data/ap-config.json` | AP firmware-compatible base config template |
+| `data/ap-config.json` | Bundled AP33 base config written by `dismist init` |
 | `data/tls.crt`, `data/tls.key` | AP WSS leaf certificate and private key |
 | `data/ca.crt`, `data/ca.key` | Local AP WSS certificate authority and private key |
 | `data/admin.token` | Single-admin token created by the web gate |
 
-Build and run `dismist init --data-dir ./data` before starting the daemon.
+Build and run `dismist init` before starting the daemon (or pass
+`--data-dir DIR` for a different location).
 Run it as the service user when using a system service. It generates a local
 CA, an AP WSS certificate for `ep-terminator.mistsys.net`, and the admin token
 using local randomness. It does not contact an AP or Mist cloud. Repeating
@@ -60,6 +61,9 @@ certificate set is incomplete or invalid, inspect it and restore it from
 backup before retrying. The generated WSS certificate lasts two years and
 the CA lasts ten years; `init` does not renew either. Plan a replacement
 and AP trust update before expiry.
+Init also writes the bundled AP33 base configuration and prints a newly
+created admin token once. If the token already exists, read it from the
+private `data/admin.token` file.
 
 Use absolute paths in a service unit. The database and token contain sensitive
 data; restrict the data directory to the service user. `-db`, `-ap-config`,
@@ -70,13 +74,14 @@ Operators may place HTTPS in front of the UI for access beyond a trusted LAN.
 
 ## AP preparation and initial state
 
-Before starting, supply a full JSON base configuration compatible with the AP
-firmware as `data/ap-config.json`. It must include a `WLANs` array with at
-least one WLAN template containing `Auth` configured for PSK. The controller
-uses this template to generate site WLANs and preserves other fields; a small
-generic JSON fragment is not a proven replacement for a device config. Keep
-secrets and passphrases in private files or the database, not in the source
-tree.
+`dismist init` writes a sanitized AP33 base configuration to
+`data/ap-config.json`. The daemon also has an embedded copy if that default
+file is absent. Operators set country, SSID, VLAN, and passphrase through site
+setup; Dismist generates the AP's effective config. The shipped template has
+no AP identity, site identifiers, credentials, fixed regional channel, or
+transmit-power override. A custom `-ap-config` file remains available for a
+different firmware/model or advanced deployment; Dismist will not silently
+replace a custom file.
 
 When the base config includes `SwitchPorts`, Dismist adds every enabled site
 WLAN's VLAN to each AP Ethernet port's `Vlans` allow list, preserving the port's
@@ -103,32 +108,12 @@ firmware-compatible base config. A site key change reconnects its APs to apply
 the new config. Never paste a private key. This path requires an already
 authenticated AP and does not prepare a factory AP to trust the controller.
 
-The first start with a new database may have zero APs; the UI can create
-sites while AP DNS refuses all unregistered clients. To register an AP at
-initial installation, prepare a private JSON import file and pass `-state`
-**only when creating a new database**. Example structure:
-
-```json
-{
-  "sites": [{"id": "office", "name": "Office"}],
-  "aps": [{
-    "id": "aa-bb-cc-00-00-01",
-    "name": "Hallway",
-    "site_id": "office",
-    "management_ip": "192.0.2.101",
-    "secret_file": "/var/lib/dismist/ap-secrets/hallway.bin"
-  }],
-  "networks": []
-}
-```
-
-Replace both example IPs and identity with real values. The AP ID is its
-actual MAC-derived controller ID; `management_ip` is the source address seen
-by this server. The import runs once, only for a new bbolt database. Keep the
-import file as a private backup; edits to it after import do not alter the
-database. Site WLANs can then be created in the UI. New AP records may also
-be created through `POST /api/aps` without restarting the server; the running
-registry applies them within a few seconds. See [AP onboarding](onboarding.md).
+The first start may have zero APs. Sign in to the UI, create a site with its
+country, then register APs and WLANs there. DNS refuses unregistered AP source
+addresses. New AP records activate within a few seconds, without a server
+restart. For a headless migration from an existing JSON state file, `-state`
+can import it **once when creating a new database**; ordinary onboarding
+does not need that file. See [AP onboarding](onboarding.md).
 
 Point the AP management LAN's DNS setting at the controller IP. The
 controller answers `ep-terminator.mistsys.net` only for registered AP source
@@ -141,12 +126,12 @@ record, or that record must use the translated source address.
 [ops/dismistd.service](../ops/dismistd.service) is a sample unit. Create a
 dedicated `dismist` user, place the binary at `/usr/local/bin/dismistd`, and
 make `/var/lib/dismist` mode `0700` and owned by that user. Run
-`dismist init --data-dir /var/lib/dismist` as that user, then place the AP
-template, import file if used, and AP secret files under that directory with
-restrictive permissions. Edit the unit's `-controller-ip`
-value and add `-state /var/lib/dismist/import.json` for a one-time initial
-AP import. The unit grants bind capability for ports below 1024. Start it with
-`systemctl enable --now dismistd` after reviewing those values and AP
+`dismist init --data-dir /var/lib/dismist` as that user. Init supplies the
+AP33 template; place only per-AP secret files there with restrictive
+permissions. Set `-controller-ip` in the unit only if address detection is
+ambiguous; add `-state /var/lib/dismist/import.json` only for a one-time
+headless import. The unit grants bind capability for ports below 1024. Start
+it with `systemctl enable --now dismistd` after reviewing those values and AP
 management LAN routing. Use `journalctl -u dismistd` for logs.
 
 For a manual launch, use the same explicit paths:
@@ -160,7 +145,7 @@ For a manual launch, use the same explicit paths:
   -admin-token-file /var/lib/dismist/admin.token
 ```
 
-The program reports missing template and certificate paths at startup. An
+The program reports missing certificate paths at startup. An
 unreadable or non-private AP secret prevents its registered AP from starting.
 Use `-ap-id` and `-ap-ip` only to preserve a legacy AP record that lacks a
 management address, and `-server-name` to change the AP authentication reply

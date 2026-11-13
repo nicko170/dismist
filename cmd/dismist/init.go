@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nicko170/dismist/internal/aptemplate"
 	"github.com/nicko170/dismist/internal/webgate"
 )
 
@@ -23,39 +24,78 @@ const apHostname = "ep-terminator.mistsys.net"
 
 var certificateFiles = []string{"ca.crt", "ca.key", "tls.crt", "tls.key"}
 
-func initialize(dir string) error {
+func initialize(dir string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create data directory: %w", err)
+		return "", fmt.Errorf("create data directory: %w", err)
 	}
 	info, err := os.Lstat(dir)
 	if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
-		return errors.New("data directory must be a private directory (mode 0700)")
+		return "", errors.New("data directory must be a private directory (mode 0700)")
 	}
 	existing, err := inspectCertificates(dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if existing {
 		if err := verifyCertificates(dir); err != nil {
-			return fmt.Errorf("existing certificates: %w", err)
+			return "", fmt.Errorf("existing certificates: %w", err)
 		}
 	}
 	var generated map[string][]byte
 	if !existing {
 		generated, err = generateCertificates(time.Now())
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
-	if _, err := webgate.LoadOrCreateToken(filepath.Join(dir, "admin.token")); err != nil {
-		return fmt.Errorf("administrator token: %w", err)
+	if err := ensureAPConfig(filepath.Join(dir, "ap-config.json")); err != nil {
+		return "", fmt.Errorf("AP config: %w", err)
 	}
 	if !existing {
 		if err := writeCertificates(dir, generated); err != nil {
-			return err
+			return "", err
 		}
 	}
-	return nil
+	tokenPath := filepath.Join(dir, "admin.token")
+	_, tokenStatErr := os.Lstat(tokenPath)
+	if tokenStatErr != nil && !errors.Is(tokenStatErr, os.ErrNotExist) {
+		return "", fmt.Errorf("administrator token: %w", tokenStatErr)
+	}
+	token, err := webgate.LoadOrCreateToken(tokenPath)
+	if err != nil {
+		return "", fmt.Errorf("administrator token: %w", err)
+	}
+	if errors.Is(tokenStatErr, os.ErrNotExist) {
+		return token, nil
+	}
+	return "", nil
+}
+
+func ensureAPConfig(path string) error {
+	info, err := os.Lstat(path)
+	if err == nil {
+		if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+			return errors.New("existing AP config must be a private regular file")
+		}
+		return nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err = file.Write(aptemplate.Default()); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(path)
+	}
+	return err
 }
 
 func inspectCertificates(dir string) (bool, error) {

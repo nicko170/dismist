@@ -13,9 +13,9 @@ For each AP, prepare these inputs on the server:
 2. Its own 32-byte authentication secret in a mode `0600` file. Each AP has
    a different secret. The claim QR/code and a Mist site SSH key do not
    contain or install it.
-3. A full firmware-compatible AP config template, including the WLAN
-   template. The controller changes site WLANs and typed identity fields on
-   top of it, and preserves unknown advanced fields.
+3. A compatible base config for its model. Dismist includes one for AP33;
+   `dismist init` writes it automatically. Other models need a validated
+   template until support is added.
 4. A WSS certificate/key for the endpoint hostname the AP uses, and a CA
    that the AP has been prepared to trust. A stock AP's Mist-only endpoint
    trust store will reject a fresh local or public-CA certificate.
@@ -31,7 +31,8 @@ the per-AP authentication secret.
 1. Start the server with the paths, listener addresses, and advertised IP in
    [deployment.md](deployment.md). Read `data/admin.token` locally and sign
    in to the LAN UI.
-2. Create a site with its name, country, and timezone. Sites have no parent
+2. Create a site with its name, country, and timezone. The site country is
+   sent to AP33s for regulatory configuration. Sites have no parent
    organization. A site may contain multiple APs.
 3. In **Access Points**, register the AP using its ID, management IP, model,
    site, and absolute path to its private secret file on the server. The UI
