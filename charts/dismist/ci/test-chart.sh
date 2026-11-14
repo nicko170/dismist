@@ -125,6 +125,7 @@ expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].sta
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].livenessProbe.httpGet.path' /healthz
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.volumes[] | select(.name == "tmp") | .emptyDir.sizeLimit' 1Gi
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].volumeMounts[] | select(.name == "tmp") | .mountPath' /tmp
+expect_arg -backup-tmp-max=1Gi
 expect_eq 'select(.kind == "Deployment") | .spec.template.metadata.annotations | has("prometheus.io/scrape")' false
 
 # monitoring.enabled turns on every part.
@@ -222,6 +223,7 @@ expect_arg -metrics-listen=127.0.0.1:9090
 # Other refusals.
 render_fails port-clash "metrics.port must differ" --set privateSecret.name=private --set metrics.port=8088
 render_fails client-mode "metrics.clients must be" --set privateSecret.name=private --set metrics.clients=all
+render_fails tmp-size "backup.tmpSizeLimit must be a whole number" --set privateSecret.name=private --set backup.tmpSizeLimit=1.5Gi
 
 # Scrape annotations expose the listener without a Service.
 render annotations --set privateSecret.name=private --set metrics.scrapeAnnotations=true

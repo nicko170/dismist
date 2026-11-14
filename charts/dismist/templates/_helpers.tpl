@@ -135,3 +135,25 @@ ServiceMonitor or scrape annotations need it.
 {{- fail "metrics.port must differ from listen.ui, listen.wss and listen.dns" -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+dismist.byteSize NAME VALUE: VALUE as a -backup-* size flag value. dismistd
+takes whole numbers with an optional K/M/G/T (1000) or Ki/Mi/Gi/Ti (1024)
+suffix; anything else (a decimal, an E/P suffix) is refused here rather
+than by the pod at start.
+*/}}
+{{- define "dismist.byteSize" -}}
+{{- $name := index . 0 -}}
+{{- $value := toString (index . 1) -}}
+{{- if not (regexMatch "^[0-9]+(Ki|Mi|Gi|Ti|K|k|M|G|T)?$" $value) -}}
+{{- fail (printf "%s must be a whole number of bytes with an optional K/M/G/T or Ki/Mi/Gi/Ti suffix, not %q" $name $value) -}}
+{{- end -}}
+{{- $value -}}
+{{- end }}
+
+{{/* The -backup-* flags (design §6.4). */}}
+{{- define "dismist.backupArgs" -}}
+{{- with .Values.backup.tmpSizeLimit }}
+- -backup-tmp-max={{ include "dismist.byteSize" (list "backup.tmpSizeLimit" .) }}
+{{- end }}
+{{- end }}

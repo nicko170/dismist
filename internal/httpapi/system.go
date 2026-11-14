@@ -58,6 +58,11 @@ type SystemInfo struct {
 	// BackupTempDir is where backup downloads are staged (an emptyDir in
 	// the chart, never the database volume). "" means os.TempDir().
 	BackupTempDir string
+	// BackupTempMax is the most bytes a staged copy may use in
+	// BackupTempDir (-backup-tmp-max: the chart's emptyDir sizeLimit,
+	// which statfs does not report and which evicts the pod when
+	// exceeded). 0 means only the free-space check applies.
+	BackupTempMax int64
 }
 
 // UseSystem sets the daemon facts /api/system and /api/onboarding report.
@@ -331,7 +336,13 @@ func (s *Server) downloadBackup(writer http.ResponseWriter, request *http.Reques
 	}
 	if sized, ok := s.store.(sizeStore); ok {
 		if size, err := sized.Size(); err == nil {
-			if space, err := model.DiskUsage(tempRoot); err == nil && space.Free < uint64(size)+1<<20 {
+			const margin = 1 << 20
+			if limit := s.system.BackupTempMax; limit > 0 && size+margin > limit {
+				writeAPIError(writer, newError(http.StatusInsufficientStorage, api.ErrorCodeUnavailable,
+					fmt.Sprintf("the database (%d bytes) does not fit the %d-byte backup staging limit; raise -backup-tmp-max (the chart's backup.tmpSizeLimit)", size, limit)))
+				return
+			}
+			if space, err := model.DiskUsage(tempRoot); err == nil && space.Free < uint64(size)+margin {
 				writeAPIError(writer, newError(http.StatusInsufficientStorage, api.ErrorCodeUnavailable,
 					fmt.Sprintf("not enough space in %s for a %d-byte copy of the database", tempRoot, size)))
 				return

@@ -37,13 +37,13 @@ func TestParseByteSize(t *testing.T) {
 func TestBackupFlagsDefaults(t *testing.T) {
 	flags := flag.NewFlagSet("test", flag.ContinueOnError)
 	config := registerBackupFlags(flags)
-	if err := flags.Parse([]string{"-backup-max-bytes=600Mi"}); err != nil {
+	if err := flags.Parse([]string{"-backup-max-bytes=600Mi", "-backup-tmp-max=1Gi"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.resolve("/state/controller.db"); err != nil {
 		t.Fatal(err)
 	}
-	if config.dir != "/state/backups" || config.interval != 24*time.Hour || config.keep != 7 || config.maxBytes != 600<<20 {
+	if config.dir != "/state/backups" || config.interval != 24*time.Hour || config.keep != 7 || config.maxBytes != 600<<20 || config.tmpMax != 1<<30 {
 		t.Fatalf("defaults %+v", config)
 	}
 	for _, args := range [][]string{{"-backup-keep=0"}, {"-backup-interval=10s"}, {"-backup-interval=-1h"}} {

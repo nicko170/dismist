@@ -259,7 +259,9 @@ metrics:
 backup:
   # Size limit of the /tmp emptyDir where a backup download is staged
   # (GET /api/system/backup copies the database there, then streams it).
-  # Keep it above the database size.
+  # Keep it above the database size. dismistd gets it as -backup-tmp-max
+  # and refuses (507) a download that would not fit, because going over an
+  # emptyDir sizeLimit evicts the pod.
   tmpSizeLimit: 1Gi
 
 probes:

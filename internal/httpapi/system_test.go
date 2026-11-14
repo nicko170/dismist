@@ -278,3 +278,27 @@ func TestBackupHoldsNoReadTransactionDuringASlowDownload(t *testing.T) {
 	}
 	openBackup(t, writer.body.Bytes())
 }
+
+// In the chart /tmp is an emptyDir with a sizeLimit: statfs reports the
+// node's free space, and going over the limit evicts the pod. A database
+// larger than the staging limit is refused before anything is copied.
+func TestBackupDownloadRespectsTheStagingLimit(t *testing.T) {
+	handler, store, _ := platformFixture(t)
+	size, err := store.Size()
+	if err != nil {
+		t.Fatal(err)
+	}
+	staging := t.TempDir()
+	handler.UseSystem(SystemInfo{BackupTempDir: staging, BackupTempMax: size})
+	response := request(t, handler, http.MethodGet, "/api/system/backup", "")
+	if response.Code != http.StatusInsufficientStorage || decodeErrorBody(t, "over the limit", response).Code != api.ErrorCodeUnavailable {
+		t.Fatalf("database of %d bytes with a %d-byte staging limit: %d %s", size, size, response.Code, response.Body.String())
+	}
+	if left, _ := os.ReadDir(staging); len(left) != 0 {
+		t.Fatalf("staged %v over the limit", left)
+	}
+	handler.UseSystem(SystemInfo{BackupTempDir: staging, BackupTempMax: size + 2<<20})
+	if response := request(t, handler, http.MethodGet, "/api/system/backup", ""); response.Code != http.StatusOK {
+		t.Fatalf("under the limit: %d %s", response.Code, response.Body.String())
+	}
+}

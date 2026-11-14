@@ -263,7 +263,7 @@ func main() {
 	operatorAPI := httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock).UseSystem(httpapi.SystemInfo{
 		Version: builtVersion, Commit: builtCommit, StartedAt: startedAt, Ready: ready.Ready,
 		APURL: *apURL, WSSListen: listener.Addr().String(), Chain: certificate.Certificate, ExtraCAs: apCAs,
-		TrustedProxies: splitList(*trustedProxies), DBPath: *dbPath,
+		TrustedProxies: splitList(*trustedProxies), DBPath: *dbPath, BackupTempMax: int64(backups.tmpMax),
 		Metrics:   systemMetricsView(metricsFlags),
 		Backups:   backupScheduler,
 		Migration: func() api.MigrationView { return migrationView(store) },

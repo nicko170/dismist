@@ -90,6 +90,10 @@ type backupConfig struct {
 	interval time.Duration
 	keep     int
 	maxBytes byteSize
+	// tmpMax limits the staged copy of a backup download (GET
+	// /api/system/backup), for a staging directory whose free space
+	// statfs does not report, like a Kubernetes emptyDir with a sizeLimit.
+	tmpMax byteSize
 }
 
 func registerBackupFlags(fs *flag.FlagSet) *backupConfig {
@@ -98,6 +102,7 @@ func registerBackupFlags(fs *flag.FlagSet) *backupConfig {
 	fs.DurationVar(&c.interval, "backup-interval", 24*time.Hour, "how often to snapshot the database into -backup-dir (0 disables)")
 	fs.IntVar(&c.keep, "backup-keep", 7, "how many scheduled snapshots to keep")
 	fs.Var(&c.maxBytes, "backup-max-bytes", "most bytes all snapshots may use together, e.g. 600Mi (default: 30% of the volume holding -backup-dir)")
+	fs.Var(&c.tmpMax, "backup-tmp-max", "most bytes a backup download may stage in the temporary directory, e.g. 1Gi for an emptyDir sizeLimit (default: its free space only)")
 	return c
 }
 
@@ -117,6 +122,9 @@ func (c *backupConfig) resolve(dbPath string) error {
 	}
 	if c.maxBytes < 0 {
 		return errors.New("-backup-max-bytes must not be negative")
+	}
+	if c.tmpMax < 0 {
+		return errors.New("-backup-tmp-max must not be negative")
 	}
 	return nil
 }

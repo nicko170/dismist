@@ -128,6 +128,9 @@ spec:
             - -dns-listen=0.0.0.0:{{ .Values.listen.dns }}
             - -upstream-dns={{ .Values.controller.upstreamDNS }}
             {{- include "dismist.metricsArgs" . | trim | nindent 12 }}
+            {{- with include "dismist.backupArgs" . | trim }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with .Values.controller.uiHost }}
             - -ui-host={{ . }}
             {{- end }}
