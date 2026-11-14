@@ -2,7 +2,7 @@
   "name": "Dismist",
   "short_name": "Dismist",
   "description": "Self-hosted controller for Mist access points",
-  "start_url": "/",
+  "start_url": "/next/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f7f9fb",
