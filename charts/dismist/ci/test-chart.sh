@@ -119,6 +119,7 @@ expect_no_arg -metrics-clients
 expect_no_arg -metrics-client-limit
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].ports[] | select(.name == "metrics") | .name' ""
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].readinessProbe.httpGet.path' /readyz
+expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].readinessProbe.timeoutSeconds' 5
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].startupProbe.httpGet.path' /healthz
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].startupProbe.periodSeconds * .spec.template.spec.containers[0].startupProbe.failureThreshold' 300
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].livenessProbe.httpGet.path' /healthz

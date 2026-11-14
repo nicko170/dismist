@@ -2,10 +2,26 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/nicko170/dismist/internal/api"
+)
+
+// The database check behind /readyz writes meta.ready (a bbolt write
+// transaction with an fsync). /readyz is unauthenticated and reachable
+// through the public route, so the write runs at most once per
+// probeInterval whatever the request rate; other requests get the last
+// result.
+const (
+	probeInterval = 10 * time.Second
+	// probeStale is how long a database check may run before /readyz
+	// reports it as failing.
+	probeStale = 30 * time.Second
 )
 
 // readiness tracks the /readyz checks (design §4.9): the migration has
@@ -14,8 +30,15 @@ import (
 // of meta.ready succeed.
 type readiness struct {
 	probe    func() error
+	now      func() time.Time // nil means time.Now
 	migrated atomic.Bool
 	wssBound atomic.Bool
+
+	mu           sync.Mutex
+	probing      bool      // a database check is running
+	probeStarted time.Time // when the running check started
+	result       error     // the last check's result
+	resultAt     time.Time // when the last check finished; zero: none yet
 }
 
 // Ready reports the checks that need no database write (for /api/system).
@@ -31,11 +54,50 @@ func (r *readiness) check() (string, string, bool) {
 		return "wss", "the AP WSS listener is not bound yet", false
 	}
 	if r.probe != nil {
-		if err := r.probe(); err != nil {
+		if err := r.probeDB(); err != nil {
 			return "database", "database check failed: " + err.Error(), false
 		}
 	}
 	return "", "", true
+}
+
+func (r *readiness) clock() time.Time {
+	if r.now != nil {
+		return r.now()
+	}
+	return time.Now()
+}
+
+// probeDB returns the result of the database check, running it only when
+// the last result is probeInterval old. While one request runs it, the
+// others answer from the last result without waiting, unless there is none
+// yet or the running check has taken probeStale.
+func (r *readiness) probeDB() error {
+	r.mu.Lock()
+	now := r.clock()
+	if r.probing {
+		err := r.result
+		switch {
+		case now.Sub(r.probeStarted) >= probeStale:
+			err = fmt.Errorf("the check has not finished in %s", probeStale)
+		case r.resultAt.IsZero():
+			err = errors.New("the first check has not finished")
+		}
+		r.mu.Unlock()
+		return err
+	}
+	if !r.resultAt.IsZero() && now.Sub(r.resultAt) < probeInterval {
+		err := r.result
+		r.mu.Unlock()
+		return err
+	}
+	r.probing, r.probeStarted = true, now
+	r.mu.Unlock()
+	err := r.probe()
+	r.mu.Lock()
+	r.probing, r.result, r.resultAt = false, err, r.clock()
+	r.mu.Unlock()
+	return err
 }
 
 // startupHandler is the UI listener's handler from the first moment of

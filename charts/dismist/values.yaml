@@ -270,6 +270,11 @@ probes:
   # the AP WSS listener is bound and any migration has finished, so the AP
   # Service only sends APs to a pod that can serve them.
   readinessPath: /readyz
+  # The readiness probe's timeout. /readyz checks a database write (at most
+  # once every 10 s); a slow volume or a storage snapshot can take more than
+  # the 1 s Kubernetes default, and three failures withdraw the AP Service
+  # endpoint.
+  readinessTimeoutSeconds: 5
 
 nodeSelector: {}
 tolerations: []

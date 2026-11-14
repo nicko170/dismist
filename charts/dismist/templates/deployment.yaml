@@ -176,11 +176,14 @@ spec:
             failureThreshold: {{ .Values.probes.startupFailureThreshold }}
           # Ready once the database works, the AP WSS listener is bound and any
           # migration has finished; until then the AP Service has no endpoint.
+          # /readyz writes to the database (at most every 10 s), so a slow
+          # volume gets more than the 1 s default before a probe fails.
           readinessProbe:
             httpGet:
               path: {{ .Values.probes.readinessPath }}
               port: ui
             periodSeconds: 10
+            timeoutSeconds: {{ .Values.probes.readinessTimeoutSeconds }}
             failureThreshold: 3
           livenessProbe:
             httpGet:
