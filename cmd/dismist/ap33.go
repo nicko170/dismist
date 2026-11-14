@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,12 @@ const ap33Usage = `usage:
   dismist ap33 inspect [ssh flags] [--json] [--log-lines N] [user@]host
   dismist ap33 ssh [ssh flags] [user@]host status [--json]
   dismist ap33 ssh [ssh flags] [user@]host reboot --yes [--reason TEXT | --no-reason]
+  dismist ap33 onboard [ssh flags] [user@]host --controller URL --token-file FILE
+                       --name NAME [--site NAME|ID] [--pin-ip] [--backup-dir DIR]
+                       [--no-reboot] [--remove-local-files] [--dry-run] [--yes]
+                       [--ca FILE]... [--public-roots auto|letsencrypt|none] [--timeout 5m]
+  dismist ap33 onboard --retarget [ssh flags] [user@]host --controller URL --token-file FILE [...]
+  dismist ap33 restore [ssh flags] [user@]host --backup DIR [--no-reboot] [--dry-run] [--yes]
   dismist ap33 serial-response <challenge>
   dismist ap33 prepare-trust --stock-dir DIR --controller-ca FILE [--controller-ca FILE...]
                              [--url wss://HOST/ws] --output DIR
@@ -31,10 +38,41 @@ type ap33Env struct {
 	stdout io.Writer
 	stderr io.Writer
 	now    func() time.Time
+	// confirm asks the operator a yes/no question; nil means no terminal
+	// to ask on, which counts as "no".
+	confirm func(question string) (bool, error)
+	// pollInterval is how often onboard polls the controller (default 5 s).
+	pollInterval time.Duration
 }
 
 func runAP33(args []string, output io.Writer) error {
-	return runAP33With(args, ap33Env{ctx: context.Background(), stdout: output, stderr: os.Stderr, now: time.Now})
+	env := ap33Env{ctx: context.Background(), stdout: output, stderr: os.Stderr, now: time.Now}
+	if info, err := os.Stdin.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
+		env.confirm = terminalConfirm(os.Stdin, os.Stderr)
+	}
+	return runAP33With(args, env)
+}
+
+// terminalConfirm asks on the terminal; only "y" or "yes" is a yes.
+func terminalConfirm(in io.Reader, out io.Writer) func(string) (bool, error) {
+	reader := bufio.NewReader(in)
+	return func(question string) (bool, error) {
+		fmt.Fprintf(out, "%s [y/N] ", question)
+		answer, err := reader.ReadString('\n')
+		if err != nil && answer == "" {
+			return false, err
+		}
+		answer = strings.ToLower(strings.TrimSpace(answer))
+		return answer == "y" || answer == "yes", nil
+	}
+}
+
+// ask returns the operator's answer, false when nobody can answer.
+func (env ap33Env) ask(question string) (bool, error) {
+	if env.confirm == nil {
+		return false, nil
+	}
+	return env.confirm(question)
 }
 
 func runAP33With(args []string, env ap33Env) error {
@@ -52,6 +90,10 @@ func runAP33With(args []string, env ap33Env) error {
 		return runPrepareTrust(args[1:], env.stdout)
 	case "check-trust":
 		return runCheckTrust(args[1:], env)
+	case "onboard":
+		return runOnboard(args[1:], env)
+	case "restore":
+		return runRestore(args[1:], env)
 	}
 	return errors.New(ap33Usage)
 }

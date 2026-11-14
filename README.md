@@ -2,12 +2,14 @@
 
 Mist, dismissed.
 
-`dismistd` is one Go server for AP WSS control, AP-scoped DNS, a LAN web UI/API,
+`dismistd` is one Go server for AP WSS control, AP-scoped DNS, a web UI/API,
 and bbolt state. The React UI is embedded in the daemon and receives live
-site-scoped updates over authenticated SSE. The `dismist` CLI
-prepares local credentials. A site contains APs, WLANs, clients, events, and
-history. See [deployment](docs/deployment.md) for installation, AP preparation,
-service operation, and backups. For a new AP, follow
+site-scoped updates over authenticated SSE. The `dismist` CLI prepares local
+credentials and, from a laptop on the AP's LAN, onboards APs: `dismist ap33
+onboard` backs an AP up, reads its secret, points it at the controller,
+registers it and waits until it is in sync. A site contains APs, WLANs,
+clients, events, and history. See [deployment](docs/deployment.md) for
+installation, service operation, and backups. For a new AP, follow
 [AP onboarding](docs/onboarding.md); for AP33 hardware, use the
 [Juniper AP33 walkthrough](docs/juniper/AP33.md).
 
@@ -36,10 +38,19 @@ sudo "$(go env GOPATH)/bin/dismistd"
 `dismist init` creates a private `data/` directory, generates the local CA
 and WSS certificate, writes the bundled AP33 base configuration, and prints
 the new admin token. Open `http://SERVER_IP:8088/`, sign in, and create a site
-with its country, then add a WLAN. Follow the
-[AP33 rooting and onboarding guide](docs/juniper/AP33.md) to prepare and register
-each physical AP. The site supplies the country, SSID, VLAN, and passphrase;
-you do not need to write an AP config JSON file.
+with its country, then add a WLAN and an API token (System › API tokens).
+With root SSH to an AP, onboard it from a machine on its LAN:
+
+```sh
+dismist ap33 onboard root@192.0.2.10 --controller https://dismist.example.net \
+  --token-file ~/.config/dismist/token --site Home --name Hallway
+```
+
+**Add an AP** in the UI builds that command, lists APs waiting to be adopted
+and follows a new AP live until it broadcasts. The
+[AP33 guide](docs/juniper/AP33.md) covers getting root on an AP33. The site
+supplies the country, SSID, VLAN, and passphrase; you do not need to write an
+AP config JSON file.
 
 For a release archive, download the file matching your OS and CPU, verify it
 against `SHA256SUMS`, and extract it. Run `./dismist init` and
@@ -80,7 +91,7 @@ provision an unprepared factory AP.
 - [Sites and history](docs/sites-and-history.md)
 - [Config field surface](docs/config-surface.md)
 - [Kubernetes deployment](docs/kubernetes.md)
-- [Verification records](docs/verification.md)
+- [Verification records and live checks](docs/verification.md)
 
 ## License
 
