@@ -141,7 +141,7 @@ func explainSSHError(target sshTarget, err error) error {
 		return err
 	}
 	message := err.Error()
-	if strings.Contains(message, "unable to authenticate") {
+	if strings.Contains(message, "unable to authenticate") || strings.Contains(message, "no common public key signature algorithm") {
 		return fmt.Errorf("SSH login as %s@%s failed: %w. Check the key is in the AP's authorized_keys; AP33 0.8 (dropbear 2017.75) accepts only RSA or ECDSA keys, not ed25519", target.User, target.Addr, err)
 	}
 	if strings.Contains(message, "no common algorithm") {
@@ -367,23 +367,29 @@ func (c *apSSH) Run(ctx context.Context, command string) (remoteResult, error) {
 }
 
 // limitedBuffer fails writes past its limit and calls onExceed (which closes
-// the session), so a runaway command cannot exhaust memory or hang.
+// the session), so a runaway command cannot exhaust memory or hang. It must
+// not embed bytes.Buffer: io.Copy would use the promoted ReadFrom and bypass
+// the limit.
 type limitedBuffer struct {
-	bytes.Buffer
+	buf      bytes.Buffer
 	limit    int
 	exceeded bool
 	onExceed func()
 }
 
 func (b *limitedBuffer) Write(data []byte) (int, error) {
-	if b.Len()+len(data) > b.limit {
+	if b.buf.Len()+len(data) > b.limit {
 		if !b.exceeded && b.onExceed != nil {
 			b.onExceed()
 		}
 		b.exceeded = true
 		return 0, fmt.Errorf("command output exceeds %d bytes", b.limit)
 	}
-	return b.Buffer.Write(data)
+	return b.buf.Write(data)
+}
+
+func (b *limitedBuffer) Bytes() []byte {
+	return b.buf.Bytes()
 }
 
 // shellQuote quotes value for a POSIX shell.
