@@ -1,116 +1,862 @@
 # promtool test rules charts/dismist/monitoring/tests/dismist.test.yml
+# Synthetic series only: IDs are placeholders, values are chosen to sit
+# either side of each threshold.
 rule_files:
   - ../rules.yaml
 
 evaluation_interval: 1m
 
 tests:
-  # A connected AP whose messages stop is quiet for the first minute plus the
-  # 2-minute hold, then fires; a disconnected AP with an old last-seen does not.
+  # A registered AP that goes away is quiet for the 5-minute hold, then fires; an AP without a session (registered 0) never does.
   - interval: 1m
     input_series:
-      - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
-        values: '1x10'
-      - series: 'dismist_ap_last_seen_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
-        values: '0 60 120 120 120 120 120 120 120 120 120'
-      - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
-        values: '0x10'
-      - series: 'dismist_ap_last_seen_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
-        values: '0x10'
+    - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 1 1 0x10
+    - series: 'dismist_ap_registered{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 1x12
+    - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: '0x12'
+    - series: 'dismist_ap_registered{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: '0x12'
     alert_rule_test:
-      - eval_time: 3m
-        alertname: DismistAPSilent
-        exp_alerts: []
-      - eval_time: 5m
-        alertname: DismistAPSilent
-        exp_alerts: []
-      - eval_time: 6m
-        alertname: DismistAPSilent
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              namespace: dismist
-              site: s1
-              ap: 02-aa-00-00-00-01
-            exp_annotations:
-              summary: "AP 02-aa-00-00-00-01 (site s1) is connected but silent for 4m 0s"
-              description: "The AP's WebSocket session is open but no message has arrived for over a minute (it normally reports every few seconds). Check the AP's uplink and the dismist logs for this AP; the session should time out and the AP reconnect."
+    - eval_time: 6m
+      alertname: DismistAPDisconnected
+      exp_alerts: []
+    - eval_time: 8m
+      alertname: DismistAPDisconnected
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) is disconnected from dismist
+          description: The AP has not had a session for 5 minutes. Its clients keep working on its last config, but dismist cannot see or change it. Check the AP's PoE and uplink, then the dismist logs for this AP (authentication or TLS errors).
 
-  # Five connections within an hour fire Flapping after the 5-minute hold;
-  # four do not.
+  # A connected AP whose messages stop is quiet for the first minute plus the 2-minute hold, then fires; a disconnected AP with an old last-seen does not.
   - interval: 1m
     input_series:
-      - series: 'dismist_ap_connections_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
-        values: '0+1x5 5x20'
-      - series: 'dismist_ap_connections_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
-        values: '0+1x4 4x20'
+    - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 1x10
+    - series: 'dismist_ap_last_seen_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 0 60 120 120 120 120 120 120 120 120 120
+    - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: '0x10'
+    - series: 'dismist_ap_last_seen_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: '0x10'
     alert_rule_test:
-      - eval_time: 4m
-        alertname: DismistAPFlapping
-        exp_alerts: []
-      - eval_time: 11m
-        alertname: DismistAPFlapping
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              namespace: dismist
-              site: s1
-              ap: 02-aa-00-00-00-01
-            exp_annotations:
-              summary: "AP 02-aa-00-00-00-01 (site s1) reconnected more than 4 times in the last hour"
-              description: "Check whether the AP is rebooting (uptime in the dismist UI), its uplink and PoE, and the dismist logs for the disconnect reasons. Config saves that change this AP's config also reconnect it."
+    - eval_time: 3m
+      alertname: DismistAPSilent
+      exp_alerts: []
+    - eval_time: 5m
+      alertname: DismistAPSilent
+      exp_alerts: []
+    - eval_time: 6m
+      alertname: DismistAPSilent
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) is connected but silent for 4m 0s
+          description: The AP's WebSocket session is open but no message has arrived for over a minute (it normally reports every few seconds). Check the AP's uplink and the dismist logs for this AP; the session should time out and the AP reconnect.
 
-  # A pending revision on a connected AP fires after 10 minutes; a pending
-  # revision while the AP is disconnected stays quiet.
+  # Five connections within an hour fire Flapping after the 5-minute hold; four do not.
   - interval: 1m
     input_series:
-      - series: 'dismist_ap_desired_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
-        values: '3x20'
-      - series: 'dismist_ap_applied_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
-        values: '2x20'
-      - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
-        values: '1x20'
-      - series: 'dismist_ap_desired_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
-        values: '3x20'
-      - series: 'dismist_ap_applied_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
-        values: '2x20'
-      - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
-        values: '0x20'
+    - series: 'dismist_ap_connections_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 0+1x5 5x20
+    - series: 'dismist_ap_connections_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 0+1x4 4x20
     alert_rule_test:
-      - eval_time: 5m
-        alertname: DismistAPConfigNotApplied
-        exp_alerts: []
-      - eval_time: 15m
-        alertname: DismistAPConfigNotApplied
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              namespace: dismist
-              site: s1
-              ap: 02-aa-00-00-00-01
-            exp_annotations:
-              summary: "AP 02-aa-00-00-00-01 (site s1) has not applied config revision 3"
-              description: "The AP is connected but has not reported the current config revision as applied for 10 minutes. Check the AP's last config error in the dismist UI; the AP may have rejected the config."
+    - eval_time: 4m
+      alertname: DismistAPFlapping
+      exp_alerts: []
+    - eval_time: 11m
+      alertname: DismistAPFlapping
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) reconnected more than 4 times in the last hour
+          description: Check whether the AP is rebooting (DismistAPRebooted, uptime in the dismist UI), its uplink and PoE, and the dismist logs for the disconnect reasons. Config pushes in reconnect mode also reconnect the APs they change.
 
-  # A compile failure fires after 5 minutes.
+  # A boot count increase fires Rebooted as info; three boots in six hours fire RebootLoop; a steady count fires neither.
   - interval: 1m
     input_series:
-      - series: 'dismist_ap_config_compile_error{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
-        values: '0 0 1x10'
-      - series: 'dismist_ap_config_compile_error{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
-        values: '0x12'
+    - series: 'dismist_ap_boots_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 6 6 7x20
+    - series: 'dismist_ap_boots_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 6x22
+    - series: 'dismist_ap_boots_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",instance="dismist"}'
+      values: 1 1 2 3 4x20
     alert_rule_test:
-      - eval_time: 5m
-        alertname: DismistAPConfigCompileError
-        exp_alerts: []
-      - eval_time: 8m
-        alertname: DismistAPConfigCompileError
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              namespace: dismist
-              site: s1
-              ap: 02-aa-00-00-00-01
-            exp_annotations:
-              summary: "dismist cannot compile the config for AP 02-aa-00-00-00-01 (site s1)"
-              description: "The AP keeps the last config it was delivered, so recent changes do not reach it. Open the AP's config page in dismist for the compile error, usually an expert patch, and fix or remove it."
+    - eval_time: 1m
+      alertname: DismistAPRebooted
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: DismistAPRebooted
+      exp_alerts:
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) rebooted
+          description: The AP's boot count went up. The AP detail page shows its last reboot reason; repeated reboots fire DismistAPRebootLoop.
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-03
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-03 (site s1) rebooted
+          description: The AP's boot count went up. The AP detail page shows its last reboot reason; repeated reboots fire DismistAPRebootLoop.
+    - eval_time: 20m
+      alertname: DismistAPRebooted
+      exp_alerts: []
+    - eval_time: 5m
+      alertname: DismistAPRebootLoop
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-03
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-03 (site s1) rebooted 3 times in 6 hours
+          description: Check the AP's reboot reasons (AP detail, or `dismist ap33 inspect` from the LAN), its PoE budget (DismistAPPoEConstrained) and temperature. Roll back the last config or protocol-feature change if the reboots started with it.
+
+  # A pending revision on a connected AP fires after 10 minutes; a pending revision while the AP is disconnected stays quiet.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_desired_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 3x20
+    - series: 'dismist_ap_applied_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 2x20
+    - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 1x20
+    - series: 'dismist_ap_desired_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 3x20
+    - series: 'dismist_ap_applied_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 2x20
+    - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: '0x20'
+    alert_rule_test:
+    - eval_time: 5m
+      alertname: DismistAPConfigNotApplied
+      exp_alerts: []
+    - eval_time: 15m
+      alertname: DismistAPConfigNotApplied
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) has not applied config revision 3
+          description: The AP is connected but has not reported the current config revision as applied for 10 minutes. Check the AP's last config error in the dismist UI; the AP may have rejected the config.
+
+  # A reported config timestamp that differs from the served one for 15 minutes on a connected AP fires Drift; equal timestamps and a disconnected AP do not.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_reported_config_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 100x30
+    - series: 'dismist_ap_desired_config_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 100 100 200x30
+    - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 1x30
+    - series: 'dismist_ap_reported_config_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 100x30
+    - series: 'dismist_ap_desired_config_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 100.0001x30
+    - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 1x30
+    - series: 'dismist_ap_reported_config_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",instance="dismist"}'
+      values: 100x30
+    - series: 'dismist_ap_desired_config_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",instance="dismist"}'
+      values: 200x30
+    - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",instance="dismist"}'
+      values: '0x30'
+    alert_rule_test:
+    - eval_time: 16m
+      alertname: DismistAPConfigDrift
+      exp_alerts: []
+    - eval_time: 18m
+      alertname: DismistAPConfigDrift
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) runs a different config than dismist serves
+          description: The config timestamp the AP reports has differed from the one dismist serves for 15 minutes. The AP may have rejected the new config or recovered to an older one; check its config page and events in dismist.
+
+  # A rejected config fires after a minute; a compile failure after 5 minutes; a verification mismatch after 10.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_config_error{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 0 1x20
+    - series: 'dismist_ap_config_error{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_ap_config_compile_error{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 0 0 1x10
+    - series: 'dismist_ap_config_compile_error{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: '0x12'
+    - series: 'dismist_ap_config_verify_mismatch{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 1x20
+    - series: 'dismist_ap_config_verify_mismatch{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: '0x20'
+    alert_rule_test:
+    - eval_time: 1m
+      alertname: DismistAPConfigRejected
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: DismistAPConfigRejected
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) rejected its config
+          description: The AP reported an error applying its config and kept its previous one. Open the AP in dismist for the error, then restore the previous revision from Changes or fix the expert patch that caused it.
+    - eval_time: 5m
+      alertname: DismistAPConfigCompileError
+      exp_alerts: []
+    - eval_time: 8m
+      alertname: DismistAPConfigCompileError
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: dismist cannot compile the config for AP 02-aa-00-00-00-01 (site s1)
+          description: The AP keeps the last config it was delivered, so recent changes do not reach it. Open the AP's config page in dismist for the compile error, usually an expert patch, and fix or remove it.
+    - eval_time: 9m
+      alertname: DismistAPVerifyMismatch
+      exp_alerts: []
+    - eval_time: 11m
+      alertname: DismistAPVerifyMismatch
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) does not run what dismist delivered
+          description: The post-delivery verification found a WLAN, BSSID, channel, power or country that differs from the delivered config. The AP detail page lists the differences; if the change introduced an experimental value, restore the previous revision from Changes.
+
+  # Two push fallbacks within an hour fire PushFallingBack; applied pushes do not.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_config_pushes_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",mode="notify",result="fallback",instance="dismist"}'
+      values: 0 1 2x60
+    - series: 'dismist_ap_config_pushes_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",mode="notify",result="applied",instance="dismist"}'
+      values: 0+1x60
+    alert_rule_test:
+    - eval_time: 3m
+      alertname: DismistAPPushFallingBack
+      exp_alerts:
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: Config pushes to AP 02-aa-00-00-00-01 (site s1) fall back to reconnecting
+          description: The AP did not fetch its config after ep-config-change, so dismist reconnected it instead. Switch the AP's config_change_notify protocol feature off (AP settings, Diagnostics) and check the AP's ep-control log over SSH.
+
+  # Repeated proof failures fire AuthFailing per AP (stage dropped); one failure does not.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_auth_failures_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",stage="proof",instance="dismist"}'
+      values: 0 1 2 3 4x20
+    - series: 'dismist_ap_auth_failures_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",stage="hello",instance="dismist"}'
+      values: '0x24'
+    - series: 'dismist_ap_auth_failures_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",stage="proof",instance="dismist"}'
+      values: 0 1x23
+    alert_rule_test:
+    - eval_time: 4m
+      alertname: DismistAPAuthFailing
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) fails to authenticate
+          description: The AP's proof does not match the secret dismist holds for it, usually after a factory reset or with a wrong secret. Re-enter the AP's EEPROM secret in dismist (AP settings) or re-run `dismist ap33 onboard`.
+
+  # An unknown AP fires an info alert per namespace that clears once it stops trying; TLS rejections by clients fire, closed connections (health checks) do not.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_ws_routes_total{namespace="dismist",instance="dismist",result="unknown_ap"}'
+      values: 0 1 1x40
+    - series: 'dismist_ap_ws_routes_total{namespace="dismist",instance="dismist",result="routed"}'
+      values: 0+1x42
+    - series: 'dismist_ap_tls_handshake_errors_total{namespace="dismist",instance="dismist",reason="client_rejected"}'
+      values: 0+1x20
+    - series: 'dismist_ap_tls_handshake_errors_total{namespace="dismist",instance="dismist",reason="closed"}'
+      values: 0+10x20
+    alert_rule_test:
+    - eval_time: 2m
+      alertname: DismistUnknownAPConnecting
+      exp_alerts:
+      - exp_labels:
+          severity: info
+          namespace: dismist
+        exp_annotations:
+          summary: An access point dismist does not know is trying to connect
+          description: An AP that is not registered sent a hello. It is listed under pending APs in the dismist UI (Onboard); adopt or dismiss it.
+    - eval_time: 40m
+      alertname: DismistUnknownAPConnecting
+      exp_alerts: []
+    - eval_time: 10m
+      alertname: DismistAPTLSFailures
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+        exp_annotations:
+          summary: Clients reject dismist's AP certificate (10 in 15 minutes)
+          description: Connections to the AP WSS endpoint end with a TLS alert from the client, usually an AP that does not trust the served chain (for example after a factory reset removed the CA roots added during onboarding). Check the dismist logs for the source address and re-run `dismist ap33 onboard` on that AP.
+
+  # Health: a hot CPU, low memory and a full /rw fire after their holds; the ambient sensor and healthy APs do not.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_temperature_celsius{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",sensor="cpu",instance="dismist"}'
+      values: 85x40
+    - series: 'dismist_ap_temperature_celsius{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",sensor="ambient",instance="dismist"}'
+      values: 90x40
+    - series: 'dismist_ap_temperature_celsius{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",sensor="cpu",instance="dismist"}'
+      values: 55x40
+    - series: 'dismist_ap_memory_available_bytes{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 50x40
+    - series: 'dismist_ap_memory_total_bytes{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 1000x40
+    - series: 'dismist_ap_memory_available_bytes{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 800x40
+    - series: 'dismist_ap_memory_total_bytes{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 1000x40
+    - series: 'dismist_ap_rw_filesystem_available_bytes{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 5x40
+    - series: 'dismist_ap_rw_filesystem_size_bytes{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: 100x40
+    - series: 'dismist_ap_rw_filesystem_available_bytes{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 50x40
+    - series: 'dismist_ap_rw_filesystem_size_bytes{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 100x40
+    alert_rule_test:
+    - eval_time: 14m
+      alertname: DismistAPHot
+      exp_alerts: []
+    - eval_time: 16m
+      alertname: DismistAPHot
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) CPU is at 85 °C
+          description: The AP has run above 80 °C for 15 minutes (50 to 55 °C is normal). Check its ventilation and mounting.
+    - eval_time: 16m
+      alertname: DismistAPMemoryLow
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) has less than 10% memory available
+          description: Check the AP's agent memory (Access point dashboard) for a leak; a reboot clears it.
+    - eval_time: 29m
+      alertname: DismistAPRWFull
+      exp_alerts: []
+    - eval_time: 31m
+      alertname: DismistAPRWFull
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) /rw is over 90% full
+          description: The AP's small writable filesystem holds its config and logs; when it fills, config writes fail. Inspect it with `dismist ap33 inspect` from the LAN.
+
+  # Uplink: 100 Mb/s or half duplex on a linked eth0 fires Degraded; a gigabit full-duplex port and a port without link do not. FCS errors over 1/s fire UplinkErrors.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_port_up{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",port="eth0",instance="dismist"}'
+      values: 1x20
+    - series: 'dismist_ap_port_speed_bits_per_second{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",port="eth0",instance="dismist"}'
+      values: 1e8x20
+    - series: 'dismist_ap_port_full_duplex{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",port="eth0",instance="dismist"}'
+      values: 1x20
+    - series: 'dismist_ap_port_up{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",port="eth0",instance="dismist"}'
+      values: 1x20
+    - series: 'dismist_ap_port_speed_bits_per_second{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",port="eth0",instance="dismist"}'
+      values: 1e9x20
+    - series: 'dismist_ap_port_full_duplex{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",port="eth0",instance="dismist"}'
+      values: 1x20
+    - series: 'dismist_ap_port_up{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",port="eth0",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_ap_port_speed_bits_per_second{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",port="eth0",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_ap_port_full_duplex{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",port="eth0",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_ap_port_up{namespace="dismist",site="s1",ap="02-aa-00-00-00-04",port="eth0",instance="dismist"}'
+      values: 1x20
+    - series: 'dismist_ap_port_speed_bits_per_second{namespace="dismist",site="s1",ap="02-aa-00-00-00-04",port="eth0",instance="dismist"}'
+      values: 1e9x20
+    - series: 'dismist_ap_port_full_duplex{namespace="dismist",site="s1",ap="02-aa-00-00-00-04",port="eth0",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_ap_port_receive_fcs_errors_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",port="eth0",instance="dismist"}'
+      values: 0+120x20
+    - series: 'dismist_ap_port_receive_fcs_errors_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",port="eth0",instance="dismist"}'
+      values: 0+30x20
+    alert_rule_test:
+    - eval_time: 9m
+      alertname: DismistAPUplinkDegraded
+      exp_alerts: []
+    - eval_time: 11m
+      alertname: DismistAPUplinkDegraded
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) uplink is below 1 Gb/s full duplex
+          description: A bad cable or pair, or a forced port speed on the switch. Check the cable and the switch port settings.
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-04
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-04 (site s1) uplink is below 1 Gb/s full duplex
+          description: A bad cable or pair, or a forced port speed on the switch. Check the cable and the switch port settings.
+    - eval_time: 16m
+      alertname: DismistAPUplinkErrors
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          port: eth0
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) receives frames with bad checksums on eth0
+          description: More than one corrupted frame a second for 10 minutes usually means a damaged cable or connector. Replace the patch lead first.
+
+  # PoE: a negative budget or constrained mode fires after 10 minutes; a positive budget does not. An inactive VLAN fires after 15.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_power_budget_watts{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: -1x20
+    - series: 'dismist_ap_power_constrained{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_ap_power_budget_watts{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 4x20
+    - series: 'dismist_ap_power_constrained{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 1x20
+    - series: 'dismist_ap_power_budget_watts{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",instance="dismist"}'
+      values: 4x20
+    - series: 'dismist_ap_power_constrained{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_ap_inactive_vlan{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",vlan="30",instance="dismist"}'
+      values: 1x20
+    alert_rule_test:
+    - eval_time: 11m
+      alertname: DismistAPPoEConstrained
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) is short of PoE power
+          description: The switch allocates less power than the AP needs, so it limits its radios or disables them. Check the switch's PoE budget and the port's power class (Access point dashboard, PoE panel).
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-02
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-02 (site s1) is short of PoE power
+          description: The switch allocates less power than the AP needs, so it limits its radios or disables them. Check the switch's PoE budget and the port's power class (Access point dashboard, PoE panel).
+    - eval_time: 16m
+      alertname: DismistAPInactiveVLAN
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          vlan: '30'
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) sees no traffic on VLAN 30
+          description: A WLAN uses this VLAN but the AP's switch port does not carry it, so clients on that WLAN get no network. Add the VLAN to the switch port's trunk.
+
+  # Controller RTT above 100 ms and a clock 45 s off fire as info after their holds.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_controller_rtt_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",socket="tcp",instance="dismist"}'
+      values: 0.2x40
+    - series: 'dismist_ap_controller_rtt_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",socket="tcp",instance="dismist"}'
+      values: 0.005x40
+    - series: 'dismist_ap_controller_rtt_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",socket="websocket",instance="dismist"}'
+      values: 0.5x40
+    - series: 'dismist_ap_clock_skew_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+      values: -45x40
+    - series: 'dismist_ap_clock_skew_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+      values: 10x40
+    alert_rule_test:
+    - eval_time: 16m
+      alertname: DismistAPControllerRTTHigh
+      exp_alerts:
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) round trip to dismist is 200ms
+          description: The AP measures more than 100 ms to the controller (3 to 10 ms is normal). Check the path between the AP and the cluster.
+    - eval_time: 31m
+      alertname: DismistAPClockSkew
+      exp_alerts:
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) clock is 45s off
+          description: The AP's clock differs from the controller's by more than 30 seconds. Check the site's NTP setting and that the AP can reach an NTP server.
+
+  # A congested access radio fires after 30 minutes; the scan radio at 0.9 (role="scan") never does. Noise above -80 dBm fires as info on access radios only.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_radio_info{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r0",band="5",phy="ax",role="access",instance="dismist"}'
+      values: 1x60
+    - series: 'dismist_radio_info{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r1",band="2.4",phy="ax",role="access",instance="dismist"}'
+      values: 1x60
+    - series: 'dismist_radio_info{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r2",band="scan",phy="ax",role="scan",instance="dismist"}'
+      values: 1x60
+    - series: 'dismist_radio_channel_utilization_ratio{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r0",band="5",type="all",instance="dismist"}'
+      values: 0.8x60
+    - series: 'dismist_radio_channel_utilization_ratio{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r1",band="2.4",type="all",instance="dismist"}'
+      values: 0.3x60
+    - series: 'dismist_radio_channel_utilization_ratio{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r2",band="scan",type="all",instance="dismist"}'
+      values: 0.9x60
+    - series: 'dismist_radio_channel_utilization_ratio{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r1",band="2.4",type="rx_other_bss",instance="dismist"}'
+      values: 0.9x60
+    - series: 'dismist_radio_noise_floor_dbm{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r0",band="5",instance="dismist"}'
+      values: -95x60
+    - series: 'dismist_radio_noise_floor_dbm{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r1",band="2.4",instance="dismist"}'
+      values: -70x60
+    - series: 'dismist_radio_noise_floor_dbm{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r2",band="scan",instance="dismist"}'
+      values: -60x60
+    alert_rule_test:
+    - eval_time: 29m
+      alertname: DismistRadioChannelCongested
+      exp_alerts: []
+    - eval_time: 31m
+      alertname: DismistRadioChannelCongested
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          radio: r0
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) radio r0 channel is 80% busy
+          description: The channel has been over 70% utilised for 30 minutes. The Clients & RF dashboard shows whether it is this network's traffic or neighbours; plan a different channel in dismist (Site, RF).
+    - eval_time: 59m
+      alertname: DismistRadioChannelCongested
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          radio: r0
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) radio r0 channel is 80% busy
+          description: The channel has been over 70% utilised for 30 minutes. The Clients & RF dashboard shows whether it is this network's traffic or neighbours; plan a different channel in dismist (Site, RF).
+    - eval_time: 31m
+      alertname: DismistRadioNoiseHigh
+      exp_alerts:
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          radio: r1
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) radio r1 noise floor is -70 dBm
+          description: A noise floor above -80 dBm cuts the usable signal-to-noise for every client. Look for non-Wi-Fi interference (microwaves, video senders) or move the radio to another channel.
+
+  # An access radio with WLANs that stops beaconing fires; an access radio without WLANs and the scan radio do not. A missing access radio fires after 5 minutes.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_radio_info{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r0",band="5",phy="ax",role="access",instance="dismist"}'
+      values: 1x60
+    - series: 'dismist_radio_info{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r1",band="2.4",phy="ax",role="access",instance="dismist"}'
+      values: 1x60
+    - series: 'dismist_radio_info{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r2",band="scan",phy="ax",role="scan",instance="dismist"}'
+      values: 1x60
+    - series: 'dismist_radio_beacons_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r0",band="5",instance="dismist"}'
+      values: 100x20
+    - series: 'dismist_radio_beacons_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r1",band="2.4",instance="dismist"}'
+      values: 100x20
+    - series: 'dismist_radio_beacons_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r2",band="scan",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_wlan_clients{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",wlan="w1",radio="r0",instance="dismist"}'
+      values: 3x20
+    - series: 'dismist_wlan_clients{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",wlan="w1",radio="r2",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_radio_missing{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r1",band="2.4",instance="dismist"}'
+      values: 1x20
+    - series: 'dismist_radio_missing{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r2",band="scan",instance="dismist"}'
+      values: 1x20
+    alert_rule_test:
+    - eval_time: 10m
+      alertname: DismistRadioNotBeaconing
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          radio: r0
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) radio r0 sends no beacons
+          description: The radio has WLANs but has not beaconed for 5 minutes, so clients cannot see them. Check the AP's events for radio errors and its PoE budget; reboot the AP if it persists.
+    - eval_time: 6m
+      alertname: DismistRadioMissing
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          radio: r1
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) reports radio r1 missing
+          description: The AP cannot find one of its radios, usually a hardware or driver fault. Reboot the AP; if the radio stays missing, replace it.
+
+  # Radar on an access radio, or more than two 5 GHz channel changes in an hour, fire as info.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_radio_info{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r0",band="5",phy="ax",role="access",instance="dismist"}'
+      values: 1x60
+    - series: 'dismist_radio_info{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",radio="r0",band="5",phy="ax",role="access",instance="dismist"}'
+      values: 1x60
+    - series: 'dismist_radio_info{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",radio="r0",band="5",phy="ax",role="access",instance="dismist"}'
+      values: 1x60
+    - series: 'dismist_radio_dfs_radar_detected{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r0",band="5",instance="dismist"}'
+      values: 0 1x10
+    - series: 'dismist_radio_dfs_radar_detected{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",radio="r0",band="5",instance="dismist"}'
+      values: '0x11'
+    - series: 'dismist_radio_dfs_radar_detected{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",radio="r0",band="5",instance="dismist"}'
+      values: '0x11'
+    - series: 'dismist_radio_channel{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r0",band="5",instance="dismist"}'
+      values: 52x11
+    - series: 'dismist_radio_channel{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",radio="r0",band="5",instance="dismist"}'
+      values: 52 100 52 100 52x7
+    - series: 'dismist_radio_channel{namespace="dismist",site="s1",ap="02-aa-00-00-00-03",radio="r0",band="5",instance="dismist"}'
+      values: 36x11
+    alert_rule_test:
+    - eval_time: 5m
+      alertname: DismistRadarDetected
+      exp_alerts:
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          radio: r0
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) radio r0 detected radar or keeps changing channel
+          description: On a DFS channel the radio must leave when it detects radar. If it happens often, keep the 5 GHz plan on non-DFS channels (36 to 48, 149 to 161).
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-02
+          radio: r0
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-02 (site s1) radio r0 detected radar or keeps changing channel
+          description: On a DFS channel the radio must leave when it detects radar. If it happens often, keep the 5 GHz plan on non-DFS channels (36 to 48, 149 to 161).
+
+  # An access radio off its planned channel fires after 10 minutes; a radio on plan and the scan radio do not.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_radio_channel{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",radio="r0",band="5",instance="dismist"}'
+      values: 149x20
+    - series: 'dismist_radio_planned_channel{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",band="5",instance="dismist"}'
+      values: 36x20
+    - series: 'dismist_radio_channel{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",radio="r0",band="5",instance="dismist"}'
+      values: 36x20
+    - series: 'dismist_radio_planned_channel{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",band="5",instance="dismist"}'
+      values: 36x20
+    - series: 'dismist_radio_channel{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",radio="r2",band="scan",instance="dismist"}'
+      values: 165x20
+    alert_rule_test:
+    - eval_time: 9m
+      alertname: DismistRadioPlanMismatch
+      exp_alerts: []
+    - eval_time: 11m
+      alertname: DismistRadioPlanMismatch
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          band: '5'
+        exp_annotations:
+          summary: AP 02-aa-00-00-00-01 (site s1) 5 GHz radio is not on its planned channel
+          description: 'The radio has been on another channel than dismist planned for 10 minutes: a DFS move after radar, or a config the AP did not apply. Check the AP''s events and the post-delivery verification on its detail page.'
+
+  # More than ten invalid-MIC handshakes in 15 minutes fire WrongPassphrase per WLAN.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_wlan_eapol_invalid_mic_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",wlan="w1",radio="r0",instance="dismist"}'
+      values: 0+2x20
+    - series: 'dismist_wlan_eapol_invalid_mic_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",wlan="w1",radio="r1",instance="dismist"}'
+      values: '0x20'
+    - series: 'dismist_wlan_eapol_invalid_mic_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",wlan="w2",radio="r0",instance="dismist"}'
+      values: 0+0.2x20
+    alert_rule_test:
+    - eval_time: 10m
+      alertname: DismistWLANWrongPassphrase
+      exp_alerts:
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+          wlan: w1
+        exp_annotations:
+          summary: Repeated wrong passphrases on WLAN w1 at AP 02-aa-00-00-00-01 (site s1)
+          description: 'More than 10 WPA handshakes failed the passphrase check in 15 minutes: a device with an old passphrase, or someone guessing it. The site''s events list the client.'
+
+  # A served certificate 13 days from expiry warns; one 20 days away does not, nor an onboarding CA that expires sooner.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_tls_certificate_not_after_timestamp_seconds{namespace="a",instance="dismist",listener="ap-wss",role="leaf",cn=""}'
+      values: 1123200x5
+    - series: 'dismist_tls_certificate_not_after_timestamp_seconds{namespace="b",instance="dismist",listener="ap-wss",role="leaf",cn=""}'
+      values: 1728000x5
+    - series: 'dismist_tls_certificate_not_after_timestamp_seconds{namespace="b",instance="dismist",listener="ap-onboarding",role="root",cn="Example Root"}'
+      values: 86400x5
+    alert_rule_test:
+    - eval_time: 1m
+      alertname: DismistServedCertificateExpiring
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: a
+        exp_annotations:
+          summary: The certificate dismist serves to APs expires in 12d 23h 59m 0s
+          description: Renewal normally happens 30 days before expiry and dismist restarts within a minute to serve it. Check the cert-manager Certificate and that the dismist pod restarted after the renewal.
+
+  # Persistent decode errors fire as info after 30 minutes; observation write errors warn at once; a legacy-mode migration warns after 30 minutes.
+  - interval: 1m
+    input_series:
+    - series: 'dismist_ap_telemetry_decode_errors_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",section="radio",instance="dismist"}'
+      values: 0+1x60
+    - series: 'dismist_ap_telemetry_decode_errors_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",section="radio",instance="dismist"}'
+      values: '0x60'
+    - series: 'dismist_store_observation_errors_total{namespace="dismist",instance="dismist"}'
+      values: 0 0 1x20
+    - series: 'dismist_schema_migration_state{namespace="dismist",instance="dismist",state="legacy"}'
+      values: 1x60
+    - series: 'dismist_schema_migration_state{namespace="dismist",instance="dismist",state="committed"}'
+      values: '0x60'
+    - series: 'dismist_schema_migration_state{namespace="other",instance="dismist",state="legacy"}'
+      values: '0x60'
+    alert_rule_test:
+    - eval_time: 20m
+      alertname: DismistTelemetryDecodeErrors
+      exp_alerts: []
+    - eval_time: 35m
+      alertname: DismistTelemetryDecodeErrors
+      exp_alerts:
+      - exp_labels:
+          severity: info
+          namespace: dismist
+          site: s1
+          ap: 02-aa-00-00-00-01
+        exp_annotations:
+          summary: dismist cannot decode part of AP 02-aa-00-00-00-01's telemetry
+          description: Some telemetry sections keep failing to decode, most likely after a firmware change. The AP still works; the affected dashboard panels go empty. Report the AP's firmware version.
+    - eval_time: 1m
+      alertname: DismistStoreWriteErrors
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: DismistStoreWriteErrors
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+        exp_annotations:
+          summary: dismist cannot write history to its database
+          description: Observations (samples, events, client sessions) failed to save. Check the dismist logs and the database volume's free space.
+    - eval_time: 29m
+      alertname: DismistMigrationPending
+      exp_alerts: []
+    - eval_time: 31m
+      alertname: DismistMigrationPending
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+        exp_annotations:
+          summary: 'dismist runs in legacy mode: the schema 2 migration did not verify'
+          description: Nothing changed for the APs, but typed settings are paused. Open System, Migration for the reason, fix the record it names and Retry.
+
+  # No successful backup for two days warns.
+  - interval: 1h
+    input_series:
+    - series: 'dismist_backup_last_success_timestamp_seconds{namespace="dismist",instance="dismist"}'
+      values: '0x60'
+    alert_rule_test:
+    - eval_time: 47h
+      alertname: DismistBackupStale
+      exp_alerts: []
+    - eval_time: 49h
+      alertname: DismistBackupStale
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          namespace: dismist
+        exp_annotations:
+          summary: No dismist database backup for 2d 1h 0m 0s
+          description: Scheduled snapshots have not succeeded for two days. The System page shows the last error (usually free space); download a backup from System until it is fixed.
