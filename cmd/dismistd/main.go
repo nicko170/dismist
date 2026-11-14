@@ -20,6 +20,7 @@ import (
 
 	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/aptemplate"
+	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/dnsserver"
 	"github.com/nicko170/dismist/internal/httpapi"
 	"github.com/nicko170/dismist/internal/metrics"
@@ -56,8 +57,13 @@ func main() {
 	udpProbeRekeyDelay := flag.Duration("udp-probe-rekey-delay", 0, "delay AP UDP test until upstream rekey can be relayed")
 	apURL := flag.String("ap-url", "", "public WSS URL APs are configured with, e.g. wss://ap.example.com/ws (for onboarding and the System page; empty: APs keep the stock ep-terminator name and reach dismist through its DNS)")
 	apCAFile := flag.String("ap-ca-file", "", "PEM bundle of CA certificates APs need to trust the WSS endpoint besides the served chain (default: ca.crt next to -tls-cert, if present)")
+	apFeatures := flag.String("ap-features", "", "comma-separated protocol features on by default for every AP (design §5.7); each AP's protocol_features override it (empty: all off)")
 	backups := registerBackupFlags(flag.CommandLine)
 	flag.Parse()
+	defaultFeatures, err := controller.ParseFeatures(*apFeatures)
+	if err != nil {
+		log.Fatalf("-ap-features: %v", err)
+	}
 	startedAt := time.Now().UTC()
 	if *apURL != "" {
 		if err := httpapi.CheckAPURL(*apURL); err != nil {
@@ -209,6 +215,8 @@ func main() {
 		UDPProbeAAD:        udpProbeAAD,
 		UDPProbeSendTest:   *udpProbeSendTest,
 		UDPProbeRekeyDelay: *udpProbeRekeyDelay,
+		APConfig:           store.APConfig(),
+		Features:           defaultFeatures,
 	}
 	manager, addresses, err := prepareAPs(withSecrets(state), registryConfig)
 	if err != nil {
