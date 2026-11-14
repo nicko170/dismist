@@ -26,14 +26,24 @@ export const keys = {
   siteChanges: (id: string) => ['site', id, 'changes'] as const,
   /** Record<apId, PushEvent>: latest push lifecycle state per AP. */
   sitePush: (id: string) => ['site', id, 'push'] as const,
+  /** One stored event with its `data` (the stream carries a summary only). */
+  siteEvent: (id: string, eventId: string) => ['site', id, 'event', eventId] as const,
+  /** History samples (site, or one AP with `ap`). */
+  siteSamples: (id: string, params: { ap?: string; range?: string; step?: string } = {}) => ['site', id, 'samples', params] as const,
   ap: (apId: string) => ['ap', apId] as const,
   apTelemetry: (apId: string) => ['ap', apId, 'telemetry'] as const,
   apConfig: (apId: string) => ['ap', apId, 'config'] as const,
+  apClients: (apId: string) => ['ap', apId, 'clients'] as const,
   network: (id: string) => ['network', id] as const,
   client: (mac: string) => ['client', mac] as const,
   pending: ['pending'] as const,
   pendingCount: ['pending', 'count'] as const,
+  /** GET /api/aps/pending, or the dismissed list with `dismissed: true`. */
+  pendingList: (dismissed = false) => ['pending', 'list', { dismissed }] as const,
   system: ['system'] as const,
+  systemSessions: ['system', 'sessions'] as const,
+  systemTokens: ['system', 'tokens'] as const,
+  onboarding: ['onboarding'] as const,
 } as const
 
 /** staleTime defaults (§7.5): config objects 30 s (SSE invalidates), live views 10 s. */
