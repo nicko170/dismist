@@ -1,84 +1,31 @@
+// Package telemetry decodes the AP's ep-telemetry messages (design §5.1):
+// protobuf stats.APStats frames (ap-stats-full-, ap-stats-fast-) and the
+// JSON messages (PACE events, ep-config-applied-). Field numbers come from
+// the protobuf struct tags of the AP's own 0.15 pace binary.
+//
+// Every section decodes on its own: a malformed optional sub-message is
+// skipped and counted in Update.DecodeErrors, and never drops the rest of
+// the frame (VAPs and clients in particular).
 package telemetry
 
 import (
 	"bytes"
 	"compress/gzip"
-	"encoding/binary"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"net"
-	"strings"
-	"time"
 )
 
 const maxPayload = 4 << 20
 
+// ErrMalformed means the message is not a telemetry message at all: an
+// unknown encoding, a broken gzip stream, a protobuf envelope that does
+// not scan, or no topic.
 var ErrMalformed = errors.New("malformed AP telemetry")
 
-type VAP struct {
-	Interface string `json:"interface"`
-	SSID      string `json:"ssid"`
-	BSSID     string `json:"bssid"`
-}
-
-type Radio struct {
-	Interface string `json:"interface"`
-	WidthMHz  uint64 `json:"width_mhz"`
-}
-
-type Client struct {
-	MAC              string  `json:"mac"`
-	Name             string  `json:"name,omitempty"`
-	IP               string  `json:"ip,omitempty"`
-	SSID             string  `json:"ssid"`
-	BSSID            string  `json:"bssid"`
-	VLANID           uint64  `json:"vlan_id"`
-	RSSI             int64   `json:"rssi"`
-	AverageRSSI      int64   `json:"average_rssi"`
-	ConnectedSeconds uint64  `json:"connected_seconds"`
-	InactiveMillis   uint64  `json:"inactive_millis"`
-	TxMbps           float64 `json:"tx_mbps"`
-	RxMbps           float64 `json:"rx_mbps"`
-	TxBytes          uint64  `json:"tx_bytes"`
-	RxBytes          uint64  `json:"rx_bytes"`
-	Auth             string  `json:"auth,omitempty"`
-	Cipher           string  `json:"cipher,omitempty"`
-	Protocol         string  `json:"protocol,omitempty"`
-}
-
-type Event struct {
-	When      time.Time `json:"when"`
-	Type      int       `json:"type"`
-	Title     string    `json:"title"`
-	Text      string    `json:"text"`
-	ClientMAC string    `json:"client_mac,omitempty"`
-	ClientIP  string    `json:"client_ip,omitempty"`
-}
-
-// Interface is one of the AP's own network interfaces (ap-stats-full field
-// 26) with its addresses in CIDR form.
-type Interface struct {
-	Name      string   `json:"name"`
-	Addresses []string `json:"addresses,omitempty"`
-}
-
-type Update struct {
-	Topic           string      `json:"topic"`
-	APID            string      `json:"ap_id"`
-	Model           string      `json:"model,omitempty"`
-	Firmware        string      `json:"firmware,omitempty"`
-	UptimeSeconds   uint64      `json:"uptime_seconds,omitempty"`
-	ConfigTimestamp float64     `json:"config_timestamp,omitempty"`
-	Error           string      `json:"error,omitempty"`
-	VAPs            []VAP       `json:"vaps,omitempty"`
-	Radios          []Radio     `json:"radios,omitempty"`
-	Clients         []Client    `json:"clients,omitempty"`
-	Interfaces      []Interface `json:"interfaces,omitempty"`
-	Event           *Event      `json:"event,omitempty"`
-}
-
+// Decode decodes one ep-telemetry body. A body may be gzip-compressed
+// (0x02 then a gzip stream); the inner body is JSON ('{') or a protobuf
+// TelemetryEnvelope ('P'). Only a message that cannot be read at all is an
+// error; problems inside sections are counted in DecodeErrors.
 func Decode(body []byte) (Update, error) {
 	if len(body) > maxPayload || len(body) == 0 {
 		return Update{}, ErrMalformed
@@ -86,11 +33,11 @@ func Decode(body []byte) (Update, error) {
 	if len(body) >= 3 && body[0] == 2 && body[1] == 0x1f && body[2] == 0x8b {
 		reader, err := gzip.NewReader(bytes.NewReader(body[1:]))
 		if err != nil {
-			return Update{}, err
+			return Update{}, ErrMalformed
 		}
 		uncompressed, err := io.ReadAll(io.LimitReader(reader, maxPayload+1))
 		_ = reader.Close()
-		if err != nil || len(uncompressed) > maxPayload {
+		if err != nil || len(uncompressed) > maxPayload || len(uncompressed) == 0 {
 			return Update{}, ErrMalformed
 		}
 		body = uncompressed
@@ -99,336 +46,42 @@ func Decode(body []byte) (Update, error) {
 	case '{':
 		return decodeJSON(body)
 	case 'P':
-		return decodeProtobuf(body[1:])
+		return decodeEnvelope(body[1:])
 	default:
 		return Update{}, ErrMalformed
 	}
 }
 
-func decodeJSON(body []byte) (Update, error) {
-	var raw struct {
-		Topic           string   `json:"Topic"`
-		Topics          []string `json:"Topics"`
-		ID              string   `json:"ID"`
-		ConfigTimestamp float64  `json:"ConfigTimestamp"`
-		Firmware        string   `json:"Firmware"`
-		Error           string   `json:"Error"`
-		Type            int      `json:"Type"`
-		Title           string   `json:"Title"`
-		Text            string   `json:"Text"`
-		When            string   `json:"When"`
-		ClientMAC       string   `json:"impacted_client_mac"`
-		ClientIP        string   `json:"impacted_client_ip"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return Update{}, err
-	}
-	update := Update{
-		Topic: raw.Topic, APID: raw.ID, ConfigTimestamp: raw.ConfigTimestamp,
-		Firmware: raw.Firmware, Error: raw.Error,
-	}
-	if update.Topic == "" {
-		for _, topic := range raw.Topics {
-			if topic == "ep-pace-event-" {
-				update.Topic = topic
-				break
-			}
-			if topic == "client-pace-event-" {
-				update.Topic = topic
-			}
-		}
-	}
-	if update.Topic == "ep-pace-event-" || update.Topic == "client-pace-event-" {
-		when, _ := time.Parse(time.RFC3339Nano, raw.When)
-		mac := strings.ToLower(strings.ReplaceAll(raw.ClientMAC, "-", ":"))
-		if parsed, err := net.ParseMAC(mac); err != nil || bytes.Equal(parsed, make([]byte, 6)) {
-			mac = ""
-		}
-		ip := ""
-		if parsed := net.ParseIP(raw.ClientIP); parsed != nil && !parsed.IsUnspecified() {
-			ip = parsed.String()
-		}
-		update.Event = &Event{
-			When: when, Type: raw.Type, Title: truncate(raw.Title, 120),
-			Text: truncate(raw.Text, 500), ClientMAC: mac, ClientIP: ip,
-		}
-	}
-	return update, nil
-}
-
-func truncate(value string, limit int) string {
-	if len(value) <= limit {
-		return value
-	}
-	return value[:limit]
-}
-
-type field struct {
-	number uint64
-	value  uint64
-	bytes  []byte
-}
-
-func scan(data []byte) ([]field, error) {
-	fields := make([]field, 0, 16)
-	for len(data) > 0 {
-		key, n := binary.Uvarint(data)
-		if n <= 0 || key>>3 == 0 {
-			return nil, ErrMalformed
-		}
-		data = data[n:]
-		item := field{number: key >> 3}
-		switch key & 7 {
-		case 0:
-			value, n := binary.Uvarint(data)
-			if n <= 0 {
-				return nil, ErrMalformed
-			}
-			item.value = value
-			data = data[n:]
-		case 1:
-			if len(data) < 8 {
-				return nil, ErrMalformed
-			}
-			item.bytes, data = data[:8], data[8:]
-		case 2:
-			length, n := binary.Uvarint(data)
-			if n <= 0 || length > uint64(len(data)-n) {
-				return nil, ErrMalformed
-			}
-			item.bytes = data[n : n+int(length)]
-			data = data[n+int(length):]
-		case 5:
-			if len(data) < 4 {
-				return nil, ErrMalformed
-			}
-			item.bytes, data = data[:4], data[4:]
-		default:
-			return nil, ErrMalformed
-		}
-		fields = append(fields, item)
-	}
-	return fields, nil
-}
-
-func decodeProtobuf(body []byte) (Update, error) {
+// decodeEnvelope reads msgs.TelemetryEnvelope: 1 Msg (stats.APStats),
+// 2 Topic, 3 HashKey (the AP ID), 4 Shuffles (ignored), 5 Ack.
+func decodeEnvelope(body []byte) (Update, error) {
 	fields, err := scan(body)
 	if err != nil {
-		return Update{}, err
+		return Update{}, ErrMalformed
 	}
-	var update Update
+	update := Update{DecodeErrors: map[string]int{}}
+	envelope := newReader(update.DecodeErrors, SectionFrame)
+	var stats [][]byte
 	for _, item := range fields {
 		switch item.number {
 		case 1:
-			if err := parseAPStats(item.bytes, &update); err != nil {
-				return Update{}, err
+			if raw := envelope.bytes(item); raw != nil {
+				stats = append(stats, raw)
 			}
 		case 2:
-			update.Topic = string(item.bytes)
+			update.Topic = envelope.str(item, 64)
 		case 3:
-			update.APID = string(item.bytes)
+			update.APID = envelope.str(item, 64)
 		}
 	}
 	if update.Topic == "" {
 		return Update{}, ErrMalformed
 	}
+	for _, raw := range stats {
+		decodeAPStats(raw, &update)
+	}
+	if len(update.DecodeErrors) == 0 {
+		update.DecodeErrors = nil
+	}
 	return update, nil
-}
-
-func parseAPStats(body []byte, update *Update) error {
-	fields, err := scan(body)
-	if err != nil {
-		return err
-	}
-	for _, item := range fields {
-		switch item.number {
-		case 18:
-			update.UptimeSeconds = item.value
-		case 19:
-			update.Model = string(item.bytes)
-		case 20:
-			update.Firmware = string(item.bytes)
-		case 32:
-			vap, err := parseVAP(item.bytes)
-			if err != nil {
-				return err
-			}
-			update.VAPs = append(update.VAPs, vap)
-		case 36:
-			radio, err := parseRadio(item.bytes)
-			if err != nil {
-				return err
-			}
-			update.Radios = append(update.Radios, radio)
-		case 33:
-			client, err := parseClient(item.bytes)
-			if err != nil {
-				return err
-			}
-			if client.MAC != "" {
-				update.Clients = append(update.Clients, client)
-			}
-		case 26:
-			iface, err := parseInterface(item.bytes)
-			if err != nil {
-				return err
-			}
-			if iface.Name != "" {
-				update.Interfaces = append(update.Interfaces, iface)
-			}
-		}
-	}
-	return nil
-}
-
-// parseInterface reads an AP interface: 1 name, repeated 3 address
-// {2 prefix length, 3 raw IPv4 or IPv6 address}.
-func parseInterface(body []byte) (Interface, error) {
-	fields, err := scan(body)
-	if err != nil {
-		return Interface{}, err
-	}
-	var iface Interface
-	for _, item := range fields {
-		switch item.number {
-		case 1:
-			iface.Name = truncate(string(item.bytes), 32)
-		case 3:
-			parts, err := scan(item.bytes)
-			if err != nil {
-				return Interface{}, err
-			}
-			var ip net.IP
-			prefix := -1
-			for _, part := range parts {
-				switch part.number {
-				case 2:
-					prefix = int(part.value)
-				case 3:
-					if len(part.bytes) == net.IPv4len || len(part.bytes) == net.IPv6len {
-						ip = net.IP(append([]byte(nil), part.bytes...))
-					}
-				}
-			}
-			if ip == nil || len(iface.Addresses) >= 16 {
-				continue
-			}
-			bits := 8 * len(ip)
-			if ip4 := ip.To4(); ip4 != nil && len(ip) == net.IPv4len {
-				ip, bits = ip4, 32
-			}
-			if prefix < 0 || prefix > bits {
-				iface.Addresses = append(iface.Addresses, ip.String())
-				continue
-			}
-			iface.Addresses = append(iface.Addresses, (&net.IPNet{IP: ip, Mask: net.CIDRMask(prefix, bits)}).String())
-		}
-	}
-	return iface, nil
-}
-
-func parseClient(body []byte) (Client, error) {
-	fields, err := scan(body)
-	if err != nil {
-		return Client{}, err
-	}
-	var client Client
-	for _, item := range fields {
-		switch item.number {
-		case 1:
-			if len(item.bytes) == 6 {
-				client.MAC = net.HardwareAddr(item.bytes).String()
-			}
-		case 4:
-			if len(item.bytes) == 6 {
-				client.BSSID = net.HardwareAddr(item.bytes).String()
-			}
-		case 5:
-			wlanFields, err := scan(item.bytes)
-			if err != nil {
-				return Client{}, err
-			}
-			for _, field := range wlanFields {
-				if field.number == 2 {
-					client.SSID = string(field.bytes)
-				}
-			}
-		case 6:
-			client.ConnectedSeconds = item.value
-		case 7:
-			client.InactiveMillis = item.value
-		case 8:
-			client.RSSI = zigzag(item.value)
-		case 10:
-			client.AverageRSSI = zigzag(item.value)
-		case 11:
-			client.TxMbps = float64(item.value) / 10
-		case 12:
-			client.TxBytes = item.value
-		case 22:
-			client.RxMbps = float64(item.value) / 10
-		case 23:
-			client.RxBytes = item.value
-		case 44:
-			client.Name = string(item.bytes)
-		case 47:
-			client.VLANID = item.value
-		case 52:
-			client.Protocol = string(item.bytes)
-		case 55:
-			if len(item.bytes) == 4 {
-				client.IP = net.IP(item.bytes).String()
-			}
-		case 66:
-			client.Auth = string(item.bytes)
-		case 67:
-			client.Cipher = string(item.bytes)
-		}
-	}
-	return client, nil
-}
-
-func zigzag(value uint64) int64 {
-	return int64(value>>1) ^ -int64(value&1)
-}
-
-func parseVAP(body []byte) (VAP, error) {
-	fields, err := scan(body)
-	if err != nil {
-		return VAP{}, err
-	}
-	var vap VAP
-	for _, item := range fields {
-		switch item.number {
-		case 3:
-			if len(item.bytes) == 6 {
-				vap.BSSID = net.HardwareAddr(item.bytes).String()
-			}
-		case 4:
-			vap.Interface = string(item.bytes)
-		case 5:
-			vap.SSID = string(item.bytes)
-		}
-	}
-	return vap, nil
-}
-
-func parseRadio(body []byte) (Radio, error) {
-	fields, err := scan(body)
-	if err != nil {
-		return Radio{}, err
-	}
-	var radio Radio
-	for _, item := range fields {
-		switch item.number {
-		case 1:
-			radio.Interface = string(item.bytes)
-		case 4:
-			radio.WidthMHz = item.value
-		}
-	}
-	if radio.Interface == "" {
-		return Radio{}, fmt.Errorf("%w: radio missing interface", ErrMalformed)
-	}
-	return radio, nil
 }

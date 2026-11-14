@@ -9,7 +9,7 @@ import (
 // TestFeatureNamesAreTheFixedList pins the §5.7 names: they are API and
 // metric label values, so they never change.
 func TestFeatureNamesAreTheFixedList(t *testing.T) {
-	want := []string{"pong2", "subscribe_reply", "file_discard", "site_rest_404", "config_change_notify"}
+	want := []string{"pong2", "subscribe_reply", "file_discard", "site_rest_404", "config_change_notify", "ap_cmd", "not_modified"}
 	if got := FeatureNames(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("feature names %v", got)
 	}

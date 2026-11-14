@@ -31,7 +31,7 @@ func TestAssociatedClientsFollowLiveAPStats(t *testing.T) {
 func TestFastClientStatsKeepNameFromFullReport(t *testing.T) {
 	mac := "02:aa:00:00:00:02"
 	previous := map[string]telemetry.Client{mac: {MAC: mac, Name: "Host", SSID: "TestSSID", RSSI: -62}}
-	next := mergeAssociated(previous, []telemetry.Client{{MAC: mac, SSID: "TestSSID", RSSI: -60}})
+	next := telemetry.MergeClients(previous, []telemetry.Client{{MAC: mac, SSID: "TestSSID", RSSI: -60}}, true)
 	if next[mac].Name != "Host" || next[mac].RSSI != -60 {
 		t.Fatalf("fast report lost client identity: %+v", next[mac])
 	}
