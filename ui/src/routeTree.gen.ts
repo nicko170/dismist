@@ -12,8 +12,17 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SitesSiteIdRouteRouteImport } from './routes/sites/$siteId/route'
+import { Route as SitesSiteIdSettingsRouteRouteImport } from './routes/sites/$siteId/settings/route'
 import { Route as SitesSiteIdRfIndexRouteImport } from './routes/sites/$siteId/rf/index'
 import { Route as SitesSiteIdRfNeighboursRouteImport } from './routes/sites/$siteId/rf/neighbours'
+import { Route as SitesSiteIdSettingsIndexRouteImport } from './routes/sites/$siteId/settings/index'
+import { Route as SitesSiteIdSettingsAccessRouteImport } from './routes/sites/$siteId/settings/access'
+import { Route as SitesSiteIdSettingsAdvancedRouteImport } from './routes/sites/$siteId/settings/advanced'
+import { Route as SitesSiteIdSettingsApDefaultsRouteImport } from './routes/sites/$siteId/settings/ap-defaults'
+import { Route as SitesSiteIdSettingsDangerRouteImport } from './routes/sites/$siteId/settings/danger'
+import { Route as SitesSiteIdSettingsGeneralRouteImport } from './routes/sites/$siteId/settings/general'
+import { Route as SitesSiteIdSettingsNetworkRouteImport } from './routes/sites/$siteId/settings/network'
+import { Route as SitesSiteIdSettingsProtectionRouteImport } from './routes/sites/$siteId/settings/protection'
 import { Route as SitesSiteIdWlansIndexRouteImport } from './routes/sites/$siteId/wlans/index'
 import { Route as SitesSiteIdWlansNewRouteImport } from './routes/sites/$siteId/wlans/new'
 import { Route as SitesSiteIdWlansWlanIdIndexRouteImport } from './routes/sites/$siteId/wlans/$wlanId/index'
@@ -34,6 +43,12 @@ const SitesSiteIdRouteRoute = SitesSiteIdRouteRouteImport.update({
   path: '/sites/$siteId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SitesSiteIdSettingsRouteRoute =
+  SitesSiteIdSettingsRouteRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
 const SitesSiteIdRfIndexRoute = SitesSiteIdRfIndexRouteImport.update({
   id: '/rf/',
   path: '/rf/',
@@ -44,6 +59,54 @@ const SitesSiteIdRfNeighboursRoute = SitesSiteIdRfNeighboursRouteImport.update({
   path: '/rf/neighbours',
   getParentRoute: () => SitesSiteIdRouteRoute,
 } as any)
+const SitesSiteIdSettingsIndexRoute =
+  SitesSiteIdSettingsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsAccessRoute =
+  SitesSiteIdSettingsAccessRouteImport.update({
+    id: '/access',
+    path: '/access',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsAdvancedRoute =
+  SitesSiteIdSettingsAdvancedRouteImport.update({
+    id: '/advanced',
+    path: '/advanced',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsApDefaultsRoute =
+  SitesSiteIdSettingsApDefaultsRouteImport.update({
+    id: '/ap-defaults',
+    path: '/ap-defaults',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsDangerRoute =
+  SitesSiteIdSettingsDangerRouteImport.update({
+    id: '/danger',
+    path: '/danger',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsGeneralRoute =
+  SitesSiteIdSettingsGeneralRouteImport.update({
+    id: '/general',
+    path: '/general',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsNetworkRoute =
+  SitesSiteIdSettingsNetworkRouteImport.update({
+    id: '/network',
+    path: '/network',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsProtectionRoute =
+  SitesSiteIdSettingsProtectionRouteImport.update({
+    id: '/protection',
+    path: '/protection',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
 const SitesSiteIdWlansIndexRoute = SitesSiteIdWlansIndexRouteImport.update({
   id: '/wlans/',
   path: '/wlans/',
@@ -71,9 +134,18 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/sites/$siteId/settings': typeof SitesSiteIdSettingsRouteRouteWithChildren
   '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
+  '/sites/$siteId/settings/access': typeof SitesSiteIdSettingsAccessRoute
+  '/sites/$siteId/settings/advanced': typeof SitesSiteIdSettingsAdvancedRoute
+  '/sites/$siteId/settings/ap-defaults': typeof SitesSiteIdSettingsApDefaultsRoute
+  '/sites/$siteId/settings/danger': typeof SitesSiteIdSettingsDangerRoute
+  '/sites/$siteId/settings/general': typeof SitesSiteIdSettingsGeneralRoute
+  '/sites/$siteId/settings/network': typeof SitesSiteIdSettingsNetworkRoute
+  '/sites/$siteId/settings/protection': typeof SitesSiteIdSettingsProtectionRoute
   '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
   '/sites/$siteId/rf/': typeof SitesSiteIdRfIndexRoute
+  '/sites/$siteId/settings/': typeof SitesSiteIdSettingsIndexRoute
   '/sites/$siteId/wlans/': typeof SitesSiteIdWlansIndexRoute
   '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
   '/sites/$siteId/wlans/$wlanId/': typeof SitesSiteIdWlansWlanIdIndexRoute
@@ -83,8 +155,16 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
   '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
+  '/sites/$siteId/settings/access': typeof SitesSiteIdSettingsAccessRoute
+  '/sites/$siteId/settings/advanced': typeof SitesSiteIdSettingsAdvancedRoute
+  '/sites/$siteId/settings/ap-defaults': typeof SitesSiteIdSettingsApDefaultsRoute
+  '/sites/$siteId/settings/danger': typeof SitesSiteIdSettingsDangerRoute
+  '/sites/$siteId/settings/general': typeof SitesSiteIdSettingsGeneralRoute
+  '/sites/$siteId/settings/network': typeof SitesSiteIdSettingsNetworkRoute
+  '/sites/$siteId/settings/protection': typeof SitesSiteIdSettingsProtectionRoute
   '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
   '/sites/$siteId/rf': typeof SitesSiteIdRfIndexRoute
+  '/sites/$siteId/settings': typeof SitesSiteIdSettingsIndexRoute
   '/sites/$siteId/wlans': typeof SitesSiteIdWlansIndexRoute
   '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
   '/sites/$siteId/wlans/$wlanId': typeof SitesSiteIdWlansWlanIdIndexRoute
@@ -94,9 +174,18 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/sites/$siteId/settings': typeof SitesSiteIdSettingsRouteRouteWithChildren
   '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
+  '/sites/$siteId/settings/access': typeof SitesSiteIdSettingsAccessRoute
+  '/sites/$siteId/settings/advanced': typeof SitesSiteIdSettingsAdvancedRoute
+  '/sites/$siteId/settings/ap-defaults': typeof SitesSiteIdSettingsApDefaultsRoute
+  '/sites/$siteId/settings/danger': typeof SitesSiteIdSettingsDangerRoute
+  '/sites/$siteId/settings/general': typeof SitesSiteIdSettingsGeneralRoute
+  '/sites/$siteId/settings/network': typeof SitesSiteIdSettingsNetworkRoute
+  '/sites/$siteId/settings/protection': typeof SitesSiteIdSettingsProtectionRoute
   '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
   '/sites/$siteId/rf/': typeof SitesSiteIdRfIndexRoute
+  '/sites/$siteId/settings/': typeof SitesSiteIdSettingsIndexRoute
   '/sites/$siteId/wlans/': typeof SitesSiteIdWlansIndexRoute
   '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
   '/sites/$siteId/wlans/$wlanId/': typeof SitesSiteIdWlansWlanIdIndexRoute
@@ -107,9 +196,18 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/sites/$siteId'
+    | '/sites/$siteId/settings'
     | '/sites/$siteId/rf/neighbours'
+    | '/sites/$siteId/settings/access'
+    | '/sites/$siteId/settings/advanced'
+    | '/sites/$siteId/settings/ap-defaults'
+    | '/sites/$siteId/settings/danger'
+    | '/sites/$siteId/settings/general'
+    | '/sites/$siteId/settings/network'
+    | '/sites/$siteId/settings/protection'
     | '/sites/$siteId/wlans/new'
     | '/sites/$siteId/rf/'
+    | '/sites/$siteId/settings/'
     | '/sites/$siteId/wlans/'
     | '/sites/$siteId/wlans/$wlanId/expert'
     | '/sites/$siteId/wlans/$wlanId/'
@@ -119,8 +217,16 @@ export interface FileRouteTypes {
     | '/login'
     | '/sites/$siteId'
     | '/sites/$siteId/rf/neighbours'
+    | '/sites/$siteId/settings/access'
+    | '/sites/$siteId/settings/advanced'
+    | '/sites/$siteId/settings/ap-defaults'
+    | '/sites/$siteId/settings/danger'
+    | '/sites/$siteId/settings/general'
+    | '/sites/$siteId/settings/network'
+    | '/sites/$siteId/settings/protection'
     | '/sites/$siteId/wlans/new'
     | '/sites/$siteId/rf'
+    | '/sites/$siteId/settings'
     | '/sites/$siteId/wlans'
     | '/sites/$siteId/wlans/$wlanId/expert'
     | '/sites/$siteId/wlans/$wlanId'
@@ -129,9 +235,18 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/sites/$siteId'
+    | '/sites/$siteId/settings'
     | '/sites/$siteId/rf/neighbours'
+    | '/sites/$siteId/settings/access'
+    | '/sites/$siteId/settings/advanced'
+    | '/sites/$siteId/settings/ap-defaults'
+    | '/sites/$siteId/settings/danger'
+    | '/sites/$siteId/settings/general'
+    | '/sites/$siteId/settings/network'
+    | '/sites/$siteId/settings/protection'
     | '/sites/$siteId/wlans/new'
     | '/sites/$siteId/rf/'
+    | '/sites/$siteId/settings/'
     | '/sites/$siteId/wlans/'
     | '/sites/$siteId/wlans/$wlanId/expert'
     | '/sites/$siteId/wlans/$wlanId/'
@@ -166,6 +281,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sites/$siteId/settings': {
+      id: '/sites/$siteId/settings'
+      path: '/settings'
+      fullPath: '/sites/$siteId/settings'
+      preLoaderRoute: typeof SitesSiteIdSettingsRouteRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
     '/sites/$siteId/rf/': {
       id: '/sites/$siteId/rf/'
       path: '/rf'
@@ -179,6 +301,62 @@ declare module '@tanstack/react-router' {
       fullPath: '/sites/$siteId/rf/neighbours'
       preLoaderRoute: typeof SitesSiteIdRfNeighboursRouteImport
       parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/settings/': {
+      id: '/sites/$siteId/settings/'
+      path: '/'
+      fullPath: '/sites/$siteId/settings/'
+      preLoaderRoute: typeof SitesSiteIdSettingsIndexRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/access': {
+      id: '/sites/$siteId/settings/access'
+      path: '/access'
+      fullPath: '/sites/$siteId/settings/access'
+      preLoaderRoute: typeof SitesSiteIdSettingsAccessRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/advanced': {
+      id: '/sites/$siteId/settings/advanced'
+      path: '/advanced'
+      fullPath: '/sites/$siteId/settings/advanced'
+      preLoaderRoute: typeof SitesSiteIdSettingsAdvancedRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/ap-defaults': {
+      id: '/sites/$siteId/settings/ap-defaults'
+      path: '/ap-defaults'
+      fullPath: '/sites/$siteId/settings/ap-defaults'
+      preLoaderRoute: typeof SitesSiteIdSettingsApDefaultsRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/danger': {
+      id: '/sites/$siteId/settings/danger'
+      path: '/danger'
+      fullPath: '/sites/$siteId/settings/danger'
+      preLoaderRoute: typeof SitesSiteIdSettingsDangerRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/general': {
+      id: '/sites/$siteId/settings/general'
+      path: '/general'
+      fullPath: '/sites/$siteId/settings/general'
+      preLoaderRoute: typeof SitesSiteIdSettingsGeneralRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/network': {
+      id: '/sites/$siteId/settings/network'
+      path: '/network'
+      fullPath: '/sites/$siteId/settings/network'
+      preLoaderRoute: typeof SitesSiteIdSettingsNetworkRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/protection': {
+      id: '/sites/$siteId/settings/protection'
+      path: '/protection'
+      fullPath: '/sites/$siteId/settings/protection'
+      preLoaderRoute: typeof SitesSiteIdSettingsProtectionRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
     }
     '/sites/$siteId/wlans/': {
       id: '/sites/$siteId/wlans/'
@@ -211,7 +389,36 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface SitesSiteIdSettingsRouteRouteChildren {
+  SitesSiteIdSettingsAccessRoute: typeof SitesSiteIdSettingsAccessRoute
+  SitesSiteIdSettingsAdvancedRoute: typeof SitesSiteIdSettingsAdvancedRoute
+  SitesSiteIdSettingsApDefaultsRoute: typeof SitesSiteIdSettingsApDefaultsRoute
+  SitesSiteIdSettingsDangerRoute: typeof SitesSiteIdSettingsDangerRoute
+  SitesSiteIdSettingsGeneralRoute: typeof SitesSiteIdSettingsGeneralRoute
+  SitesSiteIdSettingsNetworkRoute: typeof SitesSiteIdSettingsNetworkRoute
+  SitesSiteIdSettingsProtectionRoute: typeof SitesSiteIdSettingsProtectionRoute
+  SitesSiteIdSettingsIndexRoute: typeof SitesSiteIdSettingsIndexRoute
+}
+
+const SitesSiteIdSettingsRouteRouteChildren: SitesSiteIdSettingsRouteRouteChildren =
+  {
+    SitesSiteIdSettingsAccessRoute: SitesSiteIdSettingsAccessRoute,
+    SitesSiteIdSettingsAdvancedRoute: SitesSiteIdSettingsAdvancedRoute,
+    SitesSiteIdSettingsApDefaultsRoute: SitesSiteIdSettingsApDefaultsRoute,
+    SitesSiteIdSettingsDangerRoute: SitesSiteIdSettingsDangerRoute,
+    SitesSiteIdSettingsGeneralRoute: SitesSiteIdSettingsGeneralRoute,
+    SitesSiteIdSettingsNetworkRoute: SitesSiteIdSettingsNetworkRoute,
+    SitesSiteIdSettingsProtectionRoute: SitesSiteIdSettingsProtectionRoute,
+    SitesSiteIdSettingsIndexRoute: SitesSiteIdSettingsIndexRoute,
+  }
+
+const SitesSiteIdSettingsRouteRouteWithChildren =
+  SitesSiteIdSettingsRouteRoute._addFileChildren(
+    SitesSiteIdSettingsRouteRouteChildren,
+  )
+
 interface SitesSiteIdRouteRouteChildren {
+  SitesSiteIdSettingsRouteRoute: typeof SitesSiteIdSettingsRouteRouteWithChildren
   SitesSiteIdRfNeighboursRoute: typeof SitesSiteIdRfNeighboursRoute
   SitesSiteIdWlansNewRoute: typeof SitesSiteIdWlansNewRoute
   SitesSiteIdRfIndexRoute: typeof SitesSiteIdRfIndexRoute
@@ -221,6 +428,7 @@ interface SitesSiteIdRouteRouteChildren {
 }
 
 const SitesSiteIdRouteRouteChildren: SitesSiteIdRouteRouteChildren = {
+  SitesSiteIdSettingsRouteRoute: SitesSiteIdSettingsRouteRouteWithChildren,
   SitesSiteIdRfNeighboursRoute: SitesSiteIdRfNeighboursRoute,
   SitesSiteIdWlansNewRoute: SitesSiteIdWlansNewRoute,
   SitesSiteIdRfIndexRoute: SitesSiteIdRfIndexRoute,
