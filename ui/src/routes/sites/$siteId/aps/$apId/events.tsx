@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { apQuery } from '@/api/queries/aps'
-import { EVENT_KINDS, EVENT_RANGES, EVENT_SEVERITIES } from '@/api/queries/events'
+import { EVENT_KINDS, EVENT_RANGE_KEYS, EVENT_SEVERITIES } from '@/features/overview/kit/params'
 import { normaliseMac } from '@/lib/mac'
 import { usePageTitle } from '@/features/shell/title'
 import { compact, pickEnum, pickString, pickTime } from '@/features/overview/kit/search'
@@ -17,8 +17,8 @@ export const Route = createFileRoute('/sites/$siteId/aps/$apId/events')({
     compact({
       client: normaliseMac(pickString(search.client, 64) ?? '') ?? undefined,
       kind: pickEnum(search.kind, [...EVENT_KINDS, 'log'] as string[]),
-      severity: pickEnum(search.severity, EVENT_SEVERITIES as unknown as string[]),
-      range: pickEnum(search.range, Object.keys(EVENT_RANGES)),
+      severity: pickEnum(search.severity, EVENT_SEVERITIES),
+      range: pickEnum(search.range, EVENT_RANGE_KEYS),
       before: pickTime(search.before),
     }),
   staticData: { title: 'Events' },

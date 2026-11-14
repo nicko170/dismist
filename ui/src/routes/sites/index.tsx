@@ -5,6 +5,8 @@ import { SitesPage } from '@/features/overview/SitesPage'
 
 // Sites list and the New site dialog (design §3.2, §2.5 `?dialog=`).
 export const Route = createFileRoute('/sites/')({
+  // The loader rides in the route's lazy chunk (initial JS budget, design §7.9).
+  codeSplitGroupings: [['loader', 'component'], ['notFoundComponent'], ['errorComponent']],
   validateSearch: (search: Record<string, unknown>): { dialog?: 'new-site' } =>
     search.dialog === 'new-site' ? { dialog: 'new-site' } : {},
   staticData: { title: 'Sites' },

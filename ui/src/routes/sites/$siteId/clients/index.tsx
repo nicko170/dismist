@@ -3,10 +3,12 @@ import { siteClientsQuery } from '@/api/queries/clients'
 import { normaliseMac } from '@/lib/mac'
 import { compact, pickEnum, pickString } from '@/features/overview/kit/search'
 import { ClientsPage, type ClientsSearch } from '@/features/clients/ClientsPage'
-import { BANDS, SIGNALS } from '@/features/clients/model'
+import { BANDS, SIGNALS } from '@/features/overview/kit/params'
 
 // Clients (design §3.12): ?q=&ap=&wlan=&band=&signal=&view=live|recent&sort=.
 export const Route = createFileRoute('/sites/$siteId/clients/')({
+  // The loader rides in the route's lazy chunk (initial JS budget, design §7.9).
+  codeSplitGroupings: [['loader', 'component'], ['notFoundComponent'], ['errorComponent']],
   validateSearch: (search: Record<string, unknown>): ClientsSearch =>
     compact({
       q: pickString(search.q, 100),

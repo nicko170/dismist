@@ -18,6 +18,7 @@ import { apPath, bandCounts, channelsText, siteChannels, worstFirst } from '@/fe
 import { EventDrawer } from '@/features/events/EventDrawer'
 import { EventList } from '@/features/events/EventList'
 import { AttentionCard } from './AttentionCard'
+import { GlobalSearch } from './GlobalSearch'
 import { attentionItems } from './attention'
 import { Card, actionLink } from './kit/Card'
 import { StatTile } from './kit/StatTile'
@@ -75,7 +76,7 @@ export function OverviewPage({ siteId, range }: { siteId: string; range: History
 
   return (
     <div className="grid min-w-0 gap-5">
-      <PageHeader title={name} meta={[country, timezone, ccrev].filter(Boolean).join(' · ')} />
+      <PageHeader title={name} meta={[country, timezone, ccrev].filter(Boolean).join(' · ')} actions={<GlobalSearch siteId={siteId} />} />
 
       <AttentionCard items={items} />
 

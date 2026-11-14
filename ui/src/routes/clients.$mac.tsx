@@ -7,6 +7,8 @@ import { normaliseMac } from '@/lib/mac'
 // Stable client link (design §2.3): GET /api/clients/$mac without a site
 // answers where the client was last seen; redirect there.
 export const Route = createFileRoute('/clients/$mac')({
+  // The loader rides in the route's lazy chunk (initial JS budget, design §7.9).
+  codeSplitGroupings: [['loader', 'component'], ['notFoundComponent'], ['errorComponent']],
   loader: async ({ params }) => {
     const mac = normaliseMac(params.mac)
     if (!mac) throw notFound()

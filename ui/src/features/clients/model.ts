@@ -1,12 +1,12 @@
 import type { ClientView, Signal } from '@/gen/api.gen'
+import { BANDS, CLIENT_SORTS, SIGNALS as SIGNAL_LIST } from '@/features/overview/kit/params'
 
 // Client list filters and sort (design §3.12). One response per site; these
 // run client-side.
 
-export const CLIENT_SORTS = ['signal', 'name', 'usage'] as const
+export { BANDS, CLIENT_SORTS }
 export type ClientSort = (typeof CLIENT_SORTS)[number]
-export const SIGNALS: Signal[] = ['excellent', 'good', 'fair', 'poor']
-export const BANDS = ['2.4', '5'] as const
+export const SIGNALS: Signal[] = [...SIGNAL_LIST]
 
 export type ClientFilters = { q?: string; ap?: string; wlan?: string; band?: string; signal?: string }
 

@@ -17,9 +17,10 @@ export const STATUS_ORDER: APStatus[] = [
   'in_sync',
 ]
 
-export const AP_FILTERS = ['online', 'offline', 'attention'] as const
+import { AP_FILTERS, AP_SORTS } from '@/features/overview/kit/params'
+
+export { AP_FILTERS, AP_SORTS }
 export type APFilter = (typeof AP_FILTERS)[number]
-export const AP_SORTS = ['name', 'status', 'clients', 'uptime'] as const
 export type APSort = (typeof AP_SORTS)[number]
 
 const ATTENTION: APStatus[] = ['auth_failing', 'source_mismatch', 'config_error', 'rejected', 'pending']

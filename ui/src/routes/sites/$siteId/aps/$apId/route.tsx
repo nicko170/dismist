@@ -14,6 +14,8 @@ import { LinkTabs } from '@/features/overview/kit/LinkTabs'
 // Radios, Clients, Uplink, Events, Settings and Config. An AP that lives in
 // another site redirects there (same tab); a deleted AP is not found.
 export const Route = createFileRoute('/sites/$siteId/aps/$apId')({
+  // The loader rides in the route's lazy chunk (initial JS budget, design §7.9).
+  codeSplitGroupings: [['loader', 'component'], ['notFoundComponent'], ['errorComponent']],
   beforeLoad: ({ params, location }) => {
     const id = normaliseMac(params.apId)
     if (id && id !== params.apId) {

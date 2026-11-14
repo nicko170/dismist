@@ -10,28 +10,7 @@ import type { EventPage, EventView } from '@/gen/api.gen'
 
 export const EVENT_RANGES = { '1h': 3600_000, '24h': 86400_000, '7d': 7 * 86400_000, '30d': 30 * 86400_000 } as const
 export type EventRange = keyof typeof EVENT_RANGES
-export const EVENT_SEVERITIES = ['info', 'warning', 'error'] as const
-export const EVENT_KINDS = [
-  'connection',
-  'config',
-  'reboot',
-  'auth',
-  'dhcp_failure',
-  'dns',
-  'disassociated',
-  'authorized',
-  'rsn_config',
-  'radio',
-  'port',
-  'inactive_vlan',
-  'clock',
-  'push',
-  'feature',
-  'system',
-  'backup',
-  'pace',
-] as const
-
+export { EVENT_KINDS, EVENT_SEVERITIES } from '@/features/overview/kit/params'
 const kindLabels: Record<string, string> = {
   connection: 'Connection',
   config: 'Config',

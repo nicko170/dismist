@@ -196,3 +196,16 @@ test.describe('system', () => {
     await expect(page.getByText('wpa2_wpa3_personal')).toBeVisible()
   })
 })
+
+test.describe('global search', () => {
+  test('finds a client by name and opens it', async ({ signedIn: page }) => {
+    await page.goto('/next/sites/home/overview')
+    await ready(page)
+    await page.getByRole('button', { name: /^Search/ }).click()
+    const dialog = page.getByRole('dialog', { name: 'Search' })
+    await dialog.getByRole('combobox').fill('printer')
+    await dialog.getByRole('option', { name: /printer/ }).click()
+    await expect(page).toHaveURL(/\/sites\/home\/clients\/00-aa-bb-00-00-03$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'printer' })).toBeVisible()
+  })
+})
