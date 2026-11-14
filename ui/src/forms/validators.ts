@@ -81,7 +81,7 @@ export const sshPublicKey = z.string().trim().refine(isSSHPublicKey, 'Paste an O
 
 /** A number from a NumberField: null when empty, NaN when not a number. */
 export function numberInRange(min: number, max: number, unit = '') {
-  const range = `${min} to ${max}${unit ? ` ${unit}` : ''}`.replace(/-/g, '−')
+  const range = `${min} to ${max}${unit ? ` ${unit}` : ''}`.replace(/-/g, '\u2212')
   return z
     .number({ error: 'Enter a number.' })
     .refine((v) => !Number.isNaN(v), 'Enter a number.')

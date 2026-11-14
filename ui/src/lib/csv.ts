@@ -19,7 +19,7 @@ export function toCSV<T>(rows: readonly T[], columns: readonly CsvColumn<T>[]): 
 
 /** Starts a download of `csv` as `filename`. */
 export function downloadCSV(filename: string, csv: string) {
-  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' })
+  const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

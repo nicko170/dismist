@@ -20,6 +20,7 @@ import type {
   TokenCreated,
   TokenList,
 } from '../types'
+import * as config from './handlers-config'
 import * as data from './data'
 import { mockState } from './state'
 
@@ -28,12 +29,12 @@ import { mockState } from './state'
 // browser build exposes controls on window.__dismistMock (see browser.ts) so
 // Playwright can drop the stream, keep it failing, or push typed events.
 
-const fail = (status: number, error: string, code: ErrorCode, fields: Record<string, string> = {}, init?: ResponseInit) =>
+export const fail = (status: number, error: string, code: ErrorCode, fields: Record<string, string> = {}, init?: ResponseInit) =>
   HttpResponse.json<ErrorBody>({ error, code, fields }, { status, ...init })
-const unauthorized = () => fail(401, 'Sign in to continue.', 'unauthorized')
-const notFound = (what: string) => fail(404, `${what} not found.`, 'not_found')
+export const unauthorized = () => fail(401, 'Sign in to continue.', 'unauthorized')
+export const notFound = (what: string) => fail(404, `${what} not found.`, 'not_found')
 
-function guard(): Response | null {
+export function guard(): Response | null {
   return mockState.signedIn() ? null : unauthorized()
 }
 
@@ -95,7 +96,7 @@ function siteCounts(site: SiteSummary): SiteSummary {
   }
 }
 
-function ifMatchFails(request: Request, rev: number): boolean {
+export function ifMatchFails(request: Request, rev: number): boolean {
   const header = request.headers.get('If-Match')
   return header !== null && header.replace(/"/g, '') !== String(rev)
 }
@@ -116,6 +117,12 @@ function eventPage(request: Request, rows: EventView[]): EventPage {
 }
 
 let nextRevision = 44
+
+/** The site's current config revision, and the next one for a committed mutation. */
+export const revisions = {
+  current: () => nextRevision - 1,
+  next: () => nextRevision++,
+}
 
 export const restHandlers: HttpHandler[] = [
   http.get('/auth/session', () =>
@@ -164,7 +171,7 @@ export const restHandlers: HttpHandler[] = [
   }),
   http.get('/api/sites/:siteId', ({ params }) => {
     const site = data.sites.find((s) => s.id === params.siteId)
-    return guard() ?? (site ? HttpResponse.json(data.siteView(siteCounts(site))) : notFound('Site'))
+    return guard() ?? (site ? HttpResponse.json(config.siteSettingsView(siteCounts(site))) : notFound('Site'))
   }),
   http.delete('/api/sites/:siteId', ({ params }) => {
     const denied = guard()
@@ -194,7 +201,7 @@ export const restHandlers: HttpHandler[] = [
   }),
   http.get('/api/aps/:apId', ({ params }) => {
     const ap = data.aps.find((a) => a.id === params.apId)
-    return guard() ?? (ap ? HttpResponse.json<APDetail>(data.apDetail(ap)) : notFound('AP'))
+    return guard() ?? (ap ? HttpResponse.json<APDetail>({ ...data.apDetail(ap), ...config.apExtras(ap.id) }) : notFound('AP'))
   }),
   http.get('/api/aps/:apId/clients', ({ params }) => guard() ?? HttpResponse.json(data.clients.filter((c) => c.ap_id === params.apId))),
   http.patch('/api/aps/:apId', async ({ params, request }) => {
@@ -205,21 +212,20 @@ export const restHandlers: HttpHandler[] = [
     if (ifMatchFails(request, ap.updated_rev)) {
       return HttpResponse.json({ error: 'This AP changed since you opened it.', code: 'stale', fields: {}, object: ap }, { status: 409 })
     }
-    const body = (await request.json().catch(() => ({}))) as Partial<APView> & { secret?: string }
+    const body = (await request.json().catch(() => ({}))) as Partial<APView> & {
+      secret?: string
+      management_ip?: string
+      protocol_features?: Record<string, boolean>
+      overrides?: Record<string, unknown>
+    }
     if (body.name !== undefined && !body.name.trim()) return fail(422, 'Check the highlighted fields.', 'invalid', { name: 'Enter a name.' })
     if (body.secret !== undefined && secretBytes(body.secret) !== 32) {
       return fail(422, 'Check the highlighted fields.', 'invalid', { secret: 'The secret must be 32 bytes, as hex or base64.' })
     }
-    if (body.name !== undefined) ap.name = body.name.trim()
-    if (body.site_id !== undefined) ap.site_id = body.site_id
-    ap.updated_rev++
-    const response: MutationResponse<APView> = {
-      revision: nextRevision++,
-      object: ap,
-      impact: { aps: [], disruption: 'none', summary: 'No AP changes' },
-      warnings: [],
+    if (body.site_id !== undefined && !data.sites.some((s) => s.id === body.site_id)) {
+      return fail(422, 'Check the highlighted fields.', 'invalid', { site_id: 'Choose an existing site.' })
     }
-    return HttpResponse.json(response)
+    return config.patchAP(request, ap, body)
   }),
   http.delete('/api/aps/:apId', ({ params }) => {
     const denied = guard()

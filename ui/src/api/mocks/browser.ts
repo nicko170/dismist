@@ -2,6 +2,7 @@ import { setupWorker } from 'msw/browser'
 import type { APView, EventView } from '../types'
 import * as data from './data'
 import { dropStreams, emit, failStreams, restHandlers, streamHandlers, toLive, toSummary } from './handlers'
+import { configHandlers } from './handlers-config'
 import { mockState } from './state'
 
 /** Controls the Playwright specs drive (window.__dismistMock, mock builds only). */
@@ -28,7 +29,7 @@ declare global {
 
 /** Starts MSW in the browser (`--mode mock` only; never in production builds). */
 export async function startMocks() {
-  const worker = setupWorker(...restHandlers, ...streamHandlers())
+  const worker = setupWorker(...restHandlers, ...configHandlers, ...streamHandlers())
   await worker.start({
     serviceWorker: { url: '/mockServiceWorker.js' },
     onUnhandledFrame: 'bypass',

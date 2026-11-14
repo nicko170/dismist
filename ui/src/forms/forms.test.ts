@@ -24,7 +24,7 @@ describe('NumberField modes (design §7.4)', () => {
 
   it('signed ranges accept a minus, the typographic minus and the ± toggle', () => {
     expect(parseNumberInput('-3', 'signed')).toBe(-3)
-    expect(parseNumberInput('−3', 'signed')).toBe(-3)
+    expect(parseNumberInput('\u22123', 'signed')).toBe(-3)
     expect(toggleSign('3')).toBe('-3')
     expect(toggleSign('-3')).toBe('3')
     expect(parseNumberInput('-', 'signed')).toBeNull()
@@ -40,11 +40,11 @@ describe('NumberField modes (design §7.4)', () => {
   it('drops characters the mode cannot type', () => {
     expect(sanitiseNumberText('1a2-3', 'unsigned')).toBe('123')
     expect(sanitiseNumberText('-1-2', 'signed')).toBe('-12')
-    expect(sanitiseNumberText('−5', 'signed')).toBe('-5')
+    expect(sanitiseNumberText('\u22125', 'signed')).toBe('-5')
   })
 
   it('describes ranges with a typographic minus', () => {
-    expect(describeRange(-95, -50, 'dBm')).toBe('−95 to −50 dBm')
+    expect(describeRange(-95, -50, 'dBm')).toBe('\u221295 to \u221250 dBm')
     expect(describeRange(1, 25)).toBe('1 to 25')
   })
 })

@@ -81,6 +81,9 @@ export type {
   Warning,
 } from '@/gen/api.gen'
 
+// Phase 2 to 4 shapes until workstream C generates them (see provisional.ts).
+export type * from './provisional'
+
 /**
  * The pre-v1 stream's only event (`event: update`), sent by servers before
  * SSE v2 (design §4.10). The client folds it into the AP list so a v0.3

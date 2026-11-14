@@ -33,7 +33,7 @@ export function formatNumberInput(value: number | null | undefined, mode: Number
  * decimal comma.
  */
 export function parseNumberInput(text: string, mode: NumberMode, decimal = false): number | null {
-  const cleaned = text.trim().replace(/−/g, '-').replace(',', '.')
+  const cleaned = text.trim().replace(/\u2212/g, '-').replace(',', '.')
   if (cleaned === '' || cleaned === '-') return null
   const shape = decimal ? /^-?\d*\.?\d+$|^-?\d+\.$/ : /^-?\d+$/
   if (!shape.test(cleaned)) return Number.NaN
@@ -45,7 +45,7 @@ export function parseNumberInput(text: string, mode: NumberMode, decimal = false
 
 /** Keeps only what the mode can type (drops letters as they are entered). */
 export function sanitiseNumberText(text: string, mode: NumberMode, decimal = false): string {
-  let out = text.replace(/−/g, '-')
+  let out = text.replace(/\u2212/g, '-')
   out = out.replace(decimal ? /[^0-9.,-]/g : /[^0-9-]/g, '')
   if (mode !== 'signed') out = out.replace(/-/g, '')
   else out = out.replace(/(?!^)-/g, '')
@@ -61,7 +61,7 @@ export function toggleSign(text: string): string {
 
 /** "−95 to −50 dBm" for help text and errors. */
 export function describeRange(min: number | null | undefined, max: number | null | undefined, unit = ''): string {
-  const f = (n: number) => (n < 0 ? `−${Math.abs(n)}` : String(n))
+  const f = (n: number) => (n < 0 ? `\u2212${Math.abs(n)}` : String(n))
   const suffix = unit ? ` ${unit}` : ''
   if (min != null && max != null) return `${f(min)} to ${f(max)}${suffix}`
   if (min != null) return `at least ${f(min)}${suffix}`
