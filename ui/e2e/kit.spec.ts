@@ -1,4 +1,4 @@
-import { checkPage, expect, isPhone, ready, test } from './harness'
+import { checkPage, expect, expectAccessible, isPhone, ready, test } from './harness'
 
 // The shared components and forms kit at every width (design §7.7, §7.8):
 // the 16 px rule, tap targets, axe and no sideways scroll with every section
@@ -116,5 +116,19 @@ test.describe('keyboard shortcuts', () => {
     await expect(page).toHaveURL(/\/next\/sites\/home\/aps$/)
     await page.keyboard.press('?')
     await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible()
+  })
+})
+
+test.describe('dark theme', () => {
+  test('the kit and the sign-in page pass axe in dark mode', async ({ signedIn: page }) => {
+    await page.addInitScript(() => localStorage.setItem('dismist.theme', 'dark'))
+    await page.goto('/next/dev/kit')
+    await ready(page)
+    await expect(page.locator('html')).toHaveClass(/dark/)
+    await expectAccessible(page)
+    await page.evaluate(() => window.__dismistMock!.signOut())
+    await page.goto('/next/login')
+    await ready(page)
+    await expectAccessible(page)
   })
 })
