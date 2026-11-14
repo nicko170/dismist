@@ -20,6 +20,8 @@ type collector struct {
 	compileStatus func() map[string]CompileStatus
 
 	sites, aps, siteAPs, siteClients *prometheus.Desc
+	siteInfo, apInfo                 *prometheus.Desc
+	names                            bool
 	apMetrics                        []apMetric
 	schema, compat                   *prometheus.Desc
 	compileError, compileErrors      *prometheus.Desc
@@ -77,7 +79,19 @@ func newCollector(options Options) *collector {
 		compat:        prometheus.NewDesc("dismist_store_compat", "Oldest database schema a dismist binary must support to run this database (meta.compat).", nil, nil),
 		compileError:  prometheus.NewDesc("dismist_ap_config_compile_error", "Whether the access point's last config compile failed; it keeps its last delivered config.", apLabels, nil),
 		compileErrors: prometheus.NewDesc("dismist_ap_config_compile_errors_total", "Access point config compile failures since controller start.", apLabels, nil),
+		names:         options.Names,
 	}
+	// Info series let dashboards join names and AP facts onto the ID-labelled
+	// series. Names are opt-in (-metrics-names); model and firmware are
+	// bounded per AP and always present.
+	siteInfoLabels := []string{"site"}
+	apInfoLabels := []string{"site", "ap", "model", "firmware"}
+	if options.Names {
+		siteInfoLabels = append(siteInfoLabels, "name")
+		apInfoLabels = append(apInfoLabels, "name")
+	}
+	c.siteInfo = prometheus.NewDesc("dismist_site_info", "Registered site, always 1; the name label is present with -metrics-names.", siteInfoLabels, nil)
+	c.apInfo = prometheus.NewDesc("dismist_ap_info", "Registered access point, always 1, with the model and firmware it reports; the name label is present with -metrics-names.", apInfoLabels, nil)
 	gauge := func(name, help string, value func(apSample) float64) apMetric {
 		return apMetric{prometheus.NewDesc(name, help, apLabels, nil), prometheus.GaugeValue, value}
 	}
@@ -101,7 +115,7 @@ func newCollector(options Options) *collector {
 // Describe sends every descriptor, including those of optional sources that
 // are not wired, so the registry checks each emitted series against them.
 func (c *collector) Describe(ch chan<- *prometheus.Desc) {
-	for _, desc := range []*prometheus.Desc{c.sites, c.aps, c.siteAPs, c.siteClients, c.schema, c.compat, c.compileError, c.compileErrors} {
+	for _, desc := range []*prometheus.Desc{c.sites, c.aps, c.siteAPs, c.siteClients, c.siteInfo, c.apInfo, c.schema, c.compat, c.compileError, c.compileErrors} {
 		ch <- desc
 	}
 	for _, metric := range c.apMetrics {
@@ -124,8 +138,15 @@ func (c *collector) Collect(ch chan<- prometheus.Metric) {
 	for _, ap := range state.APs {
 		siteAPs[ap.SiteID]++
 		sample := apSample{site: ap.SiteID, id: ap.ID, desired: ap.ConfigRevision}
+		model, firmware := ap.Model, ap.Firmware
 		if server, ok := sessions[ap.ID]; ok {
 			status := server.Status()
+			if status.Model != "" {
+				model = status.Model
+			}
+			if status.Firmware != "" {
+				firmware = status.Firmware
+			}
 			stats := server.TelemetrySnapshot()
 			sample.connected = status.Connected
 			sample.connections = status.ConnectionCount
@@ -140,8 +161,18 @@ func (c *collector) Collect(ch chan<- prometheus.Metric) {
 			siteClients[ap.SiteID] += sample.clients
 		}
 		samples = append(samples, sample)
+		infoLabels := []string{ap.SiteID, ap.ID, model, firmware}
+		if c.names {
+			infoLabels = append(infoLabels, ap.Name)
+		}
+		emit(ch, c.apInfo, prometheus.GaugeValue, 1, infoLabels...)
 	}
 	for _, site := range state.Sites {
+		if c.names {
+			emit(ch, c.siteInfo, prometheus.GaugeValue, 1, site.ID, site.Name)
+		} else {
+			emit(ch, c.siteInfo, prometheus.GaugeValue, 1, site.ID)
+		}
 		emit(ch, c.siteAPs, prometheus.GaugeValue, float64(siteAPs[site.ID]), site.ID)
 		emit(ch, c.siteClients, prometheus.GaugeValue, float64(siteClients[site.ID]), site.ID)
 	}

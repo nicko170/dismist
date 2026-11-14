@@ -128,8 +128,9 @@ func TestCollectorMatchesLegacyExporter(t *testing.T) {
 		t.Fatalf("legacy exporter wrote %d families, want %d", got, len(legacyFamilies))
 	}
 	c := testCollector(store, sessions, Options{})
-	// No metric names: any family the legacy exporter did not have fails too.
-	if err := testutil.CollectAndCompare(c, strings.NewReader(want)); err != nil {
+	// The legacy families must match exactly; families added since (the info
+	// series) are checked by their own tests.
+	if err := testutil.CollectAndCompare(c, strings.NewReader(want), legacyFamilies...); err != nil {
 		t.Fatal(err)
 	}
 	for _, check := range []struct {

@@ -57,10 +57,10 @@ type Options struct {
 	// <token>" on every scrape (-metrics-token-file).
 	Token string
 
-	// Names adds a name label to *_info series (-metrics-names). Clients and
-	// ClientLimit select the client series (-metrics-clients,
-	// -metrics-client-limit). Phase 0 exports no *_info or client series yet,
-	// so these are accepted and kept for the collectors that use them.
+	// Names adds a name label to dismist_site_info and dismist_ap_info
+	// (-metrics-names). Clients and ClientLimit select the client series
+	// (-metrics-clients, -metrics-client-limit); phase 0 exports no client
+	// series yet, so those are accepted and kept for the collectors that use them.
 	Names       bool
 	Clients     ClientMode
 	ClientLimit int
