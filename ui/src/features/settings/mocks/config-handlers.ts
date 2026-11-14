@@ -13,6 +13,7 @@ import { changedPaths } from '../kit/patch'
 import { provisionalOptions } from '../kit/provisional-options'
 import { parseSSHKey, secretByteLength, sshFingerprint } from '../kit/validators'
 import { passphraseError, isPersonal } from '@/features/wlans/security'
+import * as data from '@/api/mocks/data'
 import * as fixtures from './config-data'
 import { toDetail, type MockChange } from './config-data'
 
@@ -335,16 +336,27 @@ export const configHandlers: HttpHandler[] = [
   http.post('/api/system/migration/finalise', () => fail(409, { error: 'Finalise is available 30 days after the migration committed.', code: 'conflict' })),
 
   // ---- sites ----
+  // The site list holds this mock's sites as well as the shared mocks'.
+  http.get('/api/sites', async () => {
+    const denied = guard()
+    if (denied) return denied
+    const shared = data.sites.map((site) => ({ ...site }))
+    for (const site of Object.values(state.sites)) {
+      if (!shared.some((s) => s.id === site.id)) shared.push({ id: site.id, name: site.name, country: site.country, timezone: site.timezone, counts: site.counts })
+    }
+    return HttpResponse.json(shared)
+  }),
   http.get('/api/sites/:siteId', ({ params }) => {
     const site = state.sites[String(params.siteId)]
-    return guard() ?? (site ? HttpResponse.json({ ...site, rf: state.rf[site.id] }) : notFound('Site'))
+    // A site this mock does not hold falls through to the shared mocks.
+    return guard() ?? (site ? HttpResponse.json({ ...site, rf: state.rf[site.id] }) : undefined)
   }),
   http.patch('/api/sites/:siteId', async ({ request, params }) => {
     const denied = guard()
     if (denied) return denied
     const id = String(params.siteId)
     const site = state.sites[id]
-    if (!site) return notFound('Site')
+    if (!site) return undefined
     const stale = ifMatch(request, site)
     if (stale) return stale
     await delay(120)
@@ -410,14 +422,14 @@ export const configHandlers: HttpHandler[] = [
   // ---- RF ----
   http.get('/api/sites/:siteId/rf', ({ params }) => {
     const rf = state.rf[String(params.siteId)]
-    return guard() ?? (rf ? HttpResponse.json({ ...rf, recommendations: state.recommendations[String(params.siteId)]?.filter((r) => r.area === 'rf') ?? [] }) : notFound('Site'))
+    return guard() ?? (rf ? HttpResponse.json({ ...rf, recommendations: state.recommendations[String(params.siteId)]?.filter((r) => r.area === 'rf') ?? [] }) : undefined)
   }),
   http.put('/api/sites/:siteId/rf', async ({ request, params }) => {
     const denied = guard() ?? typedOnly()
     if (denied) return denied
     const id = String(params.siteId)
     const rf = state.rf[id]
-    if (!rf) return notFound('Site')
+    if (!rf) return undefined
     const stale = ifMatch(request, rf)
     if (stale) return stale
     await delay(120)
@@ -454,7 +466,7 @@ export const configHandlers: HttpHandler[] = [
     if (denied) return denied
     const id = String(params.siteId)
     const rf = state.rf[id]
-    if (!rf) return notFound('Site')
+    if (!rf) return undefined
     await delay(200)
     const changes: PlanProposal['changes'] = rf.plan
       .filter((row) => row.mode === 'auto')
@@ -658,7 +670,8 @@ export const configHandlers: HttpHandler[] = [
   // ---- APs ----
   http.get('/api/aps/:apId', ({ params }) => {
     const ap = base.aps.find((a) => a.id === params.apId)
-    if (!ap) return guard() ?? notFound('AP')
+    // /api/aps/pending and APs this mock does not hold fall through.
+    if (!ap) return undefined
     return guard() ?? HttpResponse.json({ ...base.apDetail(ap), ...fixtures.apExtras(ap.id), ...state.ap[ap.id], ...pickAP(ap) })
   }),
   http.patch('/api/aps/:apId', async ({ request, params }) => {

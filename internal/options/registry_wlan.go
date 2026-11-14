@@ -31,7 +31,7 @@ var wlanOptions = []Option{
 	// Basic.
 	wlanOption(Option{
 		Key: "wlan.ssid", Label: "SSID", Help: "The network name, 1 to 32 bytes.",
-		Control: "text", Type: "string", MaxBytes: 32, Default: "", Tier: TierBasic, Confidence: Confirmed,
+		Control: "ssid", Type: "string", MaxBytes: 32, Default: "", Tier: TierBasic, Confidence: Confirmed,
 		FirmwarePaths: []string{"WLANs[].SSID"}, Catalogue: "wlans.md §5.1",
 	}),
 	boolWLAN("wlan.enabled", "Enabled", "", TierBasic, Confirmed, true, nil, "wlans.md §5.1", "WLANs[].Enabled"),
@@ -127,7 +127,7 @@ var wlanOptions = []Option{
 		FirmwarePaths: []string{"WLANs[].MacAuth.Enabled"}, Catalogue: "wlans.md §5.7",
 	}),
 	wlanOption(Option{
-		Key: "wlan.owe_ssid", Label: "OWE companion SSID", Control: "text", Type: "string", MaxBytes: 32, Default: "",
+		Key: "wlan.owe_ssid", Label: "OWE companion SSID", Control: "ssid", Type: "string", MaxBytes: 32, Default: "",
 		Tier: TierAdvanced, Confidence: NeedsLiveTest,
 		FirmwarePaths: []string{"WLANs[].OWE.SSID"}, Catalogue: "wlans.md §5.5",
 		VisibleWhen: []Condition{{Key: "wlan.security", In: []string{"owe_transition"}}},

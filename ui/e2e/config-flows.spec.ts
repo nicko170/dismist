@@ -138,7 +138,7 @@ test.describe('radio settings', () => {
     await open(page, '/next/sites/home/rf')
     const band5 = page.getByRole('region', { name: '5 GHz' })
     await expect(band5.getByRole('button', { name: /^36–48/ })).toHaveAttribute('aria-pressed', 'true')
-    await band5.getByLabel('Channel width').selectOption('40')
+    await band5.getByLabel('5 GHz width').selectOption('40')
     await expect(band5.getByRole('button', { name: /^36–40/ })).toHaveAttribute('aria-pressed', 'true')
     await expect(band5.getByRole('button', { name: /^149–153/ })).toHaveAttribute('aria-pressed', 'true')
     await expect(band5.getByRole('button', { name: /^52–56/ })).toBeDisabled()

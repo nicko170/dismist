@@ -3,7 +3,8 @@
 # TestWriteFixtureExposition) into a throwaway Prometheus and evaluates every
 # dashboard query against it (check_queries.py). Needs Go, Python 3 and
 # Docker. PROMETHEUS_IMAGE overrides the image (default: the version the
-# production cluster runs).
+# production cluster runs). EXPOSITION_FILE checks the queries against a
+# saved scrape instead (for example a live dismistd with fake APs).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -21,7 +22,11 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$work/srv" "$work/conf"
-(cd "$root" && DISMIST_FIXTURE_EXPOSITION="$work/srv/metrics" go test ./internal/metrics -run '^TestWriteFixtureExposition$' -count=1 >/dev/null)
+if [ -n "${EXPOSITION_FILE:-}" ]; then
+  cp "$EXPOSITION_FILE" "$work/srv/metrics"
+else
+  (cd "$root" && DISMIST_FIXTURE_EXPOSITION="$work/srv/metrics" go test ./internal/metrics -run '^TestWriteFixtureExposition$' -count=1 >/dev/null)
+fi
 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$work/srv" >/dev/null 2>&1 &
 server=$!
 

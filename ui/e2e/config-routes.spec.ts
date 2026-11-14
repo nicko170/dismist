@@ -33,7 +33,8 @@ export const configRoutes: ConfigRoute[] = [
   { path: `/next/sites/home/aps/${AP}/config`, heading: 'Hallway config' },
   { path: `/next/sites/home/aps/${AP}/config?view=expert`, heading: 'Hallway config' },
   { path: `/next/sites/home/aps/${AP}/config?view=history`, heading: 'Hallway config' },
-  { path: '/next/sites/lab/aps/02-aa-00-00-00-10/settings', heading: 'Lab bench settings', expand: true },
+  // AP 02-aa-00-00-00-10 lives in the shared mocks' Office site.
+  { path: '/next/sites/office/aps/02-aa-00-00-00-10/settings', heading: 'Front desk settings', expand: true },
 ]
 
 /** Opens every collapsed section so the checks cover the advanced fields too. */

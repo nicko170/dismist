@@ -80,7 +80,7 @@ const (
 
 // Controls and value types an option may declare.
 var (
-	Controls = []string{"text", "password", "number", "switch", "select", "segmented", "chips", "list", "slider", "ssh_keys", "mac_list"}
+	Controls = []string{"text", "ssid", "password", "number", "switch", "select", "segmented", "chips", "list", "slider", "ssh_keys", "mac_list"}
 	Types    = []string{"string", "int", "bool", "[]int", "[]string", "object"}
 )
 
