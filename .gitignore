@@ -31,4 +31,7 @@ __pycache__/
 # Locally built binaries
 /cmd/dismistd/dismistd
 /cmd/dismist/dismist
+/dismistd
+/dismist
 /fakeap
+/migrationcompat
