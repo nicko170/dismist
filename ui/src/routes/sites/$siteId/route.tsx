@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Outlet, createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { useSiteStream } from '@/api/sse'
 import { NotFound, SiteNotFound } from '@/components/app/NotFound'
@@ -20,7 +21,6 @@ export const Route = createFileRoute('/sites/$siteId')({
       forgetLastSite(params.siteId)
       throw notFound({ data: { kind: 'site' } })
     }
-    rememberLastSite(site.id)
     return { site, crumb: site.name }
   },
   component: SiteLayout,
@@ -31,5 +31,7 @@ export const Route = createFileRoute('/sites/$siteId')({
 function SiteLayout() {
   const { siteId } = Route.useParams()
   useSiteStream(siteId)
+  // Remember the site only when it is actually shown (loaders also run on hover preload).
+  useEffect(() => rememberLastSite(siteId), [siteId])
   return <Outlet />
 }
