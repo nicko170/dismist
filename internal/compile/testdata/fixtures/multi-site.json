@@ -1,0 +1,132 @@
+{
+ "template": "bundled",
+ "revision": 9,
+ "updated_at": "2026-11-02T00:00:00Z",
+ "sites": [
+  {
+   "id": "site-a",
+   "name": "Example A",
+   "country": "au",
+   "advanced": {
+    "LED": {
+     "Brightness": 10
+    },
+    "wlans": [
+     {
+      "SSID": "lowercase-wins"
+     }
+    ]
+   }
+  },
+  {
+   "id": "site-b",
+   "name": "Example B",
+   "ssh_public_keys": [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC ops@example",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD"
+   ]
+  }
+ ],
+ "aps": [
+  {
+   "id": "02-aa-00-00-00-01",
+   "name": "a-one",
+   "site_id": "site-a",
+   "secret": "ERERERERERERERERERERERERERERERERERERERERERE=",
+   "config_revision": 5,
+   "config_updated_at": "2026-11-01T00:00:00Z",
+   "advanced": {
+    "LED": {
+     "Brightness": 200
+    },
+    "SwitchPorts": [
+     {
+      "Name": "eth0",
+      "Vlans": [
+       "1",
+       "99"
+      ],
+      "PortVlanID": "1"
+     }
+    ]
+   }
+  },
+  {
+   "id": "02-aa-00-00-00-02",
+   "site_id": "site-a",
+   "secret": "ERERERERERERERERERERERERERERERERERERERERERE=",
+   "config_revision": 7,
+   "config_updated_at": "2026-11-01T12:00:00Z",
+   "advanced": {
+    "Hostname": "patched",
+    "SSH": {
+     "Disabled": false
+    }
+   }
+  },
+  {
+   "id": "02-aa-00-00-00-03",
+   "name": "b-one",
+   "site_id": "site-b",
+   "secret": "ERERERERERERERERERERERERERERERERERERERERERE=",
+   "config_revision": 9,
+   "config_updated_at": "2026-11-02T00:00:00Z"
+  },
+  {
+   "id": "02-aa-00-00-00-04",
+   "name": "unassigned",
+   "secret": "ERERERERERERERERERERERERERERERERERERERERERE="
+  }
+ ],
+ "networks": [
+  {
+   "id": "wlan-1",
+   "site_id": "site-a",
+   "ssid": "Example",
+   "psk": "example-passphrase-03",
+   "vlan_id": 20,
+   "enabled": true
+  },
+  {
+   "id": "wlan-2",
+   "site_id": "site-a",
+   "ssid": "Example Guest",
+   "psk": "example-passphrase-04",
+   "vlan_id": 30,
+   "enabled": false,
+   "advanced": {
+    "roamMode": "11r",
+    "RoamMode": "none",
+    "Hidden": true
+   }
+  },
+  {
+   "id": "wlan-3",
+   "site_id": "site-a",
+   "ssid": "Example IoT",
+   "psk": "example-passphrase-05",
+   "vlan_id": 20,
+   "enabled": true,
+   "advanced": {
+    "BandConfigs": [
+     {
+      "Band": "2.4",
+      "BSSIDIndex": 3
+     }
+    ],
+    "Auth": {
+     "AKM": null
+    }
+   }
+  },
+  {
+   "id": "wlan-b",
+   "site_id": "site-b",
+   "ssid": "Example B",
+   "psk": "example-passphrase-06",
+   "vlan_id": 4094,
+   "enabled": true
+  }
+ ],
+ "name": "multi-site"
+}

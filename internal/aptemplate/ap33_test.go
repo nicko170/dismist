@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nicko170/dismist/internal/controller"
+	"github.com/nicko170/dismist/internal/compile"
 	"github.com/nicko170/dismist/internal/model"
 )
 
@@ -108,7 +108,7 @@ func TestBundledAP33TemplateIsCompleteAndSanitized(t *testing.T) {
 func TestBundledAP33TemplateBuildsWorkingWLAN(t *testing.T) {
 	ap := model.APRecord{ID: "02-aa-00-00-00-03", Name: "example-ap", SiteID: "example-site"}
 	network := model.Network{ID: "example-wlan", SiteID: ap.SiteID, SSID: "ExampleSSID", PSK: "example-passphrase-04", VLANID: 123, Enabled: true}
-	raw, err := controller.BuildSiteConfig(Default(), model.Site{ID: ap.SiteID}, ap, []model.Network{network}, time.Unix(1794475905, 0))
+	raw, err := compile.BuildSiteConfig(Default(), model.Site{ID: ap.SiteID}, ap, []model.Network{network}, time.Unix(1794475905, 0))
 	if err != nil {
 		t.Fatal(err)
 	}

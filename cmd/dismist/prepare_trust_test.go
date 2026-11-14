@@ -88,7 +88,7 @@ func TestPrepareTrustAcceptsStockFIPSAndExistingRWPath(t *testing.T) {
 func TestPrepareTrustPreservesStockBundleLeadingBytes(t *testing.T) {
 	stock := " # Stock CA bundle\n" + stockCert
 	stockDir, caFile, output := trustFixture(t, stockConfig, stock, localCert)
-	if err := prepareTrustOverlay(stockDir, caFile, output); err != nil {
+	if err := prepareTrustOverlay(stockDir, []string{caFile}, "", output); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(filepath.Join(output, "etc/mist/ep-control/cacerts-production.pem"))
@@ -170,6 +170,80 @@ func TestPrepareTrustRequiresAllFlagsAndNoPositionals(t *testing.T) {
 	} {
 		if err := run(args, &bytes.Buffer{}); err == nil {
 			t.Fatalf("accepted invalid arguments %q", args)
+		}
+	}
+}
+
+// customStockConfig mirrors the 0.15 stock cloud.ini: a ${FIPS} production
+// entry, a factory entry and a commented proxy URL.
+const customStockConfig = `ENV = "production"
+
+[[cloud]]
+  url = "wss://ep-terminator${FIPS}.mistsys.net/ws"
+    [cloud.tls]
+      insecure = false
+      rootcerts = "/etc/mist/ep-control/cacerts-production${FIPS}.pem"
+
+[[cloud]]
+  url = "wss://ep-terminator.mistsys.net/ws"
+  manufacturing = true
+    [cloud.tls]
+      insecure = false
+      rootcerts = "/etc/mist/ep-control/cacerts-production.pem"
+
+[proxy]
+  #url = "http://username:password@proxy.com:8080/"
+`
+
+func TestPrepareTrustCustomURLAndPublicRoots(t *testing.T) {
+	stockDir, caFile, output := trustFixture(t, customStockConfig, stockCert, localCert)
+	second := filepath.Join(filepath.Dir(caFile), "root-x2.pem")
+	const rootX2 = "-----BEGIN CERTIFICATE-----\nROOTX2\n-----END CERTIFICATE-----\n"
+	if err := os.WriteFile(second, []byte("\n"+rootX2+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"ap33", "prepare-trust", "--stock-dir", stockDir, "--controller-ca", caFile, "--controller-ca", second,
+		"--url", "wss://ap.example.net/ws", "--output", output}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(output, "etc/mist/ep-control")
+	config, err := os.ReadFile(filepath.Join(root, "cloud.ini"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseCloudINI(string(config))
+	if len(parsed.Entries) != 2 || parsed.ProxyHost != "" {
+		t.Fatalf("overlay cloud.ini: %+v\n%s", parsed, config)
+	}
+	for _, entry := range parsed.Entries {
+		if entry.URL != "wss://ap.example.net/ws" || entry.RootCerts != rwRootCertsPath || entry.Insecure {
+			t.Fatalf("entry not retargeted: %+v\n%s", entry, config)
+		}
+	}
+	if !strings.Contains(string(config), `#url = "http://username:password@proxy.com:8080/"`) || !strings.Contains(string(config), "manufacturing = true") {
+		t.Fatalf("unrelated lines changed:\n%s", config)
+	}
+	bundle, err := os.ReadFile(filepath.Join(root, "cacerts-production.pem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(bundle) != stockCert+localCert+rootX2 {
+		t.Fatalf("bundle = %q", bundle)
+	}
+}
+
+func TestPrepareTrustRejectsBadControllerURL(t *testing.T) {
+	for _, endpoint := range []string{
+		"https://ap.example.net/ws", "ws://ap.example.net/ws", "wss:///ws", "wss://user:pw@ap.example.net/ws",
+		"wss://ap.example.net/ws?x=1", "wss://ap.example.net/ws#f", `wss://ap.example.net/"ws`, "wss://ap.example.net/w s",
+	} {
+		stockDir, caFile, output := trustFixture(t, customStockConfig, stockCert, localCert)
+		err := run([]string{"ap33", "prepare-trust", "--stock-dir", stockDir, "--controller-ca", caFile, "--url", endpoint, "--output", output}, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), "controller URL") {
+			t.Errorf("%q: %v", endpoint, err)
+		}
+		if _, err := os.Lstat(output); !os.IsNotExist(err) {
+			t.Fatalf("%q created output", endpoint)
 		}
 	}
 }

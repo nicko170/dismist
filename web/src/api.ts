@@ -19,10 +19,35 @@ export async function api<T>(
     throw new UnauthorizedError();
   }
   if (!response.ok) {
-    const message = (await response.text()).trim();
-    throw new Error(message || `Request failed (${response.status})`);
+    throw new Error(await errorMessage(response));
   }
   return response.json() as Promise<T>;
+}
+
+// errorMessage turns an error response into one sentence: the JSON contract
+// {error, code, fields} when the server sends it, otherwise the plain text.
+export async function errorMessage(response: Response): Promise<string> {
+  const text = (await response.text()).trim();
+  try {
+    const body = JSON.parse(text) as {
+      error?: unknown;
+      fields?: Record<string, unknown>;
+    };
+    const fields = Object.values(body.fields ?? {}).filter(
+      (value): value is string => typeof value === "string",
+    );
+    if (typeof body.error === "string" && body.error) {
+      return [body.error, ...fields.filter((f) => f !== body.error)].join(" ");
+    }
+    if (fields.length) return fields.join(" ");
+  } catch {
+    // Not JSON: fall through to the text.
+  }
+  // A proxy's HTML error page or a long body is no sentence for humans.
+  const line = text.split("\n")[0].trim();
+  return line && !line.startsWith("<") && line.length <= 200
+    ? line
+    : `Request failed (${response.status})`;
 }
 
 export function timeLabel(value?: string): string {

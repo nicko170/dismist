@@ -57,18 +57,26 @@ type Event struct {
 	ClientIP  string    `json:"client_ip,omitempty"`
 }
 
+// Interface is one of the AP's own network interfaces (ap-stats-full field
+// 26) with its addresses in CIDR form.
+type Interface struct {
+	Name      string   `json:"name"`
+	Addresses []string `json:"addresses,omitempty"`
+}
+
 type Update struct {
-	Topic           string   `json:"topic"`
-	APID            string   `json:"ap_id"`
-	Model           string   `json:"model,omitempty"`
-	Firmware        string   `json:"firmware,omitempty"`
-	UptimeSeconds   uint64   `json:"uptime_seconds,omitempty"`
-	ConfigTimestamp float64  `json:"config_timestamp,omitempty"`
-	Error           string   `json:"error,omitempty"`
-	VAPs            []VAP    `json:"vaps,omitempty"`
-	Radios          []Radio  `json:"radios,omitempty"`
-	Clients         []Client `json:"clients,omitempty"`
-	Event           *Event   `json:"event,omitempty"`
+	Topic           string      `json:"topic"`
+	APID            string      `json:"ap_id"`
+	Model           string      `json:"model,omitempty"`
+	Firmware        string      `json:"firmware,omitempty"`
+	UptimeSeconds   uint64      `json:"uptime_seconds,omitempty"`
+	ConfigTimestamp float64     `json:"config_timestamp,omitempty"`
+	Error           string      `json:"error,omitempty"`
+	VAPs            []VAP       `json:"vaps,omitempty"`
+	Radios          []Radio     `json:"radios,omitempty"`
+	Clients         []Client    `json:"clients,omitempty"`
+	Interfaces      []Interface `json:"interfaces,omitempty"`
+	Event           *Event      `json:"event,omitempty"`
 }
 
 func Decode(body []byte) (Update, error) {
@@ -260,9 +268,63 @@ func parseAPStats(body []byte, update *Update) error {
 			if client.MAC != "" {
 				update.Clients = append(update.Clients, client)
 			}
+		case 26:
+			iface, err := parseInterface(item.bytes)
+			if err != nil {
+				return err
+			}
+			if iface.Name != "" {
+				update.Interfaces = append(update.Interfaces, iface)
+			}
 		}
 	}
 	return nil
+}
+
+// parseInterface reads an AP interface: 1 name, repeated 3 address
+// {2 prefix length, 3 raw IPv4 or IPv6 address}.
+func parseInterface(body []byte) (Interface, error) {
+	fields, err := scan(body)
+	if err != nil {
+		return Interface{}, err
+	}
+	var iface Interface
+	for _, item := range fields {
+		switch item.number {
+		case 1:
+			iface.Name = truncate(string(item.bytes), 32)
+		case 3:
+			parts, err := scan(item.bytes)
+			if err != nil {
+				return Interface{}, err
+			}
+			var ip net.IP
+			prefix := -1
+			for _, part := range parts {
+				switch part.number {
+				case 2:
+					prefix = int(part.value)
+				case 3:
+					if len(part.bytes) == net.IPv4len || len(part.bytes) == net.IPv6len {
+						ip = net.IP(append([]byte(nil), part.bytes...))
+					}
+				}
+			}
+			if ip == nil || len(iface.Addresses) >= 16 {
+				continue
+			}
+			bits := 8 * len(ip)
+			if ip4 := ip.To4(); ip4 != nil && len(ip) == net.IPv4len {
+				ip, bits = ip4, 32
+			}
+			if prefix < 0 || prefix > bits {
+				iface.Addresses = append(iface.Addresses, ip.String())
+				continue
+			}
+			iface.Addresses = append(iface.Addresses, (&net.IPNet{IP: ip, Mask: net.CIDRMask(prefix, bits)}).String())
+		}
+	}
+	return iface, nil
 }
 
 func parseClient(body []byte) (Client, error) {

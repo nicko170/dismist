@@ -24,7 +24,8 @@ spec:
   {{- end }}
   {{- end }}
   {{- if or (eq .Values.apService.type "LoadBalancer") (eq .Values.apService.type "NodePort") }}
-  # APs are identified by source address: keep it.
+  # Keep each AP's real source address: dismist shows it, checks it against
+  # an AP's optional source pin and answers AP DNS only for registered APs.
   externalTrafficPolicy: {{ .Values.apService.externalTrafficPolicy }}
   {{- end }}
   selector:

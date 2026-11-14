@@ -44,6 +44,19 @@ type Observation struct {
 	Clients         []ClientSnapshot `json:"clients,omitempty"`
 	Events          []EventSnapshot  `json:"events,omitempty"`
 	SkipClients     bool             `json:"-"`
+	// Radios are the per-radio minute values stored on the sample (phase 1).
+	Radios []RadioSample `json:"radios,omitempty"`
+}
+
+// RadioSample is one radio's values in a minute sample (design §4.1).
+type RadioSample struct {
+	Band        string  `json:"band"`
+	Channel     int     `json:"channel"`
+	Width       int     `json:"width"`
+	UtilAll     float64 `json:"util_all"`
+	NoiseDBm    int     `json:"noise_dbm"`
+	Clients     int     `json:"clients"`
+	MaxPowerDBm int     `json:"max_power_dbm"`
 }
 
 type APStatusRecord struct {
@@ -56,17 +69,18 @@ type APStatusRecord struct {
 }
 
 type MinuteSample struct {
-	SiteID          string    `json:"site_id"`
-	APID            string    `json:"ap_id"`
-	Minute          time.Time `json:"minute"`
-	ObservedAt      time.Time `json:"observed_at"`
-	Connected       bool      `json:"connected"`
-	ClientCount     int       `json:"client_count"`
-	AverageRSSI     int64     `json:"average_rssi"`
-	TxBytes         uint64    `json:"tx_bytes"`
-	RxBytes         uint64    `json:"rx_bytes"`
-	UptimeSeconds   uint64    `json:"uptime_seconds"`
-	AppliedRevision uint64    `json:"applied_revision"`
+	SiteID          string        `json:"site_id"`
+	APID            string        `json:"ap_id"`
+	Minute          time.Time     `json:"minute"`
+	ObservedAt      time.Time     `json:"observed_at"`
+	Connected       bool          `json:"connected"`
+	ClientCount     int           `json:"client_count"`
+	AverageRSSI     int64         `json:"average_rssi"`
+	TxBytes         uint64        `json:"tx_bytes"`
+	RxBytes         uint64        `json:"rx_bytes"`
+	UptimeSeconds   uint64        `json:"uptime_seconds"`
+	AppliedRevision uint64        `json:"applied_revision"`
+	Radios          []RadioSample `json:"radios,omitempty"`
 }
 
 type ClientSession struct {
@@ -126,6 +140,7 @@ func (s *BoltStore) RecordObservation(observation Observation) error {
 			Minute: observation.At.UTC().Truncate(time.Minute), ObservedAt: observation.At,
 			Connected: observation.Connected, ClientCount: len(observation.Clients),
 			UptimeSeconds: observation.UptimeSeconds, AppliedRevision: observation.AppliedRevision,
+			Radios: observation.Radios,
 		}
 		if observation.SkipClients {
 			sample.ClientCount = -1
@@ -175,6 +190,9 @@ func recordClients(tx *bolt.Tx, observation Observation) error {
 			sessionKey = append(append(append([]byte(nil), prefix...), []byte(mac)...), 0)
 			sessionKey = append(sessionKey, timeKey(start.UnixNano())...)
 			if err := active.Put(activeKey, sessionKey); err != nil {
+				return err
+			}
+			if err := indexSession(tx, observation.SiteID, observation.APID, mac, start, sessionKey); err != nil {
 				return err
 			}
 		} else if err := json.Unmarshal(sessions.Get(sessionKey), &session); err != nil {

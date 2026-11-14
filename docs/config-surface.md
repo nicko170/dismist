@@ -1,6 +1,28 @@
 # Observed AP33 configuration surface
 
-The paths below were extracted from the private AP33 0.8 firmware config template. They are field names and value types only; no passphrases, keys, claim codes, or device secrets appear here. The controller preserves unknown JSON fields and applies site, AP, and WLAN advanced patches before typed fields. Newer firmware may add or change fields.
+The paths below were extracted from the private AP33 0.8 firmware config template. They are field names and value types only; no passphrases, keys, claim codes, or device secrets appear here. The controller preserves unknown JSON fields and applies site, AP, and WLAN advanced patches before typed fields. Newer firmware may add or change fields; the 0.15 catalogues behind the v1 design supersede this list for typed options.
+
+## Identity and fields Dismist sets
+
+The controller sets these fields. Except for `SwitchPorts`, it writes them after the template and the site and AP advanced patches, so a patch cannot change them:
+
+| Path | Value |
+| --- | --- |
+| `ID` | The AP's ID: the base MAC in dashed form, the same ID the AP authenticated with in its `ep-auth` hello. Dismist identifies APs by this ID, not by source address. |
+| `UUID` | `00000000-0000-0000-1000-` followed by the ID's 12 hex digits. |
+| `Name`, `Hostname` | The AP name, when one is set. |
+| `SiteID`, `SiteName` | The AP's site. |
+| `Country` | The site country, upper-cased. |
+| `Timestamp` | The config revision time. |
+| `WLANs[]` | One entry per site WLAN, built from the template's first WLAN plus the WLAN's advanced patch, with `ID`, `SSID`, `Enabled`, `Vlans`, `Auth.Type` (`psk`) and `Auth.PSK` set from the typed fields. |
+| `SwitchPorts[].Vlans[]` | Gains the VLAN of every enabled site WLAN. This happens before the patches, so a `SwitchPorts` patch can replace it. |
+| `RootAuthorizedSSHKeys[]`, `SSH.AuthorizedKeys[]` | The template's keys plus the site's operator SSH public keys. |
+
+Neither the config nor any API response carries the AP's 32-byte EEPROM authentication secret. The AP proves it holds that secret during authentication; the controller keeps its copy in the database (see [Sites and history](sites-and-history.md)). The WLAN passphrase (`WLANs[].Auth.PSK`) is in the config the AP receives but redacted in the operator's effective-config view.
+
+## Config the AP merges locally
+
+The AP's ep-control also merges optional files from `/rw/etc/mist/ep-control/`: `local_defaults.config` before the controller's config, and `local_overrides.config`, `local_radio_overrides.config`, `local_wlan_overrides.config` and `local_l2tp_overrides.config` after it. They do not normally exist. When they do, the AP runs something other than the config Dismist sent and shows: a key Dismist leaves out may still be set locally. `dismist ap33 inspect` lists any such file with its size, SHA-256 and key paths.
 
 ## Top-level sections
 

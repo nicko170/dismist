@@ -1,0 +1,26 @@
+{{- if include "dismist.metricsServiceEnabled" . }}
+{{- include "dismist.validateMetrics" . }}
+# Prometheus scrape target. A Service of its own: the UI Service keeps only the
+# UI port because the HTTPRoute targets it, and the ServiceMonitor selects this
+# one by its component label.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dismist.fullname" . }}-metrics
+  labels:
+    {{- include "dismist.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+  {{- with .Values.metrics.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "dismist.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.service.port }}
+      targetPort: metrics
+      protocol: TCP
+{{- end }}

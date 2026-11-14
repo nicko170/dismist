@@ -3,6 +3,7 @@ package telemetry
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/binary"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -90,5 +91,47 @@ func TestDecodeAssociatedClientFromAPStats(t *testing.T) {
 func TestDecodeRejectsMalformedCompressedFrame(t *testing.T) {
 	if _, err := Decode([]byte{2, 0x1f, 0x8b, 8}); err == nil {
 		t.Fatal("accepted truncated gzip")
+	}
+}
+
+// pbBytes and pbVarint build protobuf fields for synthetic frames.
+func pbBytes(number uint64, value []byte) []byte {
+	out := binary.AppendUvarint(nil, number<<3|2)
+	out = binary.AppendUvarint(out, uint64(len(value)))
+	return append(out, value...)
+}
+
+func pbVarint(number, value uint64) []byte {
+	return binary.AppendUvarint(binary.AppendUvarint(nil, number<<3), value)
+}
+
+func TestDecodeAPInterfaceAddresses(t *testing.T) {
+	address := func(prefix uint64, ip []byte) []byte {
+		return pbBytes(3, append(pbVarint(2, prefix), pbBytes(3, ip)...))
+	}
+	var vlan1 []byte
+	vlan1 = append(vlan1, pbBytes(1, []byte("vlan1"))...)
+	vlan1 = append(vlan1, pbVarint(2, 1)...)
+	vlan1 = append(vlan1, address(24, []byte{192, 0, 2, 101})...)
+	vlan1 = append(vlan1, address(64, []byte{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0xa8, 0xf7, 0xd9, 0xff, 0xfe, 0, 0xdc, 0x37})...)
+	vlan1 = append(vlan1, address(99, []byte{1, 2})...) // malformed: ignored
+	stats := append(pbBytes(26, vlan1), pbBytes(26, pbBytes(1, []byte("eth0")))...)
+	frame := append([]byte{'P'}, pbBytes(1, stats)...)
+	frame = append(frame, pbBytes(2, []byte("ap-stats-full-"))...)
+	got, err := Decode(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Interfaces) != 2 || got.Interfaces[0].Name != "vlan1" || got.Interfaces[1].Name != "eth0" {
+		t.Fatalf("interfaces: %+v", got.Interfaces)
+	}
+	want := []string{"192.0.2.101/24", "2001:db8::a8f7:d9ff:fe00:dc37/64"}
+	if len(got.Interfaces[0].Addresses) != len(want) {
+		t.Fatalf("vlan1 addresses: %v", got.Interfaces[0].Addresses)
+	}
+	for i := range want {
+		if got.Interfaces[0].Addresses[i] != want[i] {
+			t.Fatalf("vlan1 address %d = %s, want %s", i, got.Interfaces[0].Addresses[i], want[i])
+		}
 	}
 }

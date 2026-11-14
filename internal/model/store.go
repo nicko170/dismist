@@ -11,18 +11,44 @@ import (
 	"time"
 )
 
+// SecretSize is the length of an AP's EEPROM authentication secret.
+const SecretSize = 32
+
 type APRecord struct {
-	ID              string          `json:"id"`
-	Name            string          `json:"name,omitempty"`
-	SiteID          string          `json:"site_id,omitempty"`
-	ManagementIP    string          `json:"management_ip,omitempty"`
-	Model           string          `json:"model,omitempty"`
-	Firmware        string          `json:"firmware,omitempty"`
-	SecretFile      string          `json:"secret_file"`
+	ID           string `json:"id"`
+	Name         string `json:"name,omitempty"`
+	SiteID       string `json:"site_id,omitempty"`
+	ManagementIP string `json:"management_ip,omitempty"`
+	Model        string `json:"model,omitempty"`
+	Firmware     string `json:"firmware,omitempty"`
+	// Secret is the AP's 32-byte EEPROM authentication secret. It lives in
+	// the private database and is never returned by the API.
+	Secret []byte `json:"secret,omitempty"`
+	// SecretFile is a legacy path to the secret on disk. dismistd imports it
+	// into Secret at startup and clears it.
+	SecretFile      string          `json:"secret_file,omitempty"`
 	ConfigRevision  uint64          `json:"config_revision,omitempty"`
 	ConfigUpdatedAt time.Time       `json:"config_updated_at,omitzero"`
 	AppliedRevision uint64          `json:"applied_revision,omitempty"`
 	Advanced        json.RawMessage `json:"advanced,omitempty"`
+	// LocalFiles lists the /rw/etc/mist/ep-control/local_* files found on the
+	// AP by the CLI. nil means never checked; an empty, non-nil list means
+	// checked and none found (omitzero keeps the difference on disk). The
+	// normaliser's rule 2a depends on it (design §4.5).
+	LocalFiles []LocalFile `json:"local_files,omitzero"`
+	// Features holds per-AP protocol feature switches (design §5.7). Absent
+	// means the daemon's -ap-features default.
+	Features map[string]bool `json:"protocol_features,omitempty"`
+	// UpdatedRev is the state revision that last changed this record. The
+	// store maintains it; it backs If-Match (design §4.8).
+	UpdatedRev uint64 `json:"updated_rev,omitempty"`
+}
+
+// LocalFile is one local_* file the CLI found on an AP.
+type LocalFile struct {
+	Name   string    `json:"name"`
+	SHA256 string    `json:"sha256"`
+	SeenAt time.Time `json:"seen_at"`
 }
 
 type Site struct {
@@ -32,6 +58,7 @@ type Site struct {
 	Timezone      string          `json:"timezone,omitempty"`
 	SSHPublicKeys []string        `json:"ssh_public_keys,omitempty"`
 	Advanced      json.RawMessage `json:"advanced,omitempty"`
+	UpdatedRev    uint64          `json:"updated_rev,omitempty"`
 }
 
 type Network struct {
@@ -42,6 +69,8 @@ type Network struct {
 	VLANID   int             `json:"vlan_id"`
 	Enabled  bool            `json:"enabled"`
 	Advanced json.RawMessage `json:"advanced,omitempty"`
+	// UpdatedRev is maintained by the store, as for APRecord.
+	UpdatedRev uint64 `json:"updated_rev,omitempty"`
 }
 
 type State struct {
@@ -52,10 +81,13 @@ type State struct {
 	Networks  []Network  `json:"networks"`
 }
 
+// Store is the legacy JSON-file state store. dismistd uses BoltStore; Store
+// remains for tests and the one-time import of a legacy state file.
 type Store struct {
 	mu    sync.RWMutex
 	path  string
 	state State
+	mem   memBuckets
 }
 
 type StateStore interface {
@@ -95,6 +127,13 @@ func (s *Store) Snapshot() State {
 }
 
 func (s *Store) Update(change func(*State) error) error {
+	return s.UpdateTx(func(state *State, _ *Tx) error { return change(state) })
+}
+
+// UpdateTx implements TxStateStore. The JSON store keeps ap_config in memory
+// only (for the life of the process); writes to it are discarded when the
+// change fails.
+func (s *Store) UpdateTx(change func(*State, *Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := clone(s.state)
@@ -105,13 +144,27 @@ func (s *Store) Update(change func(*State) error) error {
 		}
 	}
 	next.UpdatedAt = time.Now().UTC()
-	if err := change(&next); err != nil {
+	staged := memBuckets{apConfig: make(map[string][]byte, len(s.mem.apConfig))}
+	for key, value := range s.mem.apConfig {
+		staged.apConfig[key] = value
+	}
+	if err := change(&next, &Tx{mem: &staged}); err != nil {
 		return err
 	}
 	if err := validate(next); err != nil {
 		return err
 	}
 	next.Revision = s.state.Revision + 1
+	stampUpdatedRev(&s.state, &next)
+	present := make(map[string]bool, len(next.APs))
+	for _, ap := range next.APs {
+		present[ap.ID] = true
+	}
+	for id := range staged.apConfig {
+		if !present[id] {
+			delete(staged.apConfig, id)
+		}
+	}
 	raw, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		return err
@@ -121,7 +174,69 @@ func (s *Store) Update(change func(*State) error) error {
 		return err
 	}
 	s.state = next
+	s.mem = staged
 	return nil
+}
+
+// stampUpdatedRev sets UpdatedRev to next.Revision on every site, AP and
+// network that is new or whose stored JSON changed in this write (for APs,
+// ignoring the system-maintained config revision fields).
+func stampUpdatedRev(previous, next *State) {
+	encode := func(value any) string {
+		raw, _ := json.Marshal(value)
+		return string(raw)
+	}
+	sites := make(map[string]Site, len(previous.Sites))
+	for _, site := range previous.Sites {
+		sites[site.ID] = site
+	}
+	for index := range next.Sites {
+		current := &next.Sites[index]
+		old, existed := sites[current.ID]
+		old.UpdatedRev = 0
+		cmp := *current
+		cmp.UpdatedRev = 0
+		current.UpdatedRev = sites[current.ID].UpdatedRev
+		if !existed || encode(old) != encode(cmp) {
+			current.UpdatedRev = next.Revision
+		}
+	}
+	aps := make(map[string]APRecord, len(previous.APs))
+	for _, ap := range previous.APs {
+		aps[ap.ID] = ap
+	}
+	for index := range next.APs {
+		current := &next.APs[index]
+		old, existed := aps[current.ID]
+		cmp := *current
+		// Config versions are maintained by the system (change detection
+		// and the AP's apply reports), not edited: they do not move
+		// updated_rev.
+		for _, record := range []*APRecord{&old, &cmp} {
+			record.UpdatedRev, record.ConfigRevision, record.AppliedRevision = 0, 0, 0
+			record.ConfigUpdatedAt = time.Time{}
+		}
+		current.UpdatedRev = aps[current.ID].UpdatedRev
+		if !existed || encode(old) != encode(cmp) {
+			current.UpdatedRev = next.Revision
+		}
+	}
+	networks := make(map[string]Network, len(previous.Networks))
+	for _, network := range previous.Networks {
+		networks[network.SiteID+"\x00"+network.ID] = network
+	}
+	for index := range next.Networks {
+		current := &next.Networks[index]
+		key := current.SiteID + "\x00" + current.ID
+		old, existed := networks[key]
+		old.UpdatedRev = 0
+		cmp := *current
+		cmp.UpdatedRev = 0
+		current.UpdatedRev = networks[key].UpdatedRev
+		if !existed || encode(old) != encode(cmp) {
+			current.UpdatedRev = next.Revision
+		}
+	}
 }
 
 func clone(state State) State {
@@ -133,7 +248,19 @@ func clone(state State) State {
 		state.Sites[index].SSHPublicKeys = append([]string(nil), state.Sites[index].SSHPublicKeys...)
 	}
 	for index := range state.APs {
-		state.APs[index].Advanced = append(json.RawMessage(nil), state.APs[index].Advanced...)
+		ap := &state.APs[index]
+		ap.Advanced = append(json.RawMessage(nil), ap.Advanced...)
+		ap.Secret = append([]byte(nil), ap.Secret...)
+		if ap.LocalFiles != nil {
+			ap.LocalFiles = append(make([]LocalFile, 0, len(ap.LocalFiles)), ap.LocalFiles...)
+		}
+		if ap.Features != nil {
+			features := make(map[string]bool, len(ap.Features))
+			for name, on := range ap.Features {
+				features[name] = on
+			}
+			ap.Features = features
+		}
 	}
 	for index := range state.Networks {
 		state.Networks[index].Advanced = append(json.RawMessage(nil), state.Networks[index].Advanced...)
@@ -141,7 +268,28 @@ func clone(state State) State {
 	return state
 }
 
+// ErrInvalid marks the errors of the store's own state rules (a duplicate
+// or missing ID, an out-of-range network value, a malformed advanced
+// patch): the state a mutation produced is refused as it is, and retrying
+// will not help. errors.Is(err, ErrInvalid) tells them apart from storage
+// failures (an I/O error, a full disk), which are not the caller's fault.
+var ErrInvalid = errors.New("invalid state")
+
+// invalidState is a validate error: its message, matching ErrInvalid.
+type invalidState struct{ err error }
+
+func (e invalidState) Error() string        { return e.err.Error() }
+func (e invalidState) Unwrap() error        { return e.err }
+func (e invalidState) Is(target error) bool { return target == ErrInvalid }
+
 func validate(state State) error {
+	if err := checkState(state); err != nil {
+		return invalidState{err: err}
+	}
+	return nil
+}
+
+func checkState(state State) error {
 	sites := map[string]bool{}
 	for _, site := range state.Sites {
 		if site.ID == "" || site.Name == "" || sites[site.ID] || validateAdvanced(site.Advanced) != nil {
@@ -154,7 +302,7 @@ func validate(state State) error {
 	}
 	seenAP := map[string]bool{}
 	for _, ap := range state.APs {
-		if ap.ID == "" || ap.SecretFile == "" || seenAP[ap.ID] || (len(sites) > 0 && ap.SiteID != "" && !sites[ap.SiteID]) || validateAdvanced(ap.Advanced) != nil {
+		if ap.ID == "" || (len(ap.Secret) != SecretSize && ap.SecretFile == "") || seenAP[ap.ID] || (len(sites) > 0 && ap.SiteID != "" && !sites[ap.SiteID]) || validateAdvanced(ap.Advanced) != nil {
 			return errors.New("invalid or duplicate AP record")
 		}
 		seenAP[ap.ID] = true

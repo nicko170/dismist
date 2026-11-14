@@ -1,0 +1,14 @@
+node_modules/
+*.tsbuildinfo
+# Build output is never committed (design §7.1): only the stub that lets
+# //go:embed compile without Node.
+dist/*
+!dist/index.html
+!dist/_ui/
+dist/_ui/*
+!dist/_ui/.keep
+dist-mock/
+test-results/
+playwright-report/
+blob-report/
+.vite/

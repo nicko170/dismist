@@ -24,6 +24,7 @@ import {
   api,
   bytesLabel,
   durationLabel,
+  errorMessage,
   timeLabel,
   UnauthorizedError,
 } from "./api";
@@ -45,6 +46,7 @@ import {
   TableHeader,
   TableRow,
 } from "./components/ui/table";
+import { writeOnlySecret } from "./lib/utils";
 
 type Page = "overview" | "aps" | "clients" | "wlans" | "events" | "settings";
 type Network = {
@@ -242,7 +244,7 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
         throw new Error(
           response.status === 401
             ? "The access token was not accepted."
-            : (await response.text()).trim() || "Could not sign in.",
+            : await errorMessage(response),
         );
       setToken("");
       onSuccess();
@@ -1098,9 +1100,21 @@ export default function App() {
                               </strong>
                             </div>
                             <div>
-                              <span>Management IP</span>
+                              <span>LAN IP</span>
                               <strong>
-                                {selectedAP.management_ip || "Unavailable"}
+                                {selectedAP.lan_ip || "Not reported yet"}
+                              </strong>
+                            </div>
+                            <div>
+                              <span>Public address</span>
+                              <strong>
+                                {selectedAP.remote_address || "Not seen yet"}
+                              </strong>
+                            </div>
+                            <div>
+                              <span>Source pin</span>
+                              <strong>
+                                {selectedAP.management_ip || "Any address"}
                               </strong>
                             </div>
                             <div>
@@ -1594,6 +1608,7 @@ export default function App() {
                             <Input
                               id="psk"
                               type="password"
+                              {...writeOnlySecret}
                               minLength={editing ? undefined : 8}
                               maxLength={63}
                               required={!editing}

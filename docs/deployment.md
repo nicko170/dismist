@@ -25,9 +25,19 @@ after 30 minutes so the browser reconnects and the admin session is checked
 again.
 
 Prometheus metrics are served separately at `127.0.0.1:9090/metrics` by
-default. Set `-metrics-listen` to another numeric loopback address, or to an
-empty string to disable them. The endpoint is read-only and unauthenticated,
-so Dismist refuses a non-loopback bind. A local Prometheus agent can scrape:
+default. The endpoint is read-only. These flags control it:
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `-metrics-listen` | `127.0.0.1:9090` | listen address; empty disables metrics |
+| `-metrics-allow-remote` | off | allow a non-loopback `-metrics-listen`: `:9090` (all addresses, IPv4 and IPv6), `0.0.0.0`, `[::]` or any numeric IP. Without it only a numeric loopback address is accepted. Hostnames, including `localhost`, are always refused |
+| `-metrics-token-file` | none | require `Authorization: Bearer <token>` on every scrape. The file must be private (mode `0600` or `0400`) and hold one token of at least 16 characters; it is read at startup |
+| `-metrics-names` | off | add site, AP and WLAN names as a `name` label on `*_info` series |
+| `-metrics-clients` | `aggregate` | client series: `off`, `aggregate` or `per-client` (per-client series carry client MACs) |
+| `-metrics-client-limit` | 100 | most clients exported in per-client mode |
+
+dismistd logs a warning when it listens beyond loopback without a token. A
+local Prometheus agent can scrape the default address:
 
 ```yaml
 scrape_configs:
@@ -36,10 +46,14 @@ scrape_configs:
       - targets: ['127.0.0.1:9090']
 ```
 
-A remote scraper needs a secured tunnel or a local scrape agent. Metrics cover
-site/AP counts, connections, associated clients, telemetry frames, uptime,
-configuration revisions, and last-seen time. Labels are limited to site and
-AP IDs; client MACs, IP addresses, passphrases, and credentials are excluded.
+For a remote Prometheus, listen on a reachable address with
+`-metrics-allow-remote`, set `-metrics-token-file`, and give the scraper the
+same token (`authorization: {credentials_file: ...}`), or keep the loopback
+default and use a tunnel or a local agent. Metrics cover site and AP counts,
+connections, associated clients, decoded telemetry frames, uptime,
+configuration revisions, last-seen time, and the controller's Go runtime and
+process. Labels are limited to site and AP IDs; names, client MACs, IP
+addresses, SSIDs, passphrases and credentials are excluded.
 
 The default private data paths are relative to the working directory:
 
@@ -106,9 +120,11 @@ The AP must trust the CA that issued the WSS certificate. For the certificate
 created by `dismist init`, install `ca.crt` in the AP trust store through a
 verified preparation path. A factory AP with its original Mist-only trust
 store will reject this local certificate. The controller also needs each AP's
-existing 32-byte EEPROM authentication secret as a raw mode `0600` file. A
-random replacement secret will not authenticate an existing AP. See
-[AP onboarding](onboarding.md) for preparation requirements and registration.
+existing 32-byte EEPROM authentication secret: paste it (hex or base64) or
+upload the AP's `secret.bin` when registering the AP, and dismist stores it
+in the private database. A random replacement secret will not authenticate an
+existing AP. See [AP onboarding](onboarding.md) for preparation requirements
+and registration.
 
 After an AP is authenticated, Site Settings can send OpenSSH public keys to
 every AP in that site. Enter one `ssh-ed25519` or `ssh-rsa` public key per line;
@@ -120,17 +136,20 @@ the new config. Never paste a private key. This path requires an already
 authenticated AP and does not prepare a factory AP to trust the controller.
 
 The first start may have zero APs. Sign in to the UI, create a site with its
-country, then register APs and WLANs there. DNS refuses unregistered AP source
-addresses. New AP records activate within a few seconds, without a server
+country, then register APs and WLANs there. DNS refuses source addresses that
+no AP record pins. New AP records activate within a few seconds, without a server
 restart. For a headless migration from an existing JSON state file, `-state`
 can import it **once when creating a new database**; ordinary onboarding
 does not need that file. See [AP onboarding](onboarding.md).
 
 Point the AP management LAN's DNS setting at the controller IP. The
-controller answers `ep-terminator.mistsys.net` only for registered AP source
-addresses and forwards their other DNS queries. The AP then connects over
-WSS. A routed network or NAT must preserve the source IP expected by the AP
-record, or that record must use the translated source address.
+controller answers `ep-terminator.mistsys.net` only for the management
+addresses of registered APs and forwards their other DNS queries. The AP then
+connects over WSS. Dismist identifies the AP by the ID it authenticates with,
+so several APs may connect through one NAT address. An AP record's management
+IP is optional: when set, it pins the AP to that source address and lets it
+use AP DNS, so a routed network or NAT on that path must preserve the
+address, or the record must use the translated one.
 
 ## Running under systemd
 
@@ -138,8 +157,8 @@ record, or that record must use the translated source address.
 dedicated `dismist` user, place the binary at `/usr/local/bin/dismistd`, and
 make `/var/lib/dismist` mode `0700` and owned by that user. Run
 `dismist init --data-dir /var/lib/dismist` as that user. Init supplies the
-AP33 template; place only per-AP secret files there with restrictive
-permissions. Set `-controller-ip` in the unit only if address detection is
+AP33 template; AP secrets go into the database when you register each AP.
+Set `-controller-ip` in the unit only if address detection is
 ambiguous; add `-state /var/lib/dismist/import.json` only for a one-time
 headless import. The unit grants bind capability for ports below 1024. Start
 it with `systemctl enable --now dismistd` after reviewing those values and AP
@@ -156,8 +175,9 @@ For a manual launch, use the same explicit paths:
   -admin-token-file /var/lib/dismist/admin.token
 ```
 
-The program reports missing certificate paths at startup. An
-unreadable or non-private AP secret prevents its registered AP from starting.
+The program reports missing certificate paths at startup. An AP without a
+secret stays inactive, with a log line, until its secret is uploaded; the
+other APs are unaffected.
 Use `-ap-id` and `-ap-ip` only to preserve a legacy AP record that lacks a
 management address, and `-server-name` to change the AP authentication reply
 name for a known firmware requirement.
@@ -165,11 +185,10 @@ name for a known firmware requirement.
 ## Backup and restore
 
 Stop the service before copying `controller.db`. Back up that file together
-with AP secret files, CA key and certificate, TLS key and certificate, AP config
-template, admin token, and the initial import file if used. Keep copies
-encrypted and access limited: the database stores WLAN PSKs and history, and
-the secrets permit AP control.
+with the CA key and certificate, TLS key and certificate, AP config template,
+admin token, and the initial import file if used. Keep copies encrypted and
+access limited: the database stores the AP secrets, WLAN PSKs and history,
+and the secrets permit AP control.
 To restore, stop the service, replace the files with owner `dismist` and
-private permissions, then start the service. Restore the complete set so the
-database's `secret_file` paths still resolve. Never run two server processes
+private permissions, then start the service. Never run two server processes
 against the same database.

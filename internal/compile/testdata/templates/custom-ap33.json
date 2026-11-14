@@ -1,0 +1,489 @@
+{
+ "Radios": [
+  {
+   "Band": "2.4",
+   "Width": 20,
+   "PreambleLength": 1,
+   "QOS": {
+    "Dscp2Ac": [
+     {
+      "DSCP": 10,
+      "AC": 1
+     },
+     {
+      "DSCP": 12,
+      "AC": 1
+     },
+     {
+      "DSCP": 14,
+      "AC": 1
+     },
+     {
+      "DSCP": 18,
+      "AC": 1
+     },
+     {
+      "DSCP": 20,
+      "AC": 1
+     },
+     {
+      "DSCP": 22,
+      "AC": 1
+     },
+     {
+      "DSCP": 8,
+      "AC": 1
+     },
+     {
+      "DSCP": 16,
+      "AC": 1
+     },
+     {
+      "DSCP": 9,
+      "AC": 1
+     },
+     {
+      "DSCP": 11,
+      "AC": 1
+     },
+     {
+      "DSCP": 13,
+      "AC": 1
+     },
+     {
+      "DSCP": 15,
+      "AC": 1
+     },
+     {
+      "DSCP": 17,
+      "AC": 1
+     },
+     {
+      "DSCP": 19,
+      "AC": 1
+     },
+     {
+      "DSCP": 21,
+      "AC": 1
+     },
+     {
+      "DSCP": 23,
+      "AC": 1
+     }
+    ]
+   },
+   "CCRev": "AU/890",
+   "CCRevSP": "AU/890",
+   "Channel": 0,
+   "RRM": {
+    "Channel": 0,
+    "Width": 20
+   },
+   "NonAggrRegulate": {
+    "Enabled": true,
+    "Disabled": false
+   },
+   "ProbeControl": {
+    "ProbeReqSW": true,
+    "ProbeRespSW": true
+   }
+  },
+  {
+   "Band": "5",
+   "Width": 40,
+   "PreambleLength": 1,
+   "QOS": {
+    "Dscp2Ac": [
+     {
+      "DSCP": 10,
+      "AC": 1
+     },
+     {
+      "DSCP": 12,
+      "AC": 1
+     },
+     {
+      "DSCP": 14,
+      "AC": 1
+     },
+     {
+      "DSCP": 18,
+      "AC": 1
+     },
+     {
+      "DSCP": 20,
+      "AC": 1
+     },
+     {
+      "DSCP": 22,
+      "AC": 1
+     },
+     {
+      "DSCP": 8,
+      "AC": 1
+     },
+     {
+      "DSCP": 16,
+      "AC": 1
+     },
+     {
+      "DSCP": 9,
+      "AC": 1
+     },
+     {
+      "DSCP": 11,
+      "AC": 1
+     },
+     {
+      "DSCP": 13,
+      "AC": 1
+     },
+     {
+      "DSCP": 15,
+      "AC": 1
+     },
+     {
+      "DSCP": 17,
+      "AC": 1
+     },
+     {
+      "DSCP": 19,
+      "AC": 1
+     },
+     {
+      "DSCP": 21,
+      "AC": 1
+     },
+     {
+      "DSCP": 23,
+      "AC": 1
+     }
+    ]
+   },
+   "CCRev": "AU/890",
+   "CCRevSP": "AU/890",
+   "Channel": 0,
+   "RRM": {
+    "Channel": 0,
+    "Width": 40
+   },
+   "DFSjumplist": {
+    "ChanSpecs": []
+   },
+   "NonAggrRegulate": {
+    "Enabled": true,
+    "Disabled": false
+   },
+   "ProbeControl": {
+    "ProbeReqSW": true,
+    "ProbeRespSW": true
+   }
+  }
+ ],
+ "Country": "",
+ "Hostname": "",
+ "WLANs": [
+  {
+   "roamMode": "none",
+   "Dot11w": {
+    "Enabled": true,
+    "Required": false,
+    "SA_Query_Timeout": 1000,
+    "SA_Query_Attempts": 5
+   },
+   "Acct_Interim_Interval": 0,
+   "Bands": [
+    "2.4",
+    "5"
+   ],
+   "RateSets": [
+    {
+     "Band": "2.4",
+     "HTMCSRateMask": "00ff00ff00ff00ff",
+     "VHTMCSRateMask": "03ff03ff03ff0fff",
+     "HEMCSRateMask": "0fff0fff0fff0fff",
+     "LegacyRates": [
+      6,
+      9,
+      12,
+      18,
+      24,
+      36,
+      48,
+      54
+     ],
+     "BasicRates": [
+      1,
+      2,
+      5.5,
+      11
+     ]
+    },
+    {
+     "Band": "5",
+     "HTMCSRateMask": "00ff00ff00ff00ff",
+     "VHTMCSRateMask": "03ff03ff03ff03ff",
+     "HEMCSRateMask": "0fff0fff0fff0fff",
+     "LegacyRates": [
+      9,
+      18,
+      36,
+      48,
+      54
+     ],
+     "BasicRates": [
+      6,
+      12,
+      24
+     ]
+    }
+   ],
+   "BandConfigs": [
+    {
+     "Band": "2.4",
+     "BSSIDIndex": 0,
+     "Steer": {
+      "NoProbeRespAll": true,
+      "DenyDot11Auth": true,
+      "DenyDot11AuthDualBandOnly": true,
+      "DenyDot11AuthConsecNum": 5,
+      "DenyDot11AuthRSSIThresh": -78
+     }
+    },
+    {
+     "Band": "5",
+     "BSSIDIndex": 0
+    }
+   ],
+   "SSID": "",
+   "Enabled": false,
+   "Auth": {
+    "PSK": "",
+    "WEP": null,
+    "Type": "psk",
+    "MultiPSK": null,
+    "AKM": {
+     "WPA2_PSK": true,
+     "WPA3_PSK": false
+    },
+    "Pairwise": {
+     "TKIP": false,
+     "CCMP": true,
+     "WPA1": {
+      "TKIP": false,
+      "CCMP": false
+     }
+    },
+    "GroupRekeyIntervalSec": 86400,
+    "GroupMasterRekeyIntervalSec": 86400,
+    "SAEAntiCloggTokenThreshold": 16
+   },
+   "MacAuth": {
+    "Enabled": false
+   },
+   "Vlans": [],
+   "Isolation": false,
+   "NetIsolation": false,
+   "BcastFilter": {
+    "Arp": false,
+    "Mcast": false,
+    "Mdns_allow": false,
+    "Ssdp_allow": false,
+    "Dhcp": true,
+    "AllowICMPv6NeighborDiscovery": true,
+    "AllowDHCPtoWirelessBridge": false,
+    "DropDHCPUnknownResponse": true,
+    "DHCPBcast2UnicastResponse": true
+   },
+   "Hidden": false,
+   "NoStaticIP": false,
+   "RestrictDNS": {
+    "FromDHCP": false
+   },
+   "DisabledIEs": {},
+   "ForMesh": false,
+   "ForFTM": false,
+   "ID": "",
+   "DisableV2RoamNotifications": false,
+   "Wxlan": {
+    "AllowAllFlows": true
+   },
+   "QOS": {
+    "Enabled": true,
+    "AccessClass": 4
+   },
+   "DTIM": {
+    "Period": 2
+   },
+   "AMPDU": {
+    "RST": true
+   },
+   "BlackList": {
+    "Enabled": true,
+    "Cloud": {
+     "Enabled": false,
+     "MgmtTypeWLC": false
+    }
+   },
+   "RateLimit": {
+    "WlanUp": 0,
+    "WlanDown": 0,
+    "ClientUp": 0,
+    "ClientDown": 0
+   },
+   "WNM": {
+    "BSSLoad": true,
+    "NeighborReport": true,
+    "ReducedNeighborReport": true,
+    "CoLocatedReducedNeighborReport": false,
+    "BSSTransitionManagement": {
+     "Passive": true,
+     "Active": false
+    }
+   },
+   "WCInactivity": {
+    "TimeoutSec": 3600,
+    "ReclaimTimeoutSec": 600,
+    "SilentDeauthTimeout": true
+   },
+   "MaxStaAllowed": 0,
+   "KeyCache": {
+    "WLCkeyCache": true,
+    "LocalAPkeyCache": false,
+    "KeyEncryptKey": ""
+   },
+   "DhcpOption82": false,
+   "DhcpOption82Data": null,
+   "DisableV1RoamNotifications": false,
+   "DisableRsnCapValidation": false,
+   "RoamMode": "okc"
+  }
+ ],
+ "SVIs": [
+  {
+   "Vlan_ID": "1",
+   "MTU": 0,
+   "DHCP": {
+    "Enabled": true,
+    "Hostname": ""
+   },
+   "DHCP_Ena": true,
+   "dhcp_enabled": true
+  }
+ ],
+ "LED": {
+  "Brightness": 64
+ },
+ "SSH": {
+  "Disabled": false,
+  "External": true,
+  "AuthorizedKeys": [
+   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICEhISEhISEhISEhISEhISEhISEhISEhISEhISEhISEh"
+  ]
+ },
+ "RootAuthorizedSSHKeys": [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICEhISEhISEhISEhISEhISEhISEhISEhISEhISEhISEh"
+ ],
+ "Stats": {
+  "Interval": 2.0,
+  "FullInterval": 60,
+  "SplitWifiAndBleRssiStats": true,
+  "UseSeparateBLEScanTopic": true,
+  "UseSeparateWifiScanTopic": true,
+  "MemInterval": 600
+ },
+ "IrqBalance": {
+  "Enabled": true,
+  "Interval": 1.0
+ },
+ "OurOUIs": [],
+ "ID": "",
+ "UUID": "",
+ "_errors": [],
+ "Timestamp": 0,
+ "OrgID": "",
+ "SiteID": "",
+ "Name": "",
+ "SiteName": "",
+ "HttpRedirector": {
+  "Enabled": false
+ },
+ "BlackList": {
+  "WCMacs": []
+ },
+ "ProxyArp": {
+  "Enabled": true,
+  "Disable_ReqSpoofCheck": true,
+  "Disable_RespSpoofCheck": true
+ },
+ "Steer": {
+  "ProbeRequest": {
+   "Enabled": true,
+   "ClientPkts": false,
+   "ClientPktsSiteOnly": false,
+   "StatsAgeOutRandom": false,
+   "RogueDetectOnly": false
+  }
+ },
+ "WIDS": [],
+ "CnaHostnames": [],
+ "Dnsmasq": {
+  "Enabled": false
+ },
+ "AppDef": [],
+ "Monitor": {
+  "LowTxPowerDetect": {
+   "RequestMitigation": true
+  },
+  "NonDFSIdleProbeAssist": true,
+  "CCRev": "",
+  "Enabled": true,
+  "Radiotap": true,
+  "RadiotapScan": true,
+  "SteerEnabled": true,
+  "PcapWLAN": {
+   "ClientFirstBkgrdEnabled": true
+  },
+  "Utilization": {
+   "ScanEnabled": true
+  },
+  "EthUplink": {
+   "Enabled": true,
+   "Device": "eth0"
+  }
+ },
+ "PACE_KernelModCounters": {
+  "Enabled": true
+ },
+ "PoePwrConstrained": {
+  "EnableRadios": false,
+  "EnableOn304": true
+ },
+ "AVS": {
+  "MarginSlow": 135,
+  "MarginFast": 105
+ },
+ "SwitchPorts": [
+  {
+   "Name": "eth0",
+   "Vlans": [
+    "1",
+    "30"
+   ],
+   "PortVlanID": "1"
+  },
+  {
+   "Name": "eth1",
+   "Vlans": [
+    "1"
+   ],
+   "PortVlanID": "1"
+  }
+ ],
+ "L2TPTunnels": [],
+ "VLANNames": {},
+ "APRecovery": {
+  "Disabled": true
+ },
+ "PAPIOpaque": ""
+}

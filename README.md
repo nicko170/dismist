@@ -12,7 +12,8 @@ service operation, and backups. For a new AP, follow
 [Juniper AP33 walkthrough](docs/juniper/AP33.md).
 
 Prometheus metrics are available at `http://127.0.0.1:9090/metrics` on the
-controller host. Site Settings can send validated SSH public keys to all APs
+controller host by default; `-metrics-listen`, `-metrics-allow-remote` and
+`-metrics-token-file` expose them for remote scraping. Site Settings can send validated SSH public keys to all APs
 in a site after they authenticate. Multiple APs per site are supported; mesh
 backhaul is not yet validated. See [monitoring and SSH operations](docs/deployment.md).
 
@@ -55,15 +56,19 @@ service account, HTTPS for the UI, and backups.
 
 The repository is currently private; downloading releases or installing a
 version from GitHub requires access until it is made public. From a source
-checkout, run `npm --prefix web ci`, `npm --prefix web run build`, then
-`go test ./...` and `go build ./cmd/dismistd`.
+checkout, run `npm --prefix web ci`, `npm --prefix web run build` (and, for
+the new UI at `/next/`, `npm --prefix ui ci` and `npm --prefix ui run build`),
+then `go test ./...` and `go build ./cmd/dismistd`.
 
-The AP management LAN must use the controller as DNS. For registered AP
-source addresses, it maps `ep-terminator.mistsys.net` to the advertised
-controller IP and forwards other questions to `-upstream-dns`. It refuses DNS
-from unregistered addresses. APs also need a compatible controller certificate
-in their trust store and their existing device secrets in private files. The
-locally generated `data/ca.crt` must be installed into the AP trust store;
+dismist identifies each AP by its authenticated ID, not its source address.
+An AP either connects to a custom WSS endpoint (`-ap-url`) or keeps the stock
+endpoint and uses the controller as DNS: for pinned AP source addresses, the
+controller maps `ep-terminator.mistsys.net` to the advertised controller IP
+and forwards other questions to `-upstream-dns`. It refuses DNS from
+addresses that are not pinned. APs also need a compatible controller
+certificate in their trust store, and each AP's existing device secret is
+uploaded when it is registered and kept in the database. The locally
+generated `data/ca.crt` must be installed into the AP trust store;
 initializing the server does not prepare an AP. DNS redirection alone cannot
 provision an unprepared factory AP.
 
@@ -75,6 +80,7 @@ provision an unprepared factory AP.
 - [Sites and history](docs/sites-and-history.md)
 - [Config field surface](docs/config-surface.md)
 - [Kubernetes deployment](docs/kubernetes.md)
+- [Verification records](docs/verification.md)
 
 ## License
 

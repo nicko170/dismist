@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,8 +23,11 @@ func apiFixture(t *testing.T, allowedHosts ...string) (http.Handler, *model.Stor
 		t.Fatal(err)
 	}
 	err = store.Update(func(state *model.State) error {
-		state.APs = []model.APRecord{{ID: "ap-1", Name: "bench", SiteID: "lab", SecretFile: "private/secret.bin"}}
-		state.Networks = []model.Network{{ID: "wlan-1", SSID: "TestSSID", PSK: "example-passphrase-11", VLANID: 123, Enabled: true}}
+		// Every AP with a site has a site record: compile (like the AP
+		// registry) never compiles an AP whose site does not exist.
+		state.Sites = []model.Site{{ID: "lab", Name: "Lab"}}
+		state.APs = []model.APRecord{{ID: "ap-1", Name: "bench", SiteID: "lab", SecretFile: "private/secret.bin", Secret: testSecret}}
+		state.Networks = []model.Network{{ID: "wlan-1", SiteID: "lab", SSID: "TestSSID", PSK: "example-passphrase-11", VLANID: 123, Enabled: true}}
 		return nil
 	})
 	if err != nil {
@@ -51,12 +56,18 @@ func request(t *testing.T, handler http.Handler, method, path, body string) *htt
 	return response
 }
 
+// testSecret is a recognisable AP secret for leak checks.
+var testSecret = bytes.Repeat([]byte("Sekrit!!"), 4)
+
 func TestListsRedactPasswordsAndSecretFiles(t *testing.T) {
 	handler, _, _ := apiFixture(t)
-	for _, path := range []string{"/api/networks", "/api/aps"} {
+	for _, path := range []string{"/api/networks", "/api/aps", "/api/status", "/api/sites"} {
 		response := request(t, handler, http.MethodGet, path, "")
-		if response.Code != http.StatusOK || bytes.Contains(response.Body.Bytes(), []byte("example-passphrase-11")) ||
-			bytes.Contains(response.Body.Bytes(), []byte("private/secret.bin")) {
+		body := response.Body.Bytes()
+		if response.Code != http.StatusOK || bytes.Contains(body, []byte("example-passphrase-11")) ||
+			bytes.Contains(body, []byte("private/secret.bin")) || bytes.Contains(body, testSecret) ||
+			bytes.Contains(body, []byte(base64.StdEncoding.EncodeToString(testSecret))) ||
+			bytes.Contains(body, []byte(hex.EncodeToString(testSecret))) {
 			t.Fatalf("secret leaked from %s: %s", path, response.Body.String())
 		}
 	}
@@ -311,5 +322,20 @@ func TestSiteAdvancedPatchIsAppliedAndPreviewRedactsSecrets(t *testing.T) {
 	bad := request(t, handler, http.MethodPut, "/api/sites/site-a/advanced", `{"patch":[1,2]}`)
 	if bad.Code != http.StatusBadRequest || store.Snapshot().Revision != 4 {
 		t.Fatalf("invalid patch changed state: %d %+v", bad.Code, store.Snapshot())
+	}
+}
+
+func TestServesSPAForClientRoutesOnly(t *testing.T) {
+	handler, _, _ := apiFixture(t)
+	for _, route := range []string{"/sites/lab/aps/ap-1", "/settings", "/sites/lab/wlans?tab=clients"} {
+		response := request(t, handler, http.MethodGet, route, "")
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "<div id=\"root\"></div>") {
+			t.Fatalf("deep link %s did not load the app: %d", route, response.Code)
+		}
+	}
+	for _, missing := range []string{"/assets/missing.js", "/favicon-missing.png", "/api/nope"} {
+		if response := request(t, handler, http.MethodGet, missing, ""); response.Code != http.StatusNotFound {
+			t.Fatalf("%s = %d, want 404", missing, response.Code)
+		}
 	}
 }

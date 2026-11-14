@@ -1,0 +1,53 @@
+{{- if include "dismist.serviceMonitorEnabled" . }}
+{{- $sm := .Values.metrics.serviceMonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "dismist.fullname" . }}
+  labels:
+    {{- include "dismist.labels" . | nindent 4 }}
+    {{- with $sm.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "dismist.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: metrics
+  {{- with $sm.sampleLimit }}
+  sampleLimit: {{ int . }}
+  {{- end }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      scheme: http
+      interval: {{ $sm.interval }}
+      scrapeTimeout: {{ $sm.scrapeTimeout }}
+      {{- if include "dismist.metricsToken" . }}
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .Values.metrics.auth.existingSecret }}
+          key: {{ .Values.metrics.auth.key }}
+      {{- end }}
+      {{- if or $sm.stableInstance $sm.relabelings }}
+      relabelings:
+        {{- if $sm.stableInstance }}
+        # One controller (replicas is always 1): keep instance stable so AP
+        # series and counters continue across pod restarts.
+        - action: replace
+          targetLabel: instance
+          replacement: {{ include "dismist.fullname" . }}
+        {{- end }}
+        {{- with $sm.relabelings }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- with $sm.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

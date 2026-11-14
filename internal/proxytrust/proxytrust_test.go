@@ -82,3 +82,42 @@ func TestMiddlewareWithoutPrefixesTrustsOnlyLoopback(t *testing.T) {
 		t.Fatal("forwarded scheme trusted without a configured proxy")
 	}
 }
+
+func TestClientAddr(t *testing.T) {
+	trusted, err := ParsePrefixes("10.244.0.0/16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name, remote string
+		forwarded    []string
+		want         string
+	}{
+		{"direct client", "192.0.2.5:4000", nil, "192.0.2.5"},
+		{"untrusted peer's header is ignored", "192.0.2.5:4000", []string{"198.51.100.7"}, "192.0.2.5"},
+		{"trusted proxy", "10.244.3.199:4000", []string{"198.51.100.7"}, "198.51.100.7"},
+		{"spoofed left entries are ignored", "10.244.3.199:4000", []string{"203.0.113.1, 198.51.100.7"}, "198.51.100.7"},
+		{"chained trusted proxies", "10.244.3.199:4000", []string{"198.51.100.7", "10.244.1.2"}, "198.51.100.7"},
+		{"loopback proxy", "127.0.0.1:4000", []string{"2001:db8::1"}, "2001:db8::1"},
+		{"malformed entry stops at the last trusted hop", "10.244.3.199:4000", []string{"198.51.100.7, bogus"}, "10.244.3.199"},
+		{"trusted proxy without the header", "10.244.3.199:4000", nil, "10.244.3.199"},
+		{"mapped IPv4", "[::ffff:192.0.2.9]:4000", nil, "192.0.2.9"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got string
+			handler := Middleware(trusted, http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+				got = ClientAddr(request).String()
+			}))
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request.RemoteAddr = tc.remote
+			for _, value := range tc.forwarded {
+				request.Header.Add("X-Forwarded-For", value)
+			}
+			handler.ServeHTTP(httptest.NewRecorder(), request)
+			if got != tc.want {
+				t.Fatalf("ClientAddr = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}

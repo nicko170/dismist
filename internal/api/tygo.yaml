@@ -1,0 +1,13 @@
+# tygo configuration for the API contract (design §4.9, §7.5).
+# Regenerate with: go generate ./internal/api
+type_mappings:
+  time.Time: "string /* RFC3339 */"
+packages:
+  - path: "github.com/nicko170/dismist/internal/api"
+    output_path: "../../ui/src/gen/api.gen.ts"
+    enum_style: "union"
+    exclude_files:
+      - "generate_test.go"
+    frontmatter: |
+      // Source: internal/api (Go DTOs).
+      // Regenerate with: go generate ./internal/api
