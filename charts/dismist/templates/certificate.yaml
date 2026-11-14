@@ -1,0 +1,22 @@
+{{- if .Values.tls.certificate.enabled }}
+{{- if not .Values.tls.certificate.dnsNames }}
+{{- fail "tls.certificate.dnsNames is required when tls.certificate.enabled" }}
+{{- end }}
+{{- if not .Values.tls.certificate.issuerRef.name }}
+{{- fail "tls.certificate.issuerRef.name is required when tls.certificate.enabled" }}
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "dismist.fullname" . }}-ap
+  labels:
+    {{- include "dismist.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "dismist.tlsSecretName" . }}
+  dnsNames:
+    {{- toYaml .Values.tls.certificate.dnsNames | nindent 4 }}
+  issuerRef:
+    {{- toYaml .Values.tls.certificate.issuerRef | nindent 4 }}
+  privateKey:
+    {{- toYaml .Values.tls.certificate.privateKey | nindent 4 }}
+{{- end }}

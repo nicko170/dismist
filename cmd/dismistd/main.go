@@ -24,6 +24,7 @@ import (
 	"github.com/nicko170/dismist/internal/metrics"
 	"github.com/nicko170/dismist/internal/model"
 	"github.com/nicko170/dismist/internal/protocol"
+	"github.com/nicko170/dismist/internal/proxytrust"
 )
 
 func main() {
@@ -38,9 +39,11 @@ func main() {
 	dbPath := flag.String("db", "data/controller.db", "private bbolt controller database path")
 	certPath := flag.String("tls-cert", "data/tls.crt", "AP WSS TLS certificate path")
 	keyPath := flag.String("tls-key", "data/tls.key", "AP WSS TLS private key path")
+	tlsCheck := flag.Duration("tls-check-interval", time.Minute, "how often to check -tls-cert/-tls-key for a renewed certificate; the daemon exits with status 75 to be restarted with it (0 disables)")
 	uiListen := flag.String("ui-listen", "0.0.0.0:8088", "LAN UI and API listen address")
 	metricsListen := flag.String("metrics-listen", "127.0.0.1:9090", "loopback-only Prometheus metrics listen address (empty disables)")
 	uiHost := flag.String("ui-host", "", "optional DNS hostname allowed for the UI and API")
+	trustedProxies := flag.String("trusted-proxies", "", "comma-separated CIDRs of reverse proxies whose X-Forwarded-Proto the UI trusts (loopback is always trusted)")
 	adminTokenFile := flag.String("admin-token-file", "data/admin.token", "private administrator token file (created if missing)")
 	serverName := flag.String("server-name", "mistlocal", "server name in the AP authentication response")
 	captureDir := flag.String("capture-telemetry-dir", "", "private directory for a bounded telemetry research capture")
@@ -69,6 +72,10 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("AP DNS advertises controller address %s", advertisedIP)
+	proxyPrefixes, err := proxytrust.ParsePrefixes(*trustedProxies)
+	if err != nil {
+		log.Fatalf("-trusted-proxies: %v", err)
+	}
 	var udpProbeAAD []byte
 	if *udpProbeSetupFile != "" {
 		raw, err := os.ReadFile(*udpProbeSetupFile)
@@ -179,7 +186,7 @@ func main() {
 		log.Fatalf("initialize administrator access: %v", err)
 	}
 	uiServer := &http.Server{
-		Handler:           uiHandler,
+		Handler:           proxytrust.Middleware(proxyPrefixes, uiHandler),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
@@ -245,9 +252,19 @@ func main() {
 		}
 	}()
 
+	certChanged := make(chan struct{})
+	if *tlsCheck > 0 {
+		go watchCertificate(*certPath, *keyPath, certificate.Certificate[0], *tlsCheck, certChanged)
+	}
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
+	restart := false
+	select {
+	case <-signals:
+	case <-certChanged:
+		log.Printf("AP WSS certificate %s changed; exiting with status %d to restart with it", *certPath, exitCertificateChanged)
+		restart = true
+	}
 	stopRegistry()
 	<-registryDone
 	close(recordStop)
@@ -258,6 +275,11 @@ func main() {
 	_ = uiServer.Shutdown(ctx)
 	if metricsServer != nil {
 		_ = metricsServer.Shutdown(ctx)
+	}
+	if restart {
+		service.Close()
+		store.Close()
+		os.Exit(exitCertificateChanged)
 	}
 }
 

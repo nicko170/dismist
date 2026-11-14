@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nicko170/dismist/internal/proxytrust"
 )
 
 const (
@@ -237,14 +238,7 @@ func sameOrigin(request *http.Request) bool {
 }
 
 func secureRequest(request *http.Request) bool {
-	if request.TLS != nil {
-		return true
-	}
-	if request.Header.Get("X-Forwarded-Proto") != "https" {
-		return false
-	}
-	host, _, err := net.SplitHostPort(request.RemoteAddr)
-	return err == nil && net.ParseIP(host).IsLoopback()
+	return proxytrust.HTTPS(request)
 }
 
 func writeJSON(writer http.ResponseWriter, status int, value any) {

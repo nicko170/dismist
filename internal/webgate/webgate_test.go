@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nicko170/dismist/internal/proxytrust"
 )
 
 func TestLoadOrCreateTokenIsPrivateAndStable(t *testing.T) {
@@ -128,5 +130,33 @@ func TestGateRejectsCrossOriginWrite(t *testing.T) {
 	gate.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || requests != 1 {
 		t.Fatalf("same-origin write failed: status=%d requests=%d", response.Code, requests)
+	}
+}
+
+func TestGateLoginThroughTrustedHTTPSProxy(t *testing.T) {
+	token := strings.Repeat("c", 64)
+	trusted, err := proxytrust.ParsePrefixes("10.244.0.0/16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := proxytrust.Middleware(trusted, New(token, http.NotFoundHandler()))
+	login := func(remote string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "http://dismist.example/auth/login", strings.NewReader(`{"token":"`+token+`"}`))
+		request.RemoteAddr = remote
+		request.Header.Set("X-Forwarded-Proto", "https")
+		request.Header.Set("Origin", "https://dismist.example")
+		response := httptest.NewRecorder()
+		gate.ServeHTTP(response, request)
+		return response
+	}
+	proxied := login("10.244.3.199:41000")
+	if proxied.Code != http.StatusOK {
+		t.Fatalf("login through trusted proxy = %d: %s", proxied.Code, proxied.Body.String())
+	}
+	if cookies := proxied.Result().Cookies(); len(cookies) != 1 || !cookies[0].Secure {
+		t.Fatalf("session cookie behind HTTPS proxy is not Secure: %+v", cookies)
+	}
+	if direct := login("192.0.2.5:41000"); direct.Code != http.StatusForbidden {
+		t.Fatalf("login with untrusted forwarded scheme = %d, want 403", direct.Code)
 	}
 }
