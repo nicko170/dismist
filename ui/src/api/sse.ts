@@ -219,6 +219,7 @@ function applyConfig(qc: QueryClient, siteId: string, event: ConfigEvent) {
       invalidate(keys.site(siteId), true)
       invalidate(keys.sites)
       invalidate(keys.siteRF(siteId))
+      invalidate(keys.siteExpert(siteId))
       break
     case 'ap':
       invalidate(keys.siteAPs(siteId))
@@ -231,6 +232,8 @@ function applyConfig(qc: QueryClient, siteId: string, event: ConfigEvent) {
       invalidate(keys.site(siteId))
   }
   invalidate(keys.siteChanges(siteId))
+  // Recommendations are computed from the config, so any change can add or retire one.
+  invalidate(keys.siteRecommendations(siteId))
   for (const apId of event.affected_aps ?? []) invalidate(keys.apConfig(apId))
 }
 

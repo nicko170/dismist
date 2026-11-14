@@ -105,6 +105,17 @@ describe('applyStreamBatch', () => {
     expect(calls).toContainEqual(keys.siteNetworks(site))
     expect(calls).toContainEqual(keys.network('n1'))
     expect(calls).toContainEqual(keys.apConfig('a1'))
+    expect(calls).toContainEqual(keys.siteRecommendations(site))
+  })
+
+  it('a site change refreshes its expert patch and RF profile', () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    applyStreamBatch(qc, site, [{ type: 'config', data: { revision: 6, kind: 'site.updated', object_id: site, affected_aps: [], actor: { kind: 'session', name: 'admin' } } }])
+    const calls = spy.mock.calls.map(([arg]) => (arg as { queryKey: unknown }).queryKey)
+    expect(calls).toContainEqual(keys.siteExpert(site))
+    expect(calls).toContainEqual(keys.siteRF(site))
+    expect(calls).toContainEqual(keys.sites)
   })
 
   it('push and pending update their keys', () => {
