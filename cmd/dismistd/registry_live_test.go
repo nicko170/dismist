@@ -257,8 +257,10 @@ func TestReconcileInvalidNewAPKeepsExistingSession(t *testing.T) {
 	state.APs = append(state.APs, model.APRecord{
 		ID: "ap-bad", SiteID: "office", ManagementIP: "127.0.0.8", SecretFile: filepath.Join(dir, "missing.bin"),
 	})
-	if err := registry.reconcile(state); err == nil {
-		t.Fatal("missing secret did not report a registration failure")
+	// Design §4.4: an AP without a secret is skipped (an attention item in
+	// the UI), never a registry failure.
+	if err := registry.reconcile(state); err != nil {
+		t.Fatalf("AP without a secret failed the registry: %v", err)
 	}
 	if current, _ := manager.Server("ap-good"); current != good {
 		t.Fatal("unrelated invalid AP replaced the existing session")

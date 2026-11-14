@@ -39,16 +39,18 @@ type Reply2 struct {
 	RC             []byte `json:"RC"`
 }
 
-type Features struct {
+// AuthFeatures is the features object of AuthReply3. It is not a
+// protocol feature switch (see Features); both stay false.
+type AuthFeatures struct {
 	ProtobufTelemetry    bool `json:"protobuf_telemetry"`
 	SmallTelemetryHeader bool `json:"small_telemetry_header"`
 }
 
 type Reply3 struct {
-	Version     int      `json:"version"`
-	NextCounter uint64   `json:"nextcounter"`
-	Authed      bool     `json:"authed"`
-	Features    Features `json:"features"`
+	Version     int          `json:"version"`
+	NextCounter uint64       `json:"nextcounter"`
+	Authed      bool         `json:"authed"`
+	Features    AuthFeatures `json:"features"`
 }
 
 type Authenticator struct {
