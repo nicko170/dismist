@@ -3,6 +3,7 @@ import { Upload } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
+import { writeOnlySecret } from "./lib/utils";
 import { readSecretFile, secretProblem } from "./secret";
 
 type Props = {
@@ -68,7 +69,7 @@ export default function SecretField({
               ? "Leave blank to keep the stored secret"
               : "64 hex digits or base64"
           }
-          autoComplete="off"
+          {...writeOnlySecret}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}

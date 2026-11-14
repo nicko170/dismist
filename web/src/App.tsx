@@ -45,6 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "./components/ui/table";
+import { writeOnlySecret } from "./lib/utils";
 
 type Page = "overview" | "aps" | "clients" | "wlans" | "events" | "settings";
 type Network = {
@@ -1606,6 +1607,7 @@ export default function App() {
                             <Input
                               id="psk"
                               type="password"
+                              {...writeOnlySecret}
                               minLength={editing ? undefined : 8}
                               maxLength={63}
                               required={!editing}
