@@ -22,8 +22,11 @@ also identifies each AP by its source IP, so the path must keep it:
   443 with `externalTrafficPolicy: Local`. Register each AP with the address
   it arrives from. For an AP behind NAT, that is the NAT's public address. One
   AP per source address.
-- **hostNetwork.** Set `hostNetwork: true`, `listen.wss: 443` and
-  `listen.dns: 53` to bind on a dedicated node instead, as on a bare server.
+- **hostNetwork.** Set `hostNetwork: true` to bind on a dedicated node
+  instead, as on a bare server. The daemon runs unprivileged, so ports 443
+  and 53 (`listen.wss`, `listen.dns`) need the node's
+  `net.ipv4.ip_unprivileged_port_start` lowered. Otherwise keep the default
+  ports and put the port in the AP's URL (`wss://host:8443/ws`).
 
 Point the AP at the endpoint in one of two ways:
 
