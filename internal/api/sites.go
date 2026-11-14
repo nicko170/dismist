@@ -79,9 +79,11 @@ type ManagementView struct {
 
 // Eth1View is an eth1 port mode (experimental).
 type Eth1View struct {
-	Mode  string `json:"mode" tstype:"'same_as_uplink' | 'access' | 'trunk' | 'disabled'"`
-	VLANs []int  `json:"vlans"`
-	PVID  int    `json:"pvid"`
+	Mode string `json:"mode" tstype:"'same_as_uplink' | 'access' | 'trunk' | 'disabled'"`
+	// VLANID is the access VLAN, or a trunk's native VLAN (PVID).
+	VLANID int `json:"vlan_id,omitempty"`
+	// VLANs are a trunk's VLANs.
+	VLANs []int `json:"vlans,omitempty"`
 }
 
 // RecoveryView is config auto-recovery (experimental).

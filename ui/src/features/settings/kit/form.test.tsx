@@ -85,7 +85,7 @@ describe('config form', () => {
       throw new ApiError({ status: 422, code: 'firmware_rule', message: 'The AP would reject this config.', fields: { 'wlan.dtim': 'DTIM 7 is not allowed with WMM off.' } })
     })
     render(<Harness submit={submit} />)
-    const dtim = screen.getByLabelText('DTIM period')
+    const dtim = screen.getByLabelText('DTIM')
     await user.clear(dtim)
     await user.type(dtim, 'x')
     await user.tab()

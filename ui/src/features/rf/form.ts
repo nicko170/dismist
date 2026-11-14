@@ -34,8 +34,8 @@ function bandForm(view: BandProfileView, band: Band): BandForm {
     dfs_fallback: view.dfs_fallback ?? 0,
     power:
       view.power.mode === 'fixed'
-        ? { mode: 'fixed', dbm: view.power.dbm, min: auto.min, max: auto.max }
-        : { mode: 'auto', dbm: auto.max, min: view.power.min, max: view.power.max },
+        ? { mode: 'fixed', dbm: view.power.dbm ?? auto.max, min: auto.min, max: auto.max }
+        : { mode: 'auto', dbm: auto.max, min: view.power.min ?? auto.min, max: view.power.max ?? auto.max },
     preamble: view.preamble ?? 'short',
     advanced: { ...view.advanced, min_probe_rssi: view.advanced?.min_probe_rssi ?? null },
   }

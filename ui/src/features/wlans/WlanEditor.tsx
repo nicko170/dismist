@@ -404,7 +404,7 @@ function ReadOnlyFacts({ view }: { view: WLANView }) {
           { label: 'BSSID index', value: `${view.bssid_index}${view.owe_bssid_index ? ` (OWE companion ${view.owe_bssid_index})` : ''}` },
           { label: 'Effective PMF', value: pmf.label },
           { label: 'Effective max clients', value: view.max_clients ?? 512 },
-          ...(view.mdid ? [{ label: 'MDID (802.11r)', value: <Identifier value={view.mdid} /> }] : []),
+          ...(view.mdid && view.roaming.fast === '11r' ? [{ label: 'MDID (802.11r)', value: <Identifier value={String(view.mdid)} /> }] : []),
           { label: 'Broadcasting', value: `${view.live.aps_broadcasting} of ${view.live.aps_total} APs` },
           { label: 'Clients now', value: view.live.clients },
         ]}

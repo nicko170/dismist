@@ -28,6 +28,8 @@ export const severityMeta: Record<Severity, { label: string; tone: Tone }> = {
 
 /** Config push lifecycle (design §5.6), shown by PushProgress. */
 export const pushStateMeta: Record<PushState, { label: string; tone: Tone }> = {
+  reconnecting: { label: 'Reconnecting', tone: 'info' },
+  offline: { label: 'Waiting for AP', tone: 'idle' },
   notified: { label: 'Notified', tone: 'info' },
   fetched: { label: 'Fetched', tone: 'info' },
   applied: { label: 'Applied', tone: 'good' },

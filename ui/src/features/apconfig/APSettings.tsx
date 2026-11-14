@@ -116,7 +116,7 @@ type APSectionProps<V extends FieldValues> = {
 function APSectionForm<V extends FieldValues>({ siteId, ap, formKey, values, schema, toBody, toValues, confirm, legacyWritable, children }: APSectionProps<V>) {
   const queryClient = useQueryClient()
   const context = useSiteFormContext(siteId, {
-    expert: { has_patch: false, shadowed: ap.config?.shadowed ?? [] },
+    expert: { has_patch: false, field: 'expert', shadowed: ap.config?.shadowed ?? [], partly_shadowed: [], overridden_on: {} },
     expertLink: { to: `/sites/${encodeURIComponent(siteId)}/aps/${encodeURIComponent(ap.id)}/config`, search: { view: 'expert' } },
   })
   const controller = useConfigForm<V, APSettingsView>({
@@ -841,26 +841,30 @@ function inSubnet(ip: string, gw: string, prefix: number) {
 function ManagementSection({ siteId, ap, site }: { siteId: string; ap: APSettingsView; site: SiteConfigView }) {
   const recovery = Boolean(site.ap_defaults.config_recovery?.enabled)
   const allowed = site.experimental && recovery
+  // The stored override (model.ManagementOverride): static, address,
+  // prefix, gateway, dns, vlan_id (absent inherits the site; 1 untagged;
+  // 2 to 4094 tagged) and ntp (absent inherits).
   const current = ap.overrides.management as null | {
-    ip_mode: 'dhcp' | 'static'
-    address: string
-    prefix: number | null
-    gateway: string
-    dns: string[]
-    vlan: { mode: 'inherit' | 'untagged' | 'tagged'; id: number | null }
-    ntp: string[] | null
+    static?: boolean
+    address?: string
+    prefix?: number
+    gateway?: string
+    dns?: string[]
+    vlan_id?: number | null
+    ntp?: string[] | null
   }
   const toValues = (a: APSettingsView): ManagementForm => {
     const m = a.overrides.management as typeof current
+    const vlanMode = m?.vlan_id == null ? 'inherit' : m.vlan_id === 1 ? 'untagged' : 'tagged'
     return {
       management: {
         override: Boolean(m),
-        ip_mode: m?.ip_mode ?? 'dhcp',
+        ip_mode: m?.static ? 'static' : 'dhcp',
         address: m?.address ?? '',
         prefix: m?.prefix ?? null,
         gateway: m?.gateway ?? '',
         dns: m?.dns ?? [],
-        vlan: { mode: m?.vlan.mode ?? 'inherit', tagged: m?.vlan.mode === 'tagged', id: m?.vlan.id ?? null },
+        vlan: { mode: vlanMode, tagged: vlanMode === 'tagged', id: vlanMode === 'tagged' ? (m?.vlan_id ?? null) : null },
         ntp_inherit: m?.ntp == null,
         ntp: m?.ntp ?? [],
       },
@@ -904,12 +908,12 @@ function ManagementSection({ siteId, ap, site }: { siteId: string; ap: APSetting
           overrides: {
             management: m.override
               ? {
-                  ip_mode: m.ip_mode,
+                  static: m.ip_mode === 'static',
                   address: m.address.trim(),
-                  prefix: m.prefix == null || m.prefix === '' ? null : Number(m.prefix),
+                  prefix: m.prefix == null || m.prefix === '' ? 0 : Number(m.prefix),
                   gateway: m.gateway.trim(),
                   dns: m.dns.map((d) => d.trim()),
-                  vlan: { mode: m.vlan.mode === 'inherit' ? 'inherit' : m.vlan.tagged ? 'tagged' : 'untagged', id: m.vlan.tagged ? Number(m.vlan.id) : null },
+                  vlan_id: m.vlan.mode === 'inherit' ? null : m.vlan.tagged ? Number(m.vlan.id) : 1,
                   ntp: m.ntp_inherit ? null : m.ntp.map((s) => s.trim()),
                 }
               : null,

@@ -72,7 +72,7 @@ describe('config mocks', () => {
     const error = (await restoreChange('home', 45, {}, { dryRun: true }).catch((e: unknown) => e)) as ApiError
     expect(error.code).toBe('secret_required')
     expect(Object.keys(error.fields)).toEqual(['networks.wlan-iot.psk'])
-    const preview = await restoreChange('home', 45, { secrets: { 'networks.wlan-iot.psk': { keep: true } } }, { dryRun: true })
+    const preview = await restoreChange('home', 45, { keep_current: ['networks.wlan-iot.psk'] }, { dryRun: true })
     expect(preview.object.changed).toEqual([{ kind: 'network', id: 'wlan-iot', name: 'Example-IoT' }])
   })
 })

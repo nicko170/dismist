@@ -121,7 +121,8 @@ func validChannels(country, band string) []api.ValidChannels {
 func (s *Server) rfProfileView(ctx apContext, site model.Site) api.RFProfileView {
 	record := readRFRecord(site)
 	view := api.RFProfileView{Managed: record.Managed, Country: site.Country, ScanningRadio: record.ScanningRadio,
-		Band24: siteBand(site, "2.4"), Band5: siteBand(site, "5"), Plan: []api.PlanRow{}, Recommendations: []api.Recommendation{}}
+		Band24: siteBand(site, "2.4"), Band5: siteBand(site, "5"), Plan: []api.PlanRow{}, Recommendations: []api.Recommendation{},
+		UpdatedRev: site.UpdatedRev}
 	if ccrev, ok := regdomain.CCRev(site.Country); ok {
 		view.CCRev = &ccrev
 	}

@@ -42,8 +42,9 @@ export const sites: SiteSummary[] = [
   },
 ]
 
+/** The phase-1 part of a SiteView; workstream F's config handlers (registered first) serve the typed settings. */
 export function siteView(summary: SiteSummary): SiteView {
-  return { ...summary, ccrev: summary.country === 'AU' ? '890' : null, experimental: false, updated_rev: 7 }
+  return { ...summary, ccrev: summary.country === 'AU' ? '890' : null, experimental: false, updated_rev: 7 } as SiteView
 }
 
 function ap(partial: Partial<APView> & Pick<APView, 'id' | 'name' | 'site_id'>): APView {
@@ -252,6 +253,8 @@ export function apDetail(view: APView): APDetail {
     rf_plan: { '2.4': null, '5': null },
     locate_until: null,
     capabilities: { config_change_notify: null, ap_cmd: false, pong2: false },
+    commands: { reboot: false, restart_radios: false, disconnect: false, locate: false, fallback: `dismist ap33 ssh root@${view.lan_ip || '<ap-lan-ip>'} reboot` },
+    reboots_detected: [],
   }
 }
 
@@ -268,6 +271,8 @@ export const pending: PendingAP[] = [
     last_seen: ago(20),
     attempts: 14,
     reason: 'unregistered',
+    dismissed: false,
+    dismissed_until: null,
   },
 ]
 

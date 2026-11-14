@@ -1,5 +1,8 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import type { CrossScopeShadow, ExpertSummary } from '@/api/queries/sites'
+import type { ExpertSummary } from '@/api/queries/sites'
+
+/** A site option an expert patch overrides on some APs (§3.0 "Shadowed fields", §4.4 cross scope). */
+export type CrossScopeShadow = { key: string; kind: 'patch' | 'override'; aps: { id: string; name: string }[] }
 
 // What every field of a config form needs to know about its surroundings:
 // whether experimental options are allowed on the site (§4.2), whether the
@@ -36,13 +39,22 @@ export function useConfigFormContext() {
   return useContext(ConfigFormContext)
 }
 
-export function shadowFor(expert: ExpertSummary | null, key: string): ShadowState | null {
+/**
+ * How an expert patch shadows option `key` (ExpertSummary: `shadowed` and
+ * `partly_shadowed` list option keys; `overridden_on` maps a site option to
+ * the IDs of the APs whose expert patch overrides it). `apNames` names those
+ * APs when the caller has them.
+ */
+export function shadowFor(expert: ExpertSummary | null, key: string, apNames: Record<string, string> = {}): ShadowState | null {
   if (!expert) return null
   const full = expert.shadowed?.includes(key) ?? false
-  const partial = expert.partly_shadowed?.find((s) => s.key === key)
-  const crossScope = expert.cross_scope?.find((s) => s.key === key) ?? null
+  const partial = expert.partly_shadowed?.includes(key) ?? false
+  const overriddenOn = expert.overridden_on?.[key] ?? []
+  const crossScope: CrossScopeShadow | null = overriddenOn.length
+    ? { key, kind: 'patch', aps: overriddenOn.map((id) => ({ id, name: apNames[id] ?? id })) }
+    : null
   if (!full && !partial && !crossScope) return null
-  return { full, paths: partial?.paths ?? [], crossScope }
+  return { full, paths: [], crossScope }
 }
 
 /** Whether a field may be edited: not read-only, or still writable in legacy mode. */

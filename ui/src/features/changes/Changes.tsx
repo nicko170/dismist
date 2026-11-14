@@ -10,7 +10,6 @@ import type { MutationResponse } from '@/gen/api.gen'
 import { PageHeader } from '@/components/app/PageHeader'
 import { RelativeTime } from '@/components/app/RelativeTime'
 import { EmptyState, ErrorState, SkeletonRows } from '@/components/app/states'
-import { Chip } from '@/components/app/StatusChip'
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { usePageTitle } from '@/features/shell/title'
@@ -136,25 +135,35 @@ function ChangeBody({ siteId, change }: { siteId: string; change: ChangeDetail }
         ) : null}
       </section>
       {restoring ? <RestorePanel siteId={siteId} revision={change.revision} onClose={() => setRestoring(false)} /> : null}
-      {change.objects.map((object) => (
-        <section key={`${object.kind}:${object.id}`} aria-label={`${object.kind} ${object.name}`} className="grid gap-2">
-          <h2 className="text-base font-semibold">
-            {object.kind === 'network' ? 'WLAN' : object.kind === 'ap' ? 'AP' : object.kind === 'rf' ? 'Radio settings' : 'Site'} {object.name}
+      {change.objects.length ? (
+        <p className="text-sm text-muted-foreground">
+          Changed:{' '}
+          {change.objects
+            .map((object) => `${object.kind === 'network' ? 'WLAN' : object.kind === 'ap' ? 'AP' : 'Site'} ${object.name || object.id}`)
+            .join(', ')}
+        </p>
+      ) : null}
+      {change.diff.length ? (
+        <section aria-labelledby="typed-diff" className="grid gap-2">
+          <h2 id="typed-diff" className="text-base font-semibold">
+            Settings changed (against the previous revision)
           </h2>
-          <DiffTable diff={object.diff} />
+          <DiffTable diff={change.diff} />
         </section>
-      ))}
-      {change.aps.length ? (
-        <section aria-labelledby="ap-diffs" className="grid gap-3">
-          <h2 id="ap-diffs" className="text-base font-semibold">
-            Effect on each AP’s config
+      ) : null}
+      {Object.keys(change.effective).length ? (
+        <section aria-labelledby="ap-effective" className="grid gap-2">
+          <h2 id="ap-effective" className="text-base font-semibold">
+            Effective config of each AP at this revision
           </h2>
-          {change.aps.map((ap) => (
-            <div key={ap.id} className="grid gap-2">
-              <h3 className="text-sm font-semibold">{ap.name || ap.id}</h3>
-              <DiffTable diff={ap.diff} />
-            </div>
-          ))}
+          <ul className="grid gap-1 text-sm">
+            {Object.entries(change.effective).map(([apId, hash]) => (
+              <li key={apId} className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{change.affected_aps.find((ap) => ap.id === apId)?.name || apId}</span>
+                <code className="font-mono text-xs break-all text-muted-foreground">{hash}</code>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
     </>
@@ -179,15 +188,22 @@ export function RestorePanel({ siteId, revision, onClose }: { siteId: string; re
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  // RestoreInput (internal/api): old values by path, and the paths whose
+  // current secret is kept.
   const body = useMemo<RestoreInput>(() => {
-    const out: RestoreInput['secrets'] = {}
+    const values: Record<string, string> = {}
+    const keep: string[] = []
     for (const { path } of needed) {
       const choice = secrets[path]
       if (!choice) continue
-      if (choice.keep) out[path] = { keep: true }
-      else if (choice.value) out[path] = { value: choice.value }
+      if (choice.keep) keep.push(path)
+      else if (choice.value) values[path] = choice.value
     }
-    return { keep_new_wlans: keepNew, ...(Object.keys(out).length ? { secrets: out } : {}) }
+    return {
+      keep_newer_wlans: keepNew,
+      ...(Object.keys(values).length ? { secrets: values } : {}),
+      ...(keep.length ? { keep_current: keep } : {}),
+    }
   }, [keepNew, needed, secrets])
 
   async function check(input: RestoreInput) {
@@ -212,7 +228,7 @@ export function RestorePanel({ siteId, revision, onClose }: { siteId: string; re
   }
 
   useEffect(() => {
-    void check({ keep_new_wlans: keepNew })
+    void check({ keep_newer_wlans: keepNew })
     // Re-run when the keep-new choice changes; secrets are checked on demand.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keepNew])
@@ -303,10 +319,7 @@ export function RestorePanel({ siteId, revision, onClose }: { siteId: string; re
             <div className="grid gap-1">
               <span className="font-medium">WLANs re-created:</span>
               {p.recreated.map((w) => (
-                <span key={w.id}>
-                  {w.ssid}
-                  {w.bssid_warning ? <span className="text-warning"> · {w.bssid_warning}</span> : null}
-                </span>
+                <span key={w.id}>{w.name || w.id}</span>
               ))}
             </div>
           ) : null}
@@ -316,9 +329,7 @@ export function RestorePanel({ siteId, revision, onClose }: { siteId: string; re
                 <>
                   <span className="font-medium">WLANs created since then are removed:</span>
                   {p.removed.map((w) => (
-                    <span key={w.id}>
-                      {w.ssid} <Chip tone="warn">{w.clients} client{w.clients === 1 ? '' : 's'}</Chip>
-                    </span>
+                    <span key={w.id}>{w.name || w.id}</span>
                   ))}
                 </>
               ) : null}
@@ -333,7 +344,7 @@ export function RestorePanel({ siteId, revision, onClose }: { siteId: string; re
               <span className="font-medium">Not restored:</span>
               {p.not_restored.map((n) => (
                 <span key={`${n.kind}:${n.id}`} className="text-muted-foreground">
-                  {n.name}: {n.reason}
+                  {n.kind === 'ap' ? 'AP' : n.kind} {n.name || n.id}: deleted since this revision
                 </span>
               ))}
             </div>

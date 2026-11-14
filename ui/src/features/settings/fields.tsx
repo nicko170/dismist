@@ -300,18 +300,23 @@ export function eth1Error(value: Eth1Form): { path: string; message: string } | 
   return null
 }
 
-export function eth1ToForm(value: { mode: Eth1Form['mode']; vlan_id: number | null; vlans: number[]; pvid: number | null } | null | undefined, inherit: boolean): Eth1Form {
+/** Eth1View (internal/api): vlan_id is the access VLAN, or a trunk's native VLAN (PVID). */
+export function eth1ToForm(value: { mode: Exclude<Eth1Form['mode'], 'inherit'>; vlan_id?: number; vlans?: number[] } | null | undefined, inherit: boolean): Eth1Form {
   if (!value) return { mode: inherit ? 'inherit' : 'same_as_uplink', vlan_id: null, vlans: '', pvid: null }
-  return { mode: value.mode, vlan_id: value.vlan_id, vlans: value.vlans.join(', '), pvid: value.pvid }
+  return {
+    mode: value.mode,
+    vlan_id: value.mode === 'access' ? value.vlan_id || null : null,
+    vlans: (value.vlans ?? []).join(', '),
+    pvid: value.mode === 'trunk' ? value.vlan_id || null : null,
+  }
 }
 
 export function eth1FromForm(form: Eth1Form) {
   if (form.mode === 'inherit') return null
   return {
     mode: form.mode,
-    vlan_id: form.mode === 'access' ? Number(form.vlan_id) : null,
+    vlan_id: form.mode === 'access' ? Number(form.vlan_id) : form.mode === 'trunk' ? Number(form.pvid) : 0,
     vlans: form.mode === 'trunk' ? form.vlans.split(/[\s,]+/).filter(Boolean).map(Number) : [],
-    pvid: form.mode === 'trunk' ? Number(form.pvid) : null,
   }
 }
 

@@ -182,6 +182,8 @@ export function normaliseDetail(body: unknown): APDetail {
     rf_plan: obj(row.rf_plan, { '2.4': null, '5': null }),
     locate_until: time(row.locate_until),
     capabilities: obj(row.capabilities, { config_change_notify: null, ap_cmd: false, pong2: false }),
+    commands: obj(row.commands, { reboot: false, restart_radios: false, disconnect: false, locate: false, fallback: '' }),
+    reboots_detected: Array.isArray(row.reboots_detected) ? row.reboots_detected.filter((at): at is string => typeof at === 'string') : [],
   }
 }
 

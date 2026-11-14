@@ -31,6 +31,8 @@ const pendingRow: PendingAP = {
   last_seen: now,
   attempts: 3,
   reason: 'unregistered',
+    dismissed: false,
+    dismissed_until: null,
 }
 const onboarding: OnboardingView = {
   wss_url: 'wss://ap.example.net/ws',

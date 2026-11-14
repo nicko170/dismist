@@ -149,8 +149,8 @@ export function PlanDialog({ siteId, onClose }: { siteId: string; onClose: () =>
 
   useEffect(() => {
     let cancelled = false
-    ;(planChannels(siteId, { dryRun: true }) as Promise<PlanProposal>)
-      .then((p) => !cancelled && setProposal(p))
+    planChannels(siteId, { dryRun: true })
+      .then((response) => !cancelled && setProposal(response.object))
       .catch((e: unknown) => !cancelled && setError(describeError(e).message))
     return () => {
       cancelled = true
@@ -162,7 +162,8 @@ export function PlanDialog({ siteId, onClose }: { siteId: string; onClose: () =>
   async function apply() {
     setBusy(true)
     try {
-      const response = await planChannels(siteId, { inputsHash: proposal?.inputs_hash })
+      // Apply exactly the moves the operator previewed.
+      const response = await planChannels(siteId, { only: moves.map((c) => ({ ap_id: c.ap_id, band: c.band })) })
       toast.success('Channel plan applied', { description: 'revision' in response ? impactLine(response.impact) : undefined })
       void queryClient.invalidateQueries({ queryKey: keys.siteRF(siteId) })
       void queryClient.invalidateQueries({ queryKey: keys.siteChanges(siteId) })

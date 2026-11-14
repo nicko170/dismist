@@ -98,6 +98,9 @@ type RFProfileView struct {
 	ScanningRadio   *bool            `json:"scanning_radio" tstype:"boolean | null,required"`
 	Plan            []PlanRow        `json:"plan"`
 	Recommendations []Recommendation `json:"recommendations"`
+	// UpdatedRev is the site's updated_rev: PUT /api/sites/$id/rf takes
+	// it as If-Match.
+	UpdatedRev uint64 `json:"updated_rev"`
 }
 
 // BandProfileInput is one band of an RF profile change (merge patch).

@@ -217,7 +217,9 @@ export function AccessSettings({ siteId, site }: { siteId: string; site: SiteCon
       toValues={toValues}
       toBody={(v, patch) => {
         const body: SitePatch = {}
-        if (patch.ssh) body.ssh = { enabled: v.ssh.enabled, keys: v.ssh.keys.map(({ key, comment }) => ({ key, comment })), readonly_keys: v.ssh.readonly_keys.map(({ key, comment }) => ({ key, comment })) }
+        // SiteSSHInput takes authorized_keys lines ("type base64 comment").
+        const line = ({ key, comment }: { key: string; comment: string }) => [key.trim(), comment.trim()].filter(Boolean).join(' ')
+        if (patch.ssh) body.ssh = { enabled: v.ssh.enabled, keys: v.ssh.keys.map(line), readonly_keys: v.ssh.readonly_keys.map(line) }
         if (patch.syslog) body.syslog = v.syslog.map((t) => ({ ...t, host: t.host.trim(), port: Number(t.port), facility: Number(t.facility), severity: Number(t.severity) }))
         return body
       }}
@@ -620,7 +622,7 @@ function RoamingKey({ siteId, site }: { siteId: string; site: SiteConfigView }) 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const queryClient = useQueryClient()
-  if (!users.length && !site.roaming?.in_use) return null
+  if (!users.length) return null
   const clients = users.reduce((sum, n) => sum + n.live.clients, 0)
 
   async function start() {

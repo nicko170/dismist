@@ -68,7 +68,7 @@ export const screenHandlers: HttpHandler[] = [
     const body = (await request.json().catch(() => ({}))) as { name?: string; country?: string; timezone?: string }
     if (!body.name?.trim()) return fail(422, 'Check the highlighted fields.', 'invalid', { name: 'Enter a name.' })
     if (body.name.trim().toLowerCase() === 'home') return fail(409, 'A site with this name exists.', 'conflict', { name: 'Another site already has this name.' })
-    const site: SiteView = {
+    const site = {
       id: body.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       name: body.name.trim(),
       country: body.country ?? 'AU',
@@ -77,7 +77,7 @@ export const screenHandlers: HttpHandler[] = [
       ccrev: 'AU/890',
       experimental: false,
       updated_rev: 1,
-    }
+    } as SiteView // the phase-1 part; the typed settings come from F's config mocks
     return HttpResponse.json(site, { status: 201 })
   }),
 

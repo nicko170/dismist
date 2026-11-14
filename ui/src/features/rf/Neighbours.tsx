@@ -21,7 +21,6 @@ type Bin = { channel: number; count: number; strongest: number | null; own: stri
 export function histogram(neighbours: Neighbour[], ownChannels: Map<number, string[]>): Bin[] {
   const bins = new Map<number, Bin>()
   for (const n of neighbours) {
-    if (n.own) continue
     const bin = bins.get(n.channel) ?? { channel: n.channel, count: 0, strongest: null, own: [] }
     bin.count++
     bin.strongest = bin.strongest == null ? n.rssi : Math.max(bin.strongest, n.rssi)
@@ -48,7 +47,7 @@ export function NeighboursPage({ siteId, band }: { siteId: string; band?: Band }
     }
     return map
   }, [rf.data, band])
-  const list = (scans.data?.neighbours ?? []).filter((n) => !n.own && (!band || n.band === band)).toSorted((a, b) => b.rssi - a.rssi)
+  const list = (scans.data?.neighbours ?? []).filter((n) => !band || n.band === band).toSorted((a, b) => b.rssi - a.rssi)
   const bins = histogram(list, own)
   const max = Math.max(1, ...bins.map((b) => b.count))
 

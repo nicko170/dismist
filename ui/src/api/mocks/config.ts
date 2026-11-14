@@ -3,7 +3,7 @@ import type {
   BandProfileView,
   ChangeRecord,
   ExpertPatchView,
-  MigrationReport,
+  MigrationStatus,
   Neighbour,
   Recommendation,
   RFProfileView,
@@ -27,12 +27,16 @@ import { ago, aps } from './data'
 
 const dfs5 = (channel: number) => channel >= 52 && channel <= 144
 const list = (channels: number[]) => channels.map((channel) => ({ channel, dfs: dfs5(channel) }))
+const chunk = (channels: number[], size: number) => Array.from({ length: Math.ceil(channels.length / size) }, (_, i) => channels.slice(i * size, i * size + size))
+const blocks40 = [36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 132, 136, 140, 144, 149, 153, 157, 161]
 export const valid5: BandProfileView['valid_channels'] = [
-  { width: 20, primaries: list([36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 132, 136, 140, 144, 149, 153, 157, 161, 165]) },
-  { width: 40, primaries: list([36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 132, 136, 140, 144, 149, 153, 157, 161]) },
-  { width: 80, primaries: list([36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 132, 136, 140, 144, 149, 153, 157, 161]) },
+  { width: 20, primaries: list([36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 132, 136, 140, 144, 149, 153, 157, 161, 165]), blocks: [] },
+  { width: 40, primaries: list(blocks40), blocks: chunk(blocks40, 2) },
+  { width: 80, primaries: list(blocks40), blocks: chunk(blocks40, 4) },
 ]
-export const valid24: BandProfileView['valid_channels'] = [{ width: 20, primaries: list([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]).map((p) => ({ ...p, dfs: false })) }]
+export const valid24: BandProfileView['valid_channels'] = [
+  { width: 20, primaries: list([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]).map((p) => ({ ...p, dfs: false })), blocks: [] },
+]
 
 const advanced: BandProfileView['advanced'] = { taf: 'default', twt: false, antenna: 'default', min_probe_rssi: null, mu_mimo: null, txbf: null }
 
@@ -77,14 +81,14 @@ export function rfProfile(siteId: string): RFProfileView {
       }),
     ),
     recommendations: [],
-    fallback_aps: [],
     updated_rev: 4,
   }
 }
 
 const ED25519 = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
-export const siteSettings = new Map<string, Omit<SiteSettingsView, keyof SiteSummary | 'ccrev' | 'experimental' | 'updated_rev' | 'rf'> & { experimental: boolean; updated_rev: number }>([
+type MockSettings = Omit<SiteSettingsView, keyof SiteSummary | 'ccrev' | 'experimental' | 'updated_rev' | 'rf'> & { experimental: boolean; updated_rev: number }
+export const siteSettings = new Map<string, MockSettings>([
   [
     'home',
     {
@@ -100,7 +104,9 @@ export const siteSettings = new Map<string, Omit<SiteSettingsView, keyof SiteSum
       // Migrated objects keep what the AP runs today (design §4.6).
       ap_defaults: { led_brightness: 255, hostname_from_name: false, keep_wlans_up_on_uplink_down: false, poe_constrained: 'disable_radios', wired_client_stats: false, ble_disabled: false, eth1: null, config_recovery: null },
       protection: { blocked_clients: [], proxy_arp: false, arp_spoof_check: false, penalty_box: null, dhcp_fingerprinting: false },
-      expert: { has_patch: true, shadowed: [] },
+      expert: { has_patch: true, field: 'expert', shadowed: [], partly_shadowed: [], overridden_on: {} },
+      experimental_in_use: [],
+      typed: true,
     },
   ],
   [
@@ -113,12 +119,14 @@ export const siteSettings = new Map<string, Omit<SiteSettingsView, keyof SiteSum
       management: { vlan_id: 1, dns: ['192.0.2.1'], ntp: ['pool.ntp.org'] },
       ap_defaults: { led_brightness: 128, hostname_from_name: true, keep_wlans_up_on_uplink_down: false, poe_constrained: 'keep_radios', wired_client_stats: false, ble_disabled: true, eth1: null, config_recovery: null },
       protection: { blocked_clients: [{ mac: '02-aa-bb-00-00-99', note: 'Old printer' }], proxy_arp: true, arp_spoof_check: true, penalty_box: null, dhcp_fingerprinting: false },
-      expert: { has_patch: false, shadowed: [] },
+      expert: { has_patch: false, field: 'expert', shadowed: [], partly_shadowed: [], overridden_on: {} },
+      experimental_in_use: [],
+      typed: true,
     },
   ],
 ])
 
-export function settingsFor(siteId: string) {
+export function settingsFor(siteId: string): MockSettings {
   let settings = siteSettings.get(siteId)
   if (!settings) {
     // A new site gets the new defaults (design §4.6).
@@ -130,7 +138,9 @@ export function settingsFor(siteId: string) {
       management: { vlan_id: 1, dns: [], ntp: [] },
       ap_defaults: { led_brightness: 255, hostname_from_name: true, keep_wlans_up_on_uplink_down: false, poe_constrained: 'keep_radios', wired_client_stats: false, ble_disabled: false, eth1: null, config_recovery: null },
       protection: { blocked_clients: [], proxy_arp: false, arp_spoof_check: false, penalty_box: null, dhcp_fingerprinting: false },
-      expert: { has_patch: false, shadowed: [] },
+      expert: { has_patch: false, field: 'expert', shadowed: [], partly_shadowed: [], overridden_on: {} },
+      experimental_in_use: [],
+      typed: true,
     }
     siteSettings.set(siteId, settings)
   }
@@ -155,9 +165,13 @@ function wlan(partial: Partial<WLANView> & Pick<WLANView, 'id' | 'site_id' | 'ss
     hidden: false,
     isolation: 'none',
     bssid_index: 1,
+    owe_bssid_index: 0,
+    owe_ssid: '',
+    live_vaps: [],
+    mdid: 0,
     band_steering: false,
     rates: 'compatible',
-    min_rssi: null,
+    min_rssi: {},
     dtim: 2,
     idle_timeout_sec: 1800,
     max_clients: null,
@@ -179,8 +193,7 @@ function wlan(partial: Partial<WLANView> & Pick<WLANView, 'id' | 'site_id' | 'ss
     option82: null,
     mpsk: null,
     schedule: null,
-    mdid: null,
-    expert: { has_patch: false, shadowed: [] },
+    expert: { has_patch: false, field: 'expert', shadowed: [], partly_shadowed: [], overridden_on: {} },
     experimental_in_use: [],
     live: { clients: 0, aps_broadcasting: 0, aps_total: 0 },
     updated_rev: 1,
@@ -264,12 +277,13 @@ export const WLAN_FORBIDDEN = ['ID', 'SSID', 'Enabled', 'Auth.PSK', 'Auth.MultiP
 
 export const expertPatches = new Map<string, ExpertPatchView>([
   // The migrated residual: Country now drives the radios, but Monitor.CCRev stays empty (§8.5 fixture).
-  ['site:home', { scope: 'site', object_id: 'home', patch: { Monitor: { CCRev: '' } }, shadowed: [], partly_shadowed: ['country'], ignored_keys: [], updated_rev: 7 }],
+  ['site:home', { scope: 'site', object_id: 'home', patch: { Monitor: { CCRev: '' } }, field: 'expert', shadowed: [], partly_shadowed: ['country'], ignored_keys: [], updated_rev: 7 }],
 ])
 
-export function expertFor(scope: ExpertPatchView['scope'], id: string): ExpertPatchView {
+/** The editor's completion and forbidden-path lists ride along on the mock view (client conveniences, design §7.4). */
+export function expertFor(scope: ExpertPatchView['scope'], id: string): ExpertPatchView & { paths: string[]; forbidden: string[] } {
   const key = `${scope}:${id}`
-  const stored = expertPatches.get(key) ?? { scope, object_id: id, patch: {}, shadowed: [], partly_shadowed: [], ignored_keys: [], updated_rev: 1 }
+  const stored = expertPatches.get(key) ?? { scope, object_id: id, patch: {}, field: 'expert' as const, shadowed: [], partly_shadowed: [], ignored_keys: [], updated_rev: 1 }
   return {
     ...stored,
     paths: scope === 'wlan' ? WLAN_PATHS : SITE_PATHS,
@@ -292,10 +306,10 @@ export const recommendations = new Map<string, Recommendation[]>([
 export function neighbours(siteId: string): Neighbour[] {
   if (siteId !== 'home') return []
   return [
-    { ssid: 'Neighbour-5G', bssid: '02-aa-cc-00-00-01', band: '5', channel: 36, width: 80, rssi: -71, seen_by: '02-aa-00-00-00-01', station_count: 4, util: 22, last_seen: ago(300) },
-    { ssid: 'Neighbour', bssid: '02-aa-cc-00-00-02', band: '2.4', channel: 6, width: 20, rssi: -64, seen_by: '02-aa-00-00-00-01', station_count: null, util: 41, last_seen: ago(300) },
-    { ssid: '', bssid: '02-aa-cc-00-00-03', band: '2.4', channel: 11, width: 20, rssi: -82, seen_by: '02-aa-00-00-00-03', station_count: null, util: null, last_seen: ago(900) },
-    { ssid: 'Printer-Direct', bssid: '02-aa-cc-00-00-04', band: '5', channel: 149, width: 20, rssi: -88, seen_by: '02-aa-00-00-00-03', station_count: 0, util: 2, last_seen: ago(600) },
+    { ssid: 'Neighbour-5G', bssid: '02-aa-cc-00-00-01', band: '5', channel: 36, width: 80, rssi: -71, seen_by: '02-aa-00-00-00-01', seen_by_name: 'Hallway', station_count: 4, util: 0.22, last_seen: ago(300) },
+    { ssid: 'Neighbour', bssid: '02-aa-cc-00-00-02', band: '2.4', channel: 6, width: 20, rssi: -64, seen_by: '02-aa-00-00-00-01', seen_by_name: 'Hallway', station_count: null, util: 0.41, last_seen: ago(300) },
+    { ssid: '', bssid: '02-aa-cc-00-00-03', band: '2.4', channel: 11, width: 20, rssi: -82, seen_by: '02-aa-00-00-00-03', seen_by_name: 'Study', station_count: null, util: null, last_seen: ago(900) },
+    { ssid: 'Printer-Direct', bssid: '02-aa-cc-00-00-04', band: '5', channel: 149, width: 20, rssi: -88, seen_by: '02-aa-00-00-00-03', seen_by_name: 'Study', station_count: 0, util: 0.02, last_seen: ago(600) },
   ]
 }
 
@@ -311,13 +325,14 @@ export function samples(siteId: string, apId: string | null, stepMinutes = 10, p
     const c24 = Math.round(clients * 0.25)
     return {
       at: ago(minutesAgo * 60),
-      ap_id: apId ?? undefined,
       clients,
-      clients_24: c24,
-      clients_5: clients - c24,
+      aps_connected: siteAPs.filter((ap) => ap.connected).length,
+      tx_bytes: clients * 120_000,
+      rx_bytes: clients * 30_000,
+      average_rssi: -58,
       radios: [
-        { band: '2.4', channel: 1, width: 20, util_all: 25 + (index % 7), noise_dbm: -92, clients: c24, max_power_dbm: 12 },
-        { band: '5', channel: 149, width: 80, util_all: 12 + (index % 5), noise_dbm: -95, clients: clients - c24, max_power_dbm: 17 },
+        { band: '2.4', channel: 1, width: 20, util: (25 + (index % 7)) / 100, noise_dbm: -92, clients: c24, max_power_dbm: 12 },
+        { band: '5', channel: 149, width: 80, util: (12 + (index % 5)) / 100, noise_dbm: -95, clients: clients - c24, max_power_dbm: 17 },
       ],
     }
   })
@@ -329,75 +344,77 @@ export const changes: ChangeRecord[] = [
   {
     revision: 43,
     at: ago(90),
-    actor: { kind: 'session', name: 'admin (198.51.100.20)' },
+    actor: { kind: 'session', name: 'admin', id: 'a1b2c3d4', remote: '198.51.100.20' },
     kind: 'config',
     summary: 'WLAN Example: hidden off',
     endpoint: 'PATCH /api/sites/home/networks/wlan-example',
-    affected_aps: [{ id: '02-aa-00-00-00-03', name: 'Study', state: 'pending' }],
+    affected_aps: [{ id: '02-aa-00-00-00-03', name: 'Study', state: 'pending', error: '' }],
     objects: [{ kind: 'network', id: 'wlan-example', name: 'Example' }],
-    diff: [{ object: 'WLAN Example', path: 'hidden', from: true, to: false }],
-    aps: [{ id: '02-aa-00-00-00-03', name: 'Study', diff: [{ path: 'WLANs[Example].Hidden', from: true, to: false }] }],
+    diff: [{ path: 'hidden', from: true, to: false }],
     results: { '02-aa-00-00-00-03': { state: 'pending', at: null, error: '' } },
+    snapshot: null,
+    effective: {},
+    restorable: true,
   },
   {
     revision: 42,
     at: ago(3 * 86400),
-    actor: { kind: 'system', name: 'migration v2' },
+    actor: { kind: 'system', name: 'dismist', id: '', remote: '' },
     kind: 'action',
     summary: 'Migration to schema 2 committed: effective config unchanged on 3 APs',
     endpoint: 'migration',
     affected_aps: [],
     objects: [],
     diff: [],
-    aps: [],
     results: {},
+    snapshot: null,
+    effective: {},
+    restorable: false,
   },
   {
     revision: 41,
     at: ago(5 * 86400),
-    actor: { kind: 'session', name: 'admin (198.51.100.20)' },
+    actor: { kind: 'session', name: 'admin', id: 'a1b2c3d4', remote: '198.51.100.20' },
     kind: 'config',
     summary: 'WLAN Example: passphrase changed',
     endpoint: 'PATCH /api/sites/home/networks/wlan-example',
     affected_aps: [
-      { id: '02-aa-00-00-00-01', name: 'Hallway', state: 'applied' },
-      { id: '02-aa-00-00-00-03', name: 'Study', state: 'applied' },
+      { id: '02-aa-00-00-00-01', name: 'Hallway', state: 'applied', error: '' },
+      { id: '02-aa-00-00-00-03', name: 'Study', state: 'applied', error: '' },
     ],
     objects: [{ kind: 'network', id: 'wlan-example', name: 'Example' }],
-    diff: [{ object: 'WLAN Example', path: 'psk', from: 'hmac:0011223344556677', to: 'hmac:8899aabbccddeeff' }],
-    aps: [
-      { id: '02-aa-00-00-00-01', name: 'Hallway', diff: [{ path: 'WLANs[Example].Auth.PSK', from: '[changed]', to: '[changed]' }] },
-      { id: '02-aa-00-00-00-03', name: 'Study', diff: [{ path: 'WLANs[Example].Auth.PSK', from: '[changed]', to: '[changed]' }] },
-    ],
+    diff: [{ path: 'psk', from: 'hmac:0011223344556677', to: 'hmac:8899aabbccddeeff' }],
     results: { '02-aa-00-00-00-01': { state: 'applied', at: ago(5 * 86400 - 20), error: '' }, '02-aa-00-00-00-03': { state: 'applied', at: ago(5 * 86400 - 25), error: '' } },
+    snapshot: null,
+    effective: {},
+    restorable: true,
   },
 ]
 
 // ---- migration (System › Migration) ----
 
-export const migration: MigrationReport = {
+// The real report is internal/migrate's V2Report, redacted (design §4.7).
+export const migration: MigrationStatus = {
   state: 'committed',
   reason: '',
+  report_available: true,
   at: ago(3 * 86400),
-  lifted: [
-    { kind: 'network', id: 'wlan-example', name: 'Example', fields: ['security', 'band_steering', 'idle_timeout_sec', 'bssid_index'], residual: null },
-    { kind: 'site', id: 'home', name: 'Home', fields: ['country', 'rf.band_5', 'rf.band_24', 'rf.managed'], residual: { Monitor: { CCRev: '' } } },
-  ],
-  aps: aps
-    .filter((ap) => ap.site_id === 'home')
-    .map((ap) => ({
-      ap_id: ap.id,
-      ap_name: ap.name,
-      equal: true,
-      hash_before: 'e1:9f2c…',
-      hash_after: 'e1:9f2c…',
-      normaliser_version: 1,
-      bssid_indexes: [{ network_id: 'wlan-example', ssid: 'Example', index: 1, source: ap.connected ? ('measured' as const) : ('predicted' as const) }],
-      local_files: 'absent' as const,
-      mismatches: [],
-    })),
+  paths: [],
+  schema: 2,
   compat: 1,
+  copy: 'controller.db.pre-v2-20261111T000000Z',
   can_finalise: false,
+  finalise_after: ago(-27 * 86400),
+  finalised: false,
+  report: {
+    at: ago(3 * 86400),
+    verified: true,
+    sites: [{ id: 'home', probe: '02-aa-00-00-00-01', rf_managed: true, typed: { country: 'AU', rf: { managed: true } }, residual: { Monitor: { CCRev: '' } }, residual_paths: ['Monitor.CCRev'] }],
+    networks: [{ id: 'wlan-example', site_id: 'home', ssid: 'Example', security: 'wpa2_wpa3_personal', bssid_index: 1, bssid_source: 'measured', typed: { security: 'wpa2_wpa3_personal' } }],
+    aps: aps
+      .filter((ap) => ap.site_id === 'home')
+      .map((ap) => ({ id: ap.id, site_id: 'home', compiled: true, local_files: 'none', old_hash: 'e2:9f2c', new_hash: 'e2:9f2c', equal: true })),
+  },
 }
 
 // ---- AP config views ----
@@ -431,5 +448,7 @@ export function apConfig(apId: string, view: APConfigView['view']): APConfigView
     site_patch: { Monitor: { CCRev: '' } },
     ap_patch: {},
     h0: { recorded_at: ago(10 * 86400), config_revision: 40, normaliser_version: 1, effective_hash: 'e1:9f2c4d0b7a1e3f5c6d8e9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d', matches: true },
+    compile: { trace: [], shadowed: [], ignored: [], warnings: [], validation: [] },
+    legacy: false,
   }
 }

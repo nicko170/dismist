@@ -33,6 +33,7 @@ function opt(scope: OptionScope, path: string, label: string, control: string, t
     catalogue: '',
     visibleWhen: [],
     ...extra,
+    dismistOnly: extra.dismistOnly ?? false,
     experimental: confidence === 'needs-live-test',
   }
 }

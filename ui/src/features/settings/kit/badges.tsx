@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { FlaskConical, Layers, PencilRuler } from 'lucide-react'
-import type { CrossScopeShadow } from '@/api/queries/sites'
+import type { CrossScopeShadow } from './context'
 import { cn } from '@/lib/utils'
 
 // Badges for experimental, shadowed and inherited values (design §3.0, §7.3).

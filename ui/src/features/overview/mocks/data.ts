@@ -205,6 +205,8 @@ export function detailFor(view: APView): APDetail {
     },
     locate_until: null,
     capabilities: { config_change_notify: null, ap_cmd: false, pong2: false },
+    commands: { reboot: false, restart_radios: false, disconnect: false, locate: false, fallback: `dismist ap33 ssh root@${view.lan_ip || '<ap-lan-ip>'} reboot` },
+    reboots_detected: [],
   }
 }
 
@@ -222,6 +224,8 @@ export function basePending(): PendingAP[] {
       last_seen: ago(20),
       attempts: 14,
       reason: 'unregistered',
+    dismissed: false,
+    dismissed_until: null,
     },
   ]
 }

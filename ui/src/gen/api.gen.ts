@@ -1411,6 +1411,11 @@ export interface RFProfileView {
   scanning_radio: boolean | null;
   plan: PlanRow[];
   recommendations: Recommendation[];
+  /**
+   * UpdatedRev is the site's updated_rev: PUT /api/sites/$id/rf takes
+   * it as If-Match.
+   */
+  updated_rev: number /* uint64 */;
 }
 /**
  * BandProfileInput is one band of an RF profile change (merge patch).
@@ -1631,8 +1636,14 @@ export interface ManagementView {
  */
 export interface Eth1View {
   mode: 'same_as_uplink' | 'access' | 'trunk' | 'disabled';
-  vlans: number /* int */[];
-  pvid: number /* int */;
+  /**
+   * VLANID is the access VLAN, or a trunk's native VLAN (PVID).
+   */
+  vlan_id?: number /* int */;
+  /**
+   * VLANs are a trunk's VLANs.
+   */
+  vlans?: number /* int */[];
 }
 /**
  * RecoveryView is config auto-recovery (experimental).
@@ -2072,12 +2083,21 @@ export interface RADIUSServerView {
   has_secret: boolean;
 }
 /**
- * CoAServerView is one Change-of-Authorisation server.
+ * CoAServerView is one Change-of-Authorisation server; Port is the AP's
+ * local CoA port (default 3799).
  */
 export interface CoAServerView {
   host: string;
-  local_port: number /* int */;
+  port: number /* int */;
   has_secret: boolean;
+}
+/**
+ * CoAView is Change of Authorisation (experimental, phase 4).
+ */
+export interface CoAView {
+  enabled: boolean;
+  servers: CoAServerView[];
+  event_timestamp_optional: boolean;
 }
 /**
  * DynamicVLANView is RADIUS-assigned VLANs.
@@ -2100,8 +2120,7 @@ export interface RADIUSView {
   dynamic_vlan: DynamicVLANView | null;
   reauth_sec: number /* int */;
   reauth_on_session_timeout: boolean;
-  coa: CoAServerView[];
-  coa_no_event_timestamp: boolean;
+  coa: CoAView | null;
 }
 /**
  * RoamingView is a WLAN's roaming settings.
@@ -2143,19 +2162,21 @@ export interface Option82View {
   circuit_id: string;
 }
 /**
- * ScheduleRange is one weekday's on-air hours ("08:00" to "22:00").
+ * ScheduleWindow is one weekday's on-air hours: Day "mon" to "sun",
+ * Start and End "HH:MM" ("24:00" is the end of the day).
  */
-export interface ScheduleRange {
-  day: number /* int */;
+export interface ScheduleWindow {
+  day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
   start: string;
   end: string;
 }
 /**
- * ScheduleView is a WLAN's on-air schedule (experimental, phase 4).
+ * ScheduleView is a WLAN's on-air schedule (experimental, phase 4): the
+ * WLAN is off outside its windows.
  */
 export interface ScheduleView {
   enabled: boolean;
-  ranges: ScheduleRange[];
+  windows: ScheduleWindow[];
 }
 /**
  * MPSKKeyView is one per-device passphrase; the passphrase is write-only.
@@ -2183,6 +2204,17 @@ export interface WLANLiveSummary {
   clients: number /* int */;
   aps_broadcasting: number /* int */;
   aps_total: number /* int */;
+}
+/**
+ * WLANLiveVAP is one AP band broadcasting the WLAN (field 32, read-only).
+ */
+export interface WLANLiveVAP {
+  ap_id: string;
+  ap_name: string;
+  band: Band;
+  bssid: string;
+  dev: string;
+  clients: number /* int */;
 }
 /**
  * WLANView is one WLAN (GET /api/sites/$id/networks, phase 2). Secrets
@@ -2234,6 +2266,15 @@ export interface WLANView {
   expert: ExpertSummary;
   experimental_in_use: string[];
   live: WLANLiveSummary;
+  /**
+   * LiveVAPs lists each AP band broadcasting the WLAN now.
+   */
+  live_vaps: WLANLiveVAP[];
+  /**
+   * MDID is the WLAN's 802.11r mobility domain (read-only; the AP uses
+   * it only with fast roaming 802.11r).
+   */
+  mdid: number /* int */;
   updated_rev: number /* uint64 */;
 }
 /**

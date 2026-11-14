@@ -35,6 +35,10 @@ func fill(v reflect.Value, depth int) {
 			}
 		}
 	case reflect.Slice:
+		if v.Type() == reflect.TypeOf(json.RawMessage(nil)) {
+			v.SetBytes([]byte(`{}`))
+			return
+		}
 		if v.Type().Elem().Kind() == reflect.Uint8 {
 			v.SetBytes([]byte{1})
 			return

@@ -1,5 +1,6 @@
 import { http, HttpResponse, delay, type HttpHandler } from 'msw'
 import * as base from '@/api/mocks/data'
+import type { BandProfileView } from '@/api/queries/rf'
 import type { APSettingsView } from '@/api/queries/apsettings'
 import type { ChangeDetail, RestoreInput, RestorePreview } from '@/api/queries/changes'
 import type { WLANInput, WLANView } from '@/api/queries/networks'
@@ -13,6 +14,7 @@ import { provisionalOptions } from '../kit/provisional-options'
 import { parseSSHKey, secretByteLength, sshFingerprint } from '../kit/validators'
 import { passphraseError, isPersonal } from '@/features/wlans/security'
 import * as fixtures from './config-data'
+import { toDetail, type MockChange } from './config-data'
 
 // MSW handlers for F's endpoints (design §4.8, §4.9): typed site, WLAN, RF,
 // AP override, expert patch, history/restore, recommendations and migration
@@ -133,9 +135,9 @@ function leafDiff(prefix: string, from: unknown, to: unknown, secret = new Set<s
   )
 }
 
-function record(siteId: string, summary: string, endpoint: string, objects: ChangeDetail['objects'], impact: Impact) {
+function record(siteId: string, summary: string, endpoint: string, objects: MockChange['objects'], impact: Impact) {
   state.revision++
-  state.changes.unshift({
+  state.changes.unshift(toDetail({
     revision: state.revision,
     at: new Date().toISOString(),
     actor: { kind: 'session', name: 'admin (browser)' },
@@ -146,7 +148,7 @@ function record(siteId: string, summary: string, endpoint: string, objects: Chan
     objects,
     aps: impact.aps.map((ap) => ({ id: ap.id, name: ap.name, diff: ap.diff ?? [] })),
     restorable: true,
-  })
+  }))
   void siteId
   return state.revision
 }
@@ -223,13 +225,13 @@ function wlanView(input: WLANInput, current: WLANView): WLANView {
           auth: (radius.auth ?? []).map((s, i) => ({ host: s.host, port: s.port, has_secret: Boolean(s.secret) || Boolean(current.radius?.auth[i]?.has_secret) })),
           acct: (radius.acct ?? []).map((s, i) => ({ host: s.host, port: s.port, has_secret: Boolean(s.secret) || Boolean(current.radius?.acct[i]?.has_secret) })),
           mac_auth: radius.mac_auth ?? false,
-          acct_interim_sec: radius.acct_interim_sec ?? null,
+          acct_interim_sec: radius.acct_interim_sec ?? 0,
           nas_id: radius.nas_id ?? '',
           nas_ip: radius.nas_ip ?? '',
           dynamic_vlan: radius.dynamic_vlan ?? null,
-          reauth_sec: radius.reauth_sec ?? null,
+          reauth_sec: radius.reauth_sec ?? 0,
           reauth_on_session_timeout: radius.reauth_on_session_timeout ?? false,
-          coa: radius.coa ? { ...radius.coa, servers: radius.coa.servers.map((s) => ({ host: s.host, local_port: s.local_port, has_secret: true })) } : null,
+          coa: radius.coa ? { ...radius.coa, servers: radius.coa.servers.map((s) => ({ host: s.host, port: s.port, has_secret: true })) } : null,
         }
       : null
   }
@@ -238,7 +240,7 @@ function wlanView(input: WLANInput, current: WLANView): WLANView {
       ? {
           enabled: Boolean(mpsk.enabled),
           private: Boolean(mpsk.private),
-          keys: (mpsk.keys ?? []).map((k, i) => ({ id: k.id || `key-${i + 1}`, name: k.name, has_passphrase: true, vlan_id: k.vlan_id, mac: k.mac, expires: k.expires })),
+          keys: (mpsk.keys ?? []).map((k, i) => ({ id: k.id || `key-${i + 1}`, name: k.name, has_passphrase: true, vlan_id: k.vlan_id ?? 0, mac: k.mac, expires: k.expires ?? '' })),
         }
       : null
   }
@@ -355,10 +357,10 @@ export const configHandlers: HttpHandler[] = [
     if (body.ssh?.keys) {
       const fields: Record<string, string> = {}
       const keys = await Promise.all(
-        body.ssh.keys.map(async (k, i) => {
-          const parsed = parseSSHKey(k.key)
+        body.ssh.keys.map(async (line, i) => {
+          const parsed = parseSSHKey(line)
           if (!parsed.ok) fields[`ssh.keys[${i}]`] = parsed.error
-          return parsed.ok ? { key: parsed.key.key, comment: k.comment, type: parsed.key.type, fingerprint: await sshFingerprint(parsed.key.blob) } : null
+          return parsed.ok ? { key: parsed.key.key, comment: parsed.key.comment, type: parsed.key.type, fingerprint: await sshFingerprint(parsed.key.blob) } : null
         }),
       )
       if (Object.keys(fields).length) return fail(422, { error: 'Check the SSH keys.', code: 'invalid', fields })
@@ -366,9 +368,9 @@ export const configHandlers: HttpHandler[] = [
     }
     if (body.ssh?.readonly_keys) {
       ;(body.ssh as unknown as { readonly_keys: unknown }).readonly_keys = await Promise.all(
-        body.ssh.readonly_keys.map(async (k) => {
-          const parsed = parseSSHKey(k.key)
-          return parsed.ok ? { key: parsed.key.key, comment: k.comment, type: parsed.key.type, fingerprint: await sshFingerprint(parsed.key.blob) } : k
+        body.ssh.readonly_keys.map(async (line) => {
+          const parsed = parseSSHKey(line)
+          return parsed.ok ? { key: parsed.key.key, comment: parsed.key.comment, type: parsed.key.type, fingerprint: await sshFingerprint(parsed.key.blob) } : line
         }),
       )
     }
@@ -421,25 +423,25 @@ export const configHandlers: HttpHandler[] = [
     await delay(120)
     const body = (await request.json().catch(() => ({}))) as RFProfileInput
     const site = state.sites[id]
-    const experimental = body.band_5.advanced.mu_mimo || body.band_5.advanced.txbf || body.band_24.advanced.mu_mimo || body.band_24.advanced.txbf || body.scanning_radio === false
+    const experimental = body.band_5?.advanced?.mu_mimo || body.band_5?.advanced?.txbf || body.band_24?.advanced?.mu_mimo || body.band_24?.advanced?.txbf || body.scanning_radio === false
     if (experimental && !site.experimental) return fail(422, { error: 'This value is experimental. Turn on experimental options for the site first.', code: 'experimental_disabled' })
     for (const key of ['band_24', 'band_5'] as const) {
-      const p = body[key].power
-      if (p.mode === 'fixed' && (p.dbm < 1 || p.dbm > 25)) return fail(422, { error: 'Power must be 1 to 25 dBm.', code: 'firmware_rule', fields: { [`${key}.power.dbm`]: 'Enter 1 to 25 dBm.' } })
+      const p = body[key]?.power
+      if (p?.mode === 'fixed' && ((p.dbm ?? 0) < 1 || (p.dbm ?? 0) > 25)) return fail(422, { error: 'Power must be 1 to 25 dBm.', code: 'firmware_rule', fields: { [`${key}.power.dbm`]: 'Enter 1 to 25 dBm.' } })
     }
     const next: RFProfileView = {
       ...rf,
-      managed: body.managed,
-      band_24: { ...rf.band_24, ...body.band_24, valid_channels: rf.band_24.valid_channels },
-      band_5: { ...rf.band_5, ...body.band_5, valid_channels: rf.band_5.valid_channels },
-      scanning_radio: body.scanning_radio,
-      updated_rev: (rf.updated_rev ?? 0) + 1,
+      managed: body.managed ?? rf.managed,
+      band_24: { ...rf.band_24, ...body.band_24, advanced: { ...rf.band_24.advanced, ...body.band_24?.advanced }, preamble: (body.band_24?.preamble ?? rf.band_24.preamble) as BandProfileView['preamble'], valid_channels: rf.band_24.valid_channels },
+      band_5: { ...rf.band_5, ...body.band_5, advanced: { ...rf.band_5.advanced, ...body.band_5?.advanced }, preamble: (body.band_5?.preamble ?? rf.band_5.preamble) as BandProfileView['preamble'], valid_channels: rf.band_5.valid_channels },
+      scanning_radio: body.scanning_radio === undefined ? rf.scanning_radio : body.scanning_radio,
+      updated_rev: rf.updated_rev + 1,
     }
     const { plan: _p, recommendations: _r, updated_rev: _u, ...comparable } = rf
     const { plan: _p2, recommendations: _r2, updated_rev: _u2, ...nextComparable } = next
     // The Auto channel list is planner input only: never sent to the AP.
     const diff = leafDiff('Radios', comparable, nextComparable).filter((d) => !/channels/.test(d.path))
-    const warnings = next.band_5.power.mode === 'fixed' && next.band_5.power.dbm > 20 ? [{ code: 'power_high', message: '5 GHz power above 20 dBm' }] : []
+    const warnings = next.band_5.power.mode === 'fixed' && (next.band_5.power.dbm ?? 0) > 20 ? [{ code: 'power_high', message: '5 GHz power above 20 dBm' }] : []
     const impact = impactFor(id, body.managed !== rf.managed ? 'all_radios_bounce' : 'radio_bounce', diff, 'The radio')
     if (!isDryRun(request)) {
       state.rf[id] = next
@@ -463,8 +465,8 @@ export const configHandlers: HttpHandler[] = [
           ap_id: row.ap_id,
           ap_name: row.ap_name,
           band: row.band,
-          from: { channel: row.channel, power_dbm: row.power_dbm },
-          to: { channel: target, power_dbm: row.power_dbm, dfs_fallback: null },
+          from: { channel: row.channel, width: row.width, power_dbm: row.power_dbm, dfs_fallback: null },
+          to: { channel: target, width: row.width, power_dbm: row.power_dbm, dfs_fallback: null },
           cost_before: keep ? 3.2 : 9.4,
           cost_after: 3.2,
           keep,
@@ -472,7 +474,8 @@ export const configHandlers: HttpHandler[] = [
           disruption: keep ? 'none' : 'radio_bounce',
         }
       })
-    if (isDryRun(request)) return HttpResponse.json({ inputs: { aps: new Set(rf.plan.map((r) => r.ap_id)).size, scans_age_s: { Hallway: 240, Study: 900, Garage: null } }, inputs_hash: 'mock-inputs-1', changes } satisfies PlanProposal)
+    const proposal: PlanProposal = { inputs: { aps: new Set(rf.plan.map((r) => r.ap_id)).size, scans_age_s: { '02-aa-00-00-00-01': 240, '02-aa-00-00-00-03': 900, '02-aa-00-00-00-02': null } }, changes }
+    if (isDryRun(request)) return respond(request, proposal, impactFor(id, 'radio_bounce', changes.filter((c) => !c.keep).map((c) => ({ path: `Radios[${c.band}].RRM.Channel`, from: c.from.channel, to: c.to.channel })), 'The radio', changes.filter((c) => !c.keep).map((c) => c.ap_id)), [])
     for (const change of changes) {
       const row = rf.plan.find((r) => r.ap_id === change.ap_id && r.band === change.band)
       if (row) Object.assign(row, { channel: change.to.channel, source: 'planner, today' })
@@ -606,7 +609,7 @@ export const configHandlers: HttpHandler[] = [
     const denied = guard()
     if (denied) return denied
     const ap = new URL(request.url).searchParams.get('ap')
-    const list = state.changes.filter((c) => !ap || c.affected_aps.some((a) => a.id === ap)).map(({ objects: _o, aps: _a, endpoint: _e, restorable: _r, ...summary }) => summary)
+    const list = state.changes.filter((c) => !ap || c.affected_aps.some((a) => a.id === ap)).map(({ objects: _o, diff: _d, snapshot: _s, effective: _e, results: _r, restorable: _x, ...summary }) => summary)
     void params
     return HttpResponse.json({ changes: list, next_before: null })
   }),
@@ -627,22 +630,24 @@ export const configHandlers: HttpHandler[] = [
     const needsSecret = rev < 46 && rev >= 45
     const secretPath = 'networks.wlan-iot.psk'
     if (needsSecret) {
-      const given = body.secrets?.[secretPath]
-      if (!given || (!given.keep && !given.value)) {
+      const kept = body.keep_current?.includes(secretPath) ?? false
+      const value = body.secrets?.[secretPath]
+      if (!kept && !value) {
         return fail(422, { error: 'Some secrets differ from today’s.', code: 'secret_required', fields: { [secretPath]: 'Passphrase for Example-IoT at rev 45 differs from today’s' } })
       }
-      if (given.value && given.value !== 'old-iot-passphrase') {
+      if (value && value !== 'old-iot-passphrase') {
         return fail(422, { error: 'That passphrase does not match the one stored at that revision.', code: 'secret_required', fields: { [secretPath]: 'Passphrase for Example-IoT at rev 45 differs from today’s (the value entered does not match)' } })
       }
     }
     const iot = state.networks.find((n) => n.id === 'wlan-iot')
-    const removed = rev < 45 && iot && !body.keep_new_wlans ? [{ id: iot.id, ssid: iot.ssid, clients: iot.live.clients }] : []
+    const removed = rev < 45 && iot && !body.keep_newer_wlans ? [{ kind: 'network' as const, id: iot.id, name: iot.ssid }] : []
     const preview: RestorePreview = {
       revision: rev,
       changed: rev >= 45 ? [{ kind: 'network', id: 'wlan-iot', name: 'Example-IoT' }] : [{ kind: 'site', id, name: state.sites[id]?.name ?? id }],
       recreated: [],
       removed,
-      not_restored: [{ kind: 'ap', id: '02-aa-00-00-00-01', name: 'Hallway', reason: 'name, pin, secret and protocol features are not config and are kept' }],
+      not_restored: [],
+      secret_fields: body.secrets ? Object.keys(body.secrets) : [],
     }
     const diff = rev >= 47 ? [] : rev >= 45 ? [{ path: 'WLANs[Example-IoT].Vlans', from: ['30'], to: ['1'] }] : [{ path: 'WLANs[Example-IoT]', from: '(present)', to: null }]
     const impact = impactFor(id, 'wlan_restart', removed.length || rev < 47 ? diff : [], 'WLAN Example-IoT')

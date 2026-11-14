@@ -68,7 +68,7 @@ describe('form helpers', () => {
   })
   it('finds experimental values among the changes', () => {
     expect(experimentalChanges('wlan', { security: 'open', rates: 'compatible' }, { security: 'owe', rates: 'compatible' })).toEqual(['Security'])
-    expect(experimentalChanges('wlan', { rate_limit: { wlan_up: null } }, { rate_limit: { wlan_up: 100 } })).toEqual(['Rate limits'])
+    expect(experimentalChanges('wlan', { rate_limit: { wlan_up: null } }, { rate_limit: { wlan_up: 100 } })).toEqual(['WLAN rate limit, up'])
     expect(experimentalChanges('wlan', { hidden: false }, { hidden: true })).toEqual([])
   })
   it('parses number text, negating negative-only ranges', () => {

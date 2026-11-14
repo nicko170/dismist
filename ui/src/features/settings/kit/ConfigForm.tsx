@@ -295,6 +295,8 @@ export function ImpactDiff({ impact }: { impact: Impact | undefined }) {
 }
 
 const pushLabel: Record<PushEvent['state'], { label: string; tone: 'good' | 'info' | 'warn' | 'crit' | 'idle' }> = {
+  reconnecting: { label: 'Reconnecting', tone: 'info' },
+  offline: { label: 'Waiting for AP', tone: 'idle' },
   notified: { label: 'Pending', tone: 'info' },
   fetched: { label: 'Fetched', tone: 'info' },
   applied: { label: 'Applied', tone: 'good' },

@@ -22,11 +22,19 @@ type RADIUSServerView struct {
 	HasSecret bool   `json:"has_secret"`
 }
 
-// CoAServerView is one Change-of-Authorisation server.
+// CoAServerView is one Change-of-Authorisation server; Port is the AP's
+// local CoA port (default 3799).
 type CoAServerView struct {
 	Host      string `json:"host"`
-	LocalPort int    `json:"local_port"`
+	Port      int    `json:"port"`
 	HasSecret bool   `json:"has_secret"`
+}
+
+// CoAView is Change of Authorisation (experimental, phase 4).
+type CoAView struct {
+	Enabled                bool            `json:"enabled"`
+	Servers                []CoAServerView `json:"servers"`
+	EventTimestampOptional bool            `json:"event_timestamp_optional"`
 }
 
 // DynamicVLANView is RADIUS-assigned VLANs.
@@ -47,8 +55,7 @@ type RADIUSView struct {
 	DynamicVLAN         *DynamicVLANView   `json:"dynamic_vlan" tstype:"DynamicVLANView | null,required"`
 	ReauthSec           int                `json:"reauth_sec"`
 	ReauthOnSessionTime bool               `json:"reauth_on_session_timeout"`
-	CoA                 []CoAServerView    `json:"coa"`
-	CoANoTimestamp      bool               `json:"coa_no_event_timestamp"`
+	CoA                 *CoAView           `json:"coa" tstype:"CoAView | null,required"`
 }
 
 // RoamingView is a WLAN's roaming settings.
@@ -86,17 +93,19 @@ type Option82View struct {
 	CircuitID string `json:"circuit_id"`
 }
 
-// ScheduleRange is one weekday's on-air hours ("08:00" to "22:00").
-type ScheduleRange struct {
-	Day   int    `json:"day"`
+// ScheduleWindow is one weekday's on-air hours: Day "mon" to "sun",
+// Start and End "HH:MM" ("24:00" is the end of the day).
+type ScheduleWindow struct {
+	Day   string `json:"day" tstype:"'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'"`
 	Start string `json:"start"`
 	End   string `json:"end"`
 }
 
-// ScheduleView is a WLAN's on-air schedule (experimental, phase 4).
+// ScheduleView is a WLAN's on-air schedule (experimental, phase 4): the
+// WLAN is off outside its windows.
 type ScheduleView struct {
-	Enabled bool            `json:"enabled"`
-	Ranges  []ScheduleRange `json:"ranges"`
+	Enabled bool             `json:"enabled"`
+	Windows []ScheduleWindow `json:"windows"`
 }
 
 // MPSKKeyView is one per-device passphrase; the passphrase is write-only.
@@ -121,6 +130,16 @@ type WLANLiveSummary struct {
 	Clients         int `json:"clients"`
 	APsBroadcasting int `json:"aps_broadcasting"`
 	APsTotal        int `json:"aps_total"`
+}
+
+// WLANLiveVAP is one AP band broadcasting the WLAN (field 32, read-only).
+type WLANLiveVAP struct {
+	APID    string `json:"ap_id"`
+	APName  string `json:"ap_name"`
+	Band    Band   `json:"band"`
+	BSSID   string `json:"bssid"`
+	Dev     string `json:"dev"`
+	Clients int    `json:"clients"`
 }
 
 // WLANView is one WLAN (GET /api/sites/$id/networks, phase 2). Secrets
@@ -169,7 +188,12 @@ type WLANView struct {
 	Expert            ExpertSummary   `json:"expert"`
 	ExperimentalInUse []string        `json:"experimental_in_use"`
 	Live              WLANLiveSummary `json:"live"`
-	UpdatedRev        uint64          `json:"updated_rev"`
+	// LiveVAPs lists each AP band broadcasting the WLAN now.
+	LiveVAPs []WLANLiveVAP `json:"live_vaps"`
+	// MDID is the WLAN's 802.11r mobility domain (read-only; the AP uses
+	// it only with fast roaming 802.11r).
+	MDID       int    `json:"mdid"`
+	UpdatedRev uint64 `json:"updated_rev"`
 }
 
 // RADIUSServerInput is one RADIUS server in a WLAN change. An absent

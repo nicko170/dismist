@@ -1,5 +1,6 @@
 import type { APSettingsView } from '@/api/queries/apsettings'
 import type { ChangeDetail } from '@/api/queries/changes'
+import type { ActorKind, DiffEntry } from '@/gen/api.gen'
 import type { WLANView } from '@/api/queries/networks'
 import type { Recommendation } from '@/api/queries/recommendations'
 import type { BandProfileView, NeighboursView, RFProfileView } from '@/api/queries/rf'
@@ -33,8 +34,8 @@ function band(partial: Partial<BandProfileView> & Pick<BandProfileView, 'width' 
     preamble: 'short',
     advanced: { taf: 'default', twt: true, antenna: 'default', min_probe_rssi: null, mu_mimo: null, txbf: null },
     valid_channels: is24
-      ? [{ width: 20, primaries: Array.from({ length: 13 }, (_, i) => ({ channel: i + 1, dfs: false })) }]
-      : [20, 40, 80].map((width) => ({ width, primaries: AU5(width) })),
+      ? [{ width: 20, primaries: Array.from({ length: 13 }, (_, i) => ({ channel: i + 1, dfs: false })), blocks: [] }]
+      : [20, 40, 80].map((width) => ({ width, primaries: AU5(width), blocks: [] })),
     ...partial,
   }
 }
@@ -48,8 +49,8 @@ export function homeRF(): RFProfileView {
     band_5: band({ width: 80, channels: [36, 149], power: { mode: 'fixed', dbm: 17 } }, false),
     scanning_radio: null,
     plan: [
-      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', band: '5', mode: 'static', channel: 149, width: 80, power_dbm: 17, dfs_fallback: null, actual: { channel: 149, width: 80, max_power_dbm: 17, util: 18, clients: 11 }, status: 'match' },
-      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', band: '2.4', mode: 'static', channel: 1, width: 20, power_dbm: 12, dfs_fallback: null, actual: { channel: 1, width: 20, max_power_dbm: 12, util: 31, clients: 4 }, status: 'match' },
+      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', band: '5', mode: 'static', channel: 149, width: 80, power_dbm: 17, dfs_fallback: null, source: 'static', actual: { channel: 149, width: 80, max_power_dbm: 17, util: 18, clients: 11 }, status: 'match' },
+      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', band: '2.4', mode: 'static', channel: 1, width: 20, power_dbm: 12, dfs_fallback: null, source: 'static', actual: { channel: 1, width: 20, max_power_dbm: 12, util: 31, clients: 4 }, status: 'match' },
       { ap_id: '02-aa-00-00-00-02', ap_name: 'Garage', band: '5', mode: 'auto', channel: 36, width: 80, power_dbm: 17, dfs_fallback: null, source: 'initial assignment', actual: null, status: 'offline' },
       { ap_id: '02-aa-00-00-00-02', ap_name: 'Garage', band: '2.4', mode: 'auto', channel: 6, width: 20, power_dbm: 12, dfs_fallback: null, source: 'initial assignment', actual: null, status: 'offline' },
       { ap_id: '02-aa-00-00-00-03', ap_name: 'Study', band: '5', mode: 'auto', channel: 36, width: 80, power_dbm: 17, dfs_fallback: null, source: 'initial assignment', actual: { channel: 36, width: 80, max_power_dbm: 17, util: 9, clients: 3 }, status: 'match' },
@@ -108,14 +109,18 @@ export function siteConfig(id: string): SiteConfigView {
       ble_disabled: false,
     },
     protection: { blocked_clients: [], proxy_arp: true, arp_spoof_check: false, penalty_box: null, dhcp_fingerprinting: false },
-    roaming: { key_set: false, in_use: false },
-    expert: { has_patch: false, shadowed: [] },
+    expert: { has_patch: false, field: 'expert', shadowed: [], partly_shadowed: [], overridden_on: {} },
     experimental_in_use: [],
-  }
+    rf: home ? homeRF() : labRF(),
+    typed: true,
+  } as SiteConfigView
 }
 
 function wlan(partial: Partial<WLANView> & Pick<WLANView, 'id' | 'site_id' | 'ssid' | 'security' | 'bands'>): WLANView {
   return {
+    owe_bssid_index: 0,
+    live_vaps: [],
+    mdid: 0,
     enabled: true,
     has_psk: true,
     pmf: null,
@@ -138,7 +143,7 @@ function wlan(partial: Partial<WLANView> & Pick<WLANView, 'id' | 'site_id' | 'ss
     sae_h2e_only: false,
     transition_disable: false,
     owe_ssid: '',
-    min_rssi: null,
+    min_rssi: {},
     wmm_disabled: false,
     uapsd_disabled: false,
     disable_11ax: false,
@@ -149,7 +154,7 @@ function wlan(partial: Partial<WLANView> & Pick<WLANView, 'id' | 'site_id' | 'ss
     option82: null,
     mpsk: null,
     schedule: null,
-    expert: { has_patch: false, shadowed: [] },
+    expert: { has_patch: false, field: 'expert', shadowed: [], partly_shadowed: [], overridden_on: {} },
     experimental_in_use: [],
     live: { clients: 0, aps_broadcasting: 2, aps_total: 3 },
     updated_rev: 1,
@@ -202,7 +207,7 @@ export function networks(): WLANView[] {
 export const MOCK_PSK: Record<string, string> = { 'wlan-example': 'example-passphrase-1', 'wlan-iot': 'example-iot-pass', 'wlan-lab': 'example-lab-pass' }
 
 export function emptyExpert(scope: ExpertPatchView['scope'], objectId: string, patch: Record<string, unknown> = {}): ExpertPatchView {
-  return { scope, object_id: objectId, patch, shadowed: [], partly_shadowed: [], ignored_keys: [], updated_rev: 1 }
+  return { scope, object_id: objectId, patch, field: 'expert', shadowed: [], partly_shadowed: [], ignored_keys: [], updated_rev: 1 }
 }
 
 /** Per-AP phase-2 fields layered over the phase-1 AP detail. */
@@ -276,35 +281,66 @@ export function effectiveConfig(apId: string, name: string): Record<string, unkn
   }
 }
 
+/** GET /api/system/migration; the report is internal/migrate's V2Report, redacted. */
 export function migrationReport(state: MigrationReport['state']): MigrationReport {
   const legacy = state === 'legacy'
   return {
     state,
-    at: state === 'not_run' ? null : ago(86400 * 2),
     reason: legacy ? 'A disabled WLAN comes before an enabled one, so the BSSID index cannot be proven (bssid_unresolved).' : '',
+    report_available: state !== 'not_run',
+    at: state === 'not_run' ? null : ago(86400 * 2),
     paths: legacy ? ['WLANs[wlan-iot].BandConfigs[2.4].BSSIDIndex'] : [],
+    schema: legacy ? 1 : 2,
     compat: 1,
-    finalise: { allowed: false, reason: 'Available 30 days after the migration committed.' },
-    report: {
-      lifted: [
-        { scope: 'wlan', object_id: 'wlan-example', name: 'Example', values: { security: 'wpa2_wpa3_personal', band_steering: true, idle_timeout_sec: 3600, bssid_index: 1 } },
-        { scope: 'site', object_id: 'home', name: 'Home', values: { rf: { managed: true, band_5: { width: 80, power: { mode: 'fixed', dbm: 17 } }, band_24: { width: 20, power: { mode: 'fixed', dbm: 12 } } } } },
-        { scope: 'ap', object_id: '02-aa-00-00-00-01', name: 'Hallway', values: { rf_override: { '5': { channel: 149 }, '2.4': { channel: 1 } } } },
-      ],
-      residuals: [],
-      bssid_indexes: [
-        { network_id: 'wlan-example', ssid: 'Example', index: 1, source: 'measured' },
-        { network_id: 'wlan-iot', ssid: 'Example-IoT', index: 2, source: legacy ? 'predicted' : 'measured' },
-      ],
-      aps: [
-        { id: '02-aa-00-00-00-01', name: 'Hallway', verified: !legacy, local_files: 'none', note: '' },
-        { id: '02-aa-00-00-00-02', name: 'Garage', verified: true, local_files: 'unknown', note: 'Never checked with dismist ap33 inspect.' },
-      ],
-    },
+    copy: 'controller.db.pre-v2-20261112T000000Z',
+    can_finalise: false,
+    finalise_after: state === 'committed' ? ago(-28 * 86400) : null,
+    finalised: false,
+    report:
+      state === 'not_run'
+        ? null
+        : {
+            at: ago(86400 * 2),
+            verified: !legacy,
+            reason: legacy ? 'bssid_unresolved' : undefined,
+            sites: [{ id: 'home', probe: '02-aa-00-00-00-01', rf_managed: true, typed: { rf: { managed: true, band_5: { width: 80, power: { mode: 'fixed', dbm: 17 } }, band_24: { width: 20, power: { mode: 'fixed', dbm: 12 } } } } }],
+            networks: [
+              { id: 'wlan-example', site_id: 'home', ssid: 'Example', security: 'wpa2_wpa3_personal', bssid_index: 1, bssid_source: 'measured', typed: { security: 'wpa2_wpa3_personal', band_steering: true, idle_timeout_sec: 3600 } },
+              { id: 'wlan-iot', site_id: 'home', ssid: 'Example-IoT', security: 'wpa2_personal', bssid_index: 2, bssid_source: legacy ? 'predicted' : 'measured', typed: {} },
+            ],
+            aps: [{ id: '02-aa-00-00-00-01', site_id: 'home', compiled: true, local_files: 'none', rf_override: { '5': { channel: 149 }, '2.4': { channel: 1 } }, equal: !legacy }],
+          },
+  }
+}
+
+/** The mock's working shape of a change: per-object and per-AP diffs, folded into ChangeDetail by toDetail. */
+export type MockChange = Omit<ChangeDetail, 'objects' | 'diff' | 'snapshot' | 'effective' | 'results' | 'actor' | 'affected_aps'> & {
+  actor: { kind: ActorKind; name: string }
+  affected_aps: { id: string; name: string; state: string }[]
+  objects: { kind: 'site' | 'network' | 'ap' | 'rf'; id: string; name: string; diff: DiffEntry[] }[]
+  aps: { id: string; name: string; diff: DiffEntry[] }[]
+}
+
+/** GET /api/sites/$id/changes/$rev (internal/api ChangeDetail). */
+export function toDetail(change: MockChange): ChangeDetail {
+  const { objects, aps, actor, affected_aps, ...rest } = change
+  return {
+    ...rest,
+    actor: { ...actor, id: actor.kind === 'session' ? 'a1b2c3d4' : '', remote: actor.kind === 'session' ? '198.51.100.20' : '' },
+    affected_aps: affected_aps.map((ap) => ({ ...ap, error: '' })),
+    objects: objects.map(({ kind, id, name }) => ({ kind: kind === 'rf' ? 'site' : kind, id, name })),
+    diff: objects.flatMap((object) => object.diff),
+    snapshot: null,
+    effective: Object.fromEntries(aps.map((ap) => [ap.id, `e2:${ap.id.slice(-2)}`])),
+    results: Object.fromEntries(affected_aps.map((ap) => [ap.id, { state: ap.state, at: null, error: '' }])),
   }
 }
 
 export function changes(): ChangeDetail[] {
+  return mockChanges().map(toDetail)
+}
+
+function mockChanges(): MockChange[] {
   const actor = { kind: 'session' as const, name: 'admin (browser)' }
   const hallway = { id: '02-aa-00-00-00-01', name: 'Hallway' }
   return [
@@ -374,16 +410,16 @@ export function changes(): ChangeDetail[] {
 export function neighbours(): NeighboursView {
   return {
     scans: [
-      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', at: ago(240) },
-      { ap_id: '02-aa-00-00-00-03', ap_name: 'Study', at: ago(900) },
+      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', band: '5', at: ago(240), entries: 4 },
+      { ap_id: '02-aa-00-00-00-03', ap_name: 'Study', band: '5', at: ago(900), entries: 2 },
     ],
     neighbours: [
-      { ssid: 'Neighbour-A', bssid: '02-bb-00-00-00-01', band: '5', channel: 36, width: 80, rssi: -71, seen_by: 'Hallway', station_count: 4, util: 0.21, last_seen: ago(240) },
-      { ssid: 'Neighbour-B', bssid: '02-bb-00-00-00-02', band: '5', channel: 149, width: 80, rssi: -83, seen_by: 'Hallway', station_count: null, util: null, last_seen: ago(240) },
-      { ssid: '', bssid: '02-bb-00-00-00-03', band: '5', channel: 100, width: 80, rssi: -88, seen_by: 'Study', station_count: 1, util: 0.05, last_seen: ago(900) },
-      { ssid: 'Neighbour-C', bssid: '02-bb-00-00-00-04', band: '2.4', channel: 6, width: 20, rssi: -64, seen_by: 'Hallway', station_count: 7, util: 0.44, last_seen: ago(240) },
-      { ssid: 'Neighbour-D', bssid: '02-bb-00-00-00-05', band: '2.4', channel: 11, width: 20, rssi: -79, seen_by: 'Study', station_count: 2, util: 0.12, last_seen: ago(900) },
-      { ssid: 'Example', bssid: '02-aa-00-00-01-11', band: '5', channel: 149, width: 80, rssi: -40, seen_by: 'Study', station_count: 11, util: 0.18, last_seen: ago(900), own: true },
+      { ssid: 'Neighbour-A', bssid: '02-bb-00-00-00-01', band: '5', channel: 36, width: 80, rssi: -71, seen_by: '02-aa-00-00-00-01', seen_by_name: 'Hallway', station_count: 4, util: 0.21, last_seen: ago(240) },
+      { ssid: 'Neighbour-B', bssid: '02-bb-00-00-00-02', band: '5', channel: 149, width: 80, rssi: -83, seen_by: '02-aa-00-00-00-01', seen_by_name: 'Hallway', station_count: null, util: null, last_seen: ago(240) },
+      { ssid: '', bssid: '02-bb-00-00-00-03', band: '5', channel: 100, width: 80, rssi: -88, seen_by: '02-aa-00-00-00-03', seen_by_name: 'Study', station_count: 1, util: 0.05, last_seen: ago(900) },
+      { ssid: 'Neighbour-C', bssid: '02-bb-00-00-00-04', band: '2.4', channel: 6, width: 20, rssi: -64, seen_by: '02-aa-00-00-00-01', seen_by_name: 'Hallway', station_count: 7, util: 0.44, last_seen: ago(240) },
+      { ssid: 'Neighbour-D', bssid: '02-bb-00-00-00-05', band: '2.4', channel: 11, width: 20, rssi: -79, seen_by: '02-aa-00-00-00-03', seen_by_name: 'Study', station_count: 2, util: 0.12, last_seen: ago(900) },
     ],
+    own: [{ ssid: 'Example', bssid: '02-aa-00-00-01-11', band: '5', channel: 149, width: 80, rssi: -40, seen_by: '02-aa-00-00-00-03', seen_by_name: 'Study', station_count: 11, util: 0.18, last_seen: ago(900) }],
   }
 }

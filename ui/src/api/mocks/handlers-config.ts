@@ -14,6 +14,7 @@ import type {
   PlanProposal,
   RFProfileInput,
   RFProfileView,
+  RestoreInput,
   RevealView,
   SamplesView,
   SiteSettingsInput,
@@ -95,15 +96,17 @@ function commit(siteId: string, impact: Impact, kind: string, objectId: string, 
   cfg.changes.unshift({
     revision,
     at: new Date().toISOString(),
-    actor: { kind: 'session', name: 'admin (198.51.100.20)' },
+    actor: { kind: 'session', name: 'admin', id: 'a1b2c3d4', remote: '198.51.100.20' },
     kind: 'config',
     summary,
     endpoint: kind,
-    affected_aps: impact.aps.map((ap) => ({ id: ap.id, name: ap.name, state: ap.connected ? 'pending' : 'offline' })),
+    affected_aps: impact.aps.map((ap) => ({ id: ap.id, name: ap.name, state: ap.connected ? 'pending' : 'offline', error: '' })),
     objects: [],
-    diff,
-    aps: impact.aps.map((ap) => ({ id: ap.id, name: ap.name, diff: ap.diff })),
+    diff: [...diff, ...impact.aps.flatMap((ap) => ap.diff ?? [])],
     results: Object.fromEntries(impact.aps.map((ap) => [ap.id, { state: 'pending', at: null, error: '' }])),
+    snapshot: null,
+    effective: {},
+    restorable: true,
   })
   emit(siteId, { type: 'config', data: { revision, kind, object_id: objectId, affected_aps: affected, actor: { kind: 'session', name: 'admin' } } })
   for (const id of affected) {
@@ -154,7 +157,13 @@ export function siteSettingsView(summary: SiteSummary): SiteSettingsView {
     ccrev: summary.country === 'AU' ? '890' : null,
     ...settings,
     rf: cfg.rfFor(summary.id),
-    expert: { has_patch: Object.keys(cfg.expertFor('site', summary.id).patch).length > 0, shadowed: cfg.expertFor('site', summary.id).shadowed },
+    expert: {
+      has_patch: Object.keys(cfg.expertFor('site', summary.id).patch).length > 0,
+      field: 'expert',
+      shadowed: cfg.expertFor('site', summary.id).shadowed,
+      partly_shadowed: cfg.expertFor('site', summary.id).partly_shadowed,
+      overridden_on: {},
+    },
     counts: { ...summary.counts, wlans: cfg.networks.filter((n) => n.site_id === summary.id).length },
   }
 }
@@ -305,7 +314,7 @@ function rfChanges(before: RFProfileView, input: RFProfileInput): Change[] {
     if (!patch) continue
     const label = band === 'band_5' ? '5' : '2.4'
     for (const [key, value] of Object.entries(patch)) {
-      const from = (before[band] as Record<string, unknown>)[key]
+      const from = (before[band] as unknown as Record<string, unknown>)[key]
       if (equal(from, value)) continue
       out.push({ field: `rf.${band}.${key}`, path: `Radios[${label}].${key === 'width' ? 'Width' : key === 'power' ? 'Power' : key === 'channels' ? 'RRM.Channel' : key === 'enabled' ? 'Disabled' : key}`, from, to: value, disruption: 'radio_bounce' })
     }
@@ -319,7 +328,7 @@ function applyRF(target: RFProfileView, input: RFProfileInput) {
   if (input.managed !== undefined) target.managed = input.managed
   if (input.scanning_radio !== undefined) target.scanning_radio = input.scanning_radio
   for (const band of ['band_24', 'band_5'] as const) if (input[band]) Object.assign(target[band], input[band])
-  target.updated_rev = (target.updated_rev ?? 1) + 1
+  target.updated_rev += 1
 }
 
 // ---- site ----
@@ -441,7 +450,7 @@ export const configHandlers: HttpHandler[] = [
     if (!siteOf(params.siteId)) return notFound('Site')
     const siteId = String(params.siteId)
     const current = cfg.rfFor(siteId)
-    if (ifMatchFails(request, current.updated_rev ?? 1)) return HttpResponse.json({ error: 'The RF profile changed since you opened it.', code: 'stale', fields: {}, object: current }, { status: 409 })
+    if (ifMatchFails(request, current.updated_rev)) return HttpResponse.json({ error: 'The RF profile changed since you opened it.', code: 'stale', fields: {}, object: current }, { status: 409 })
     const input = (await request.json().catch(() => ({}))) as RFProfileInput
     const fields: Record<string, string> = {}
     for (const band of ['band_24', 'band_5'] as const) {
@@ -449,7 +458,7 @@ export const configHandlers: HttpHandler[] = [
       if (!patch) continue
       if (patch.width === 160) fields[`${band}.width`] = 'AU/890 has no 160 MHz channels on AP33.'
       if (band === 'band_24' && patch.width && patch.width !== 20) fields[`${band}.width`] = '2.4 GHz runs at 20 MHz; 40 MHz is expert only.'
-      if (patch.power?.mode === 'fixed' && (patch.power.dbm < 1 || patch.power.dbm > 25)) fields[`${band}.power`] = 'Use 1 to 25 dBm.'
+      if (patch.power?.mode === 'fixed' && ((patch.power.dbm ?? 0) < 1 || (patch.power.dbm ?? 0) > 25)) fields[`${band}.power`] = 'Use 1 to 25 dBm.'
       if (patch.channels && !patch.channels.length) fields[`${band}.channels`] = 'Allow at least one channel.'
       if (band === 'band_5' && patch.channels?.some((c) => c >= 52 && c <= 144) && !(patch.dfs ?? current.band_5.dfs)) fields[`${band}.channels`] = 'Channels 52 to 144 need DFS turned on.'
     }
@@ -478,9 +487,10 @@ export const configHandlers: HttpHandler[] = [
           const move = row.band === '5' && row.channel === 36
           return {
             ap_id: row.ap_id,
+            ap_name: row.ap_name,
             band: row.band,
-            from: { channel: row.channel, power_dbm: row.power_dbm },
-            to: { channel: move ? 44 : row.channel, power_dbm: row.power_dbm, dfs_fallback: null },
+            from: { channel: row.channel, width: row.width, power_dbm: row.power_dbm, dfs_fallback: null },
+            to: { channel: move ? 44 : row.channel, width: row.width, power_dbm: row.power_dbm, dfs_fallback: null },
             cost_before: move ? 0.62 : 0.2,
             cost_after: move ? 0.31 : 0.2,
             keep: !move,
@@ -555,7 +565,7 @@ export const configHandlers: HttpHandler[] = [
       bssid_index: index,
       has_psk: false,
       live: { clients: 0, aps_broadcasting: 0, aps_total: data.aps.filter((ap) => ap.site_id === siteId).length },
-      expert: { has_patch: false, shadowed: [] },
+      expert: { has_patch: false, field: 'expert', shadowed: [], partly_shadowed: [], overridden_on: {} },
       updated_rev: 1,
     }
     applyWLAN(created, input)
@@ -625,7 +635,7 @@ export const configHandlers: HttpHandler[] = [
     if (!network) return notFound('WLAN')
     const psk = cfg.psks.get(network.id) ?? ''
     const escape = (v: string) => v.replace(/[\\;,:"]/g, (c) => `\\${c}`)
-    const body: RevealView = { psk, wifi_qr: `WIFI:T:${psk ? 'WPA' : 'nopass'};S:${escape(network.ssid)};${psk ? `P:${escape(psk)};` : ''}${network.hidden ? 'H:true;' : ''};` }
+    const body: RevealView = { ssid: network.ssid, psk, wifi_qr: `WIFI:T:${psk ? 'WPA' : 'nopass'};S:${escape(network.ssid)};${psk ? `P:${escape(psk)};` : ''}${network.hidden ? 'H:true;' : ''};` }
     return HttpResponse.json(body)
   }),
 
@@ -714,14 +724,17 @@ export const configHandlers: HttpHandler[] = [
     const step = search.get('step') ?? '10m'
     const minutes = Number(step.replace(/m$/, '')) || 10
     const hours = Number(range.replace(/h$/, '')) || (range.endsWith('d') ? Number(range.replace(/d$/, '')) * 24 : 24)
-    const body: SamplesView = { range, step, samples: cfg.samples(String(params.siteId), search.get('ap'), minutes, Math.min(500, Math.round((hours * 60) / minutes))) }
+    const body: SamplesView = { site_id: String(params.siteId), ap_id: search.get('ap') ?? '', range, step, samples: cfg.samples(String(params.siteId), search.get('ap'), minutes, Math.min(500, Math.round((hours * 60) / minutes))) }
     return guard() ?? HttpResponse.json(body)
   }),
   http.get('/api/sites/:siteId/changes', ({ request }) => {
-    const before = new URL(request.url).searchParams.get('before')
-    const rows = cfg.changes.filter((c) => !before || c.at < before)
+    const before = Number(new URL(request.url).searchParams.get('before') ?? 0)
+    const rows = cfg.changes.filter((c) => !before || c.revision < before)
     const page = rows.slice(0, 20)
-    const body: ChangePage = { changes: page.map(({ revision, at, actor, kind, summary, affected_aps }) => ({ revision, at, actor, kind, summary, affected_aps })), next_before: rows.length > 20 ? page.at(-1)!.at : null }
+    const body: ChangePage = {
+      changes: page.map(({ revision, at, actor, kind, endpoint, summary, affected_aps }) => ({ revision, at, actor, kind, endpoint, summary, affected_aps })),
+      next_before: rows.length > 20 ? page.at(-1)!.revision : null,
+    }
     return guard() ?? HttpResponse.json(body)
   }),
   http.get('/api/sites/:siteId/changes/:rev', ({ params }) => {
@@ -734,17 +747,19 @@ export const configHandlers: HttpHandler[] = [
     const siteId = String(params.siteId)
     const record = cfg.changes.find((c) => String(c.revision) === params.rev)
     if (!record) return notFound('Change')
-    const body = (await request.json().catch(() => ({}))) as { secrets?: Record<string, { value?: string; keep_current?: boolean }> }
+    const body = (await request.json().catch(() => ({}))) as RestoreInput
     // Revision 41 changed the passphrase: restoring before it needs the old one or "keep current" (§4.11).
     if (record.revision <= 41) {
-      const answer = body.secrets?.['networks.wlan-example.psk']
-      if (!answer || (!answer.keep_current && answer.value !== 'previous-passphrase')) {
+      const path = 'networks.wlan-example.psk'
+      const keep = body.keep_current?.includes(path) ?? false
+      const value = body.secrets?.[path]
+      if (!keep && value !== 'previous-passphrase') {
         return fail(422, 'Some secrets at this revision differ from today’s.', 'secret_required', {
-          'networks.wlan-example.psk': answer?.value ? 'That is not the passphrase Example had at this revision.' : 'Passphrase for Example at this revision differs from today’s. Enter it, or keep the current one.',
+          'networks.wlan-example.psk': value ? 'That is not the passphrase Example had at this revision.' : 'Passphrase for Example at this revision differs from today’s. Enter it, or keep the current one.',
         })
       }
     }
-    const changes: Change[] = record.aps.length ? (record.aps[0].diff ?? []).map((d) => ({ field: d.path, path: d.path, from: d.to, to: d.from, disruption: 'wlan_restart' })) : []
+    const changes: Change[] = record.diff.map((d) => ({ field: d.path, path: d.path, from: d.to, to: d.from, disruption: 'wlan_restart' }))
     const impact = impactFor(siteId, changes, isDry(request), 'Config')
     return respond(request, siteId, record, impact, [], () => ({ revision: commit(siteId, impact, 'site.restored', siteId, `Restored revision ${record.revision}`), object: record }))
   }),

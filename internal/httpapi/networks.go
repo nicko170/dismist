@@ -41,10 +41,10 @@ type wlanRecord struct {
 	RADIUS   *struct {
 		Auth []storedServer `json:"auth"`
 		Acct []storedServer `json:"acct"`
-		CoA  []struct {
-			Host      string `json:"host"`
-			LocalPort int    `json:"local_port"`
-			Secret    string `json:"secret"`
+		CoA  *struct {
+			Enabled                bool           `json:"enabled"`
+			Servers                []storedServer `json:"servers"`
+			EventTimestampOptional bool           `json:"event_timestamp_optional"`
 		} `json:"coa"`
 	} `json:"radius"`
 	MPSK *struct {
@@ -227,17 +227,20 @@ func (s *Server) wlanView(ctx apContext, network model.Network, lifted map[strin
 	view.UpdatedRev = network.UpdatedRev
 	view.RADIUS = nil
 	if record.RADIUS != nil {
-		radius := &api.RADIUSView{Auth: []api.RADIUSServerView{}, Acct: []api.RADIUSServerView{}, CoA: []api.CoAServerView{}}
+		radius := &api.RADIUSView{Auth: []api.RADIUSServerView{}, Acct: []api.RADIUSServerView{}}
 		viewFrom(lookupRaw(network, "radius"), radius)
-		radius.Auth, radius.Acct, radius.CoA = []api.RADIUSServerView{}, []api.RADIUSServerView{}, []api.CoAServerView{}
+		radius.Auth, radius.Acct, radius.CoA = []api.RADIUSServerView{}, []api.RADIUSServerView{}, nil
 		for _, server := range record.RADIUS.Auth {
 			radius.Auth = append(radius.Auth, api.RADIUSServerView{Host: server.Host, Port: server.Port, HasSecret: server.Secret != ""})
 		}
 		for _, server := range record.RADIUS.Acct {
 			radius.Acct = append(radius.Acct, api.RADIUSServerView{Host: server.Host, Port: server.Port, HasSecret: server.Secret != ""})
 		}
-		for _, server := range record.RADIUS.CoA {
-			radius.CoA = append(radius.CoA, api.CoAServerView{Host: server.Host, LocalPort: server.LocalPort, HasSecret: server.Secret != ""})
+		if coa := record.RADIUS.CoA; coa != nil {
+			radius.CoA = &api.CoAView{Enabled: coa.Enabled, Servers: []api.CoAServerView{}, EventTimestampOptional: coa.EventTimestampOptional}
+			for _, server := range coa.Servers {
+				radius.CoA.Servers = append(radius.CoA.Servers, api.CoAServerView{Host: server.Host, Port: server.Port, HasSecret: server.Secret != ""})
+			}
 		}
 		view.RADIUS = radius
 	}
@@ -275,7 +278,8 @@ func (s *Server) wlanView(ctx apContext, network model.Network, lifted map[strin
 	}
 	view.Expert = s.expertSummary(ctx.state, api.ExpertScopeWLAN, network.ID, network)
 	view.ExperimentalInUse = s.experimentalInUse("wlan", network, mapKeys(wlanTypedKeys))
-	view.Live = s.wlanLive(ctx, network)
+	view.Live, view.LiveVAPs = s.wlanLive(ctx, network)
+	view.MDID = compile.MDID(network.ID)
 	return view
 }
 
@@ -298,8 +302,9 @@ func mapKeys(set map[string]bool) []string {
 }
 
 // wlanLive counts the network's clients and the APs broadcasting it now.
-func (s *Server) wlanLive(ctx apContext, network model.Network) api.WLANLiveSummary {
+func (s *Server) wlanLive(ctx apContext, network model.Network) (api.WLANLiveSummary, []api.WLANLiveVAP) {
 	var live api.WLANLiveSummary
+	vaps := []api.WLANLiveVAP{}
 	for _, ap := range ctx.state.APs {
 		if ap.SiteID != network.SiteID || network.SiteID == "" {
 			continue
@@ -314,13 +319,15 @@ func (s *Server) wlanLive(ctx apContext, network model.Network) api.WLANLiveSumm
 			if vap.WLANID == network.ID || (vap.WLANID == "" && vap.SSID == network.SSID) {
 				broadcasting = true
 				live.Clients += vap.Clients
+				vaps = append(vaps, api.WLANLiveVAP{APID: ap.ID, APName: firstNonEmpty(ap.Name, ap.ID), Band: api.Band(vap.Band),
+					BSSID: strings.ToLower(vap.BSSID), Dev: vap.Interface, Clients: vap.Clients})
 			}
 		}
 		if broadcasting {
 			live.APsBroadcasting++
 		}
 	}
-	return live
+	return live, vaps
 }
 
 // listNetworks serves GET /api/sites/$id/networks: the bare WLANView array
@@ -1000,11 +1007,13 @@ func (s *Server) validateWLANTyped(errs *fieldErrors, state model.State, siteID 
 	if value, ok := typed["schedule"].(map[string]any); ok {
 		var schedule api.ScheduleView
 		if err := remarshal(value, &schedule); err != nil {
-			errs.add("schedule", "must be {enabled, ranges}")
+			errs.add("schedule", "must be {enabled, windows}")
 		}
-		for index, entry := range schedule.Ranges {
-			if entry.Day < 0 || entry.Day > 6 || !hhmm.MatchString(entry.Start) || !hhmm.MatchString(entry.End) || entry.Start >= entry.End {
-				errs.add(fmt.Sprintf("schedule.ranges[%d]", index), "each range is a weekday 0 to 6 with start before end as HH:MM")
+		days := map[string]bool{"mon": true, "tue": true, "wed": true, "thu": true, "fri": true, "sat": true, "sun": true}
+		for index, entry := range schedule.Windows {
+			end := entry.End == "24:00" || hhmm.MatchString(entry.End)
+			if !days[entry.Day] || !hhmm.MatchString(entry.Start) || !end || entry.Start >= entry.End {
+				errs.add(fmt.Sprintf("schedule.windows[%d]", index), "each window is a weekday mon to sun with start before end as HH:MM")
 			}
 		}
 	}
@@ -1113,6 +1122,31 @@ func mergeRADIUSSecrets(raw any, stored wlanRecord) (any, *apiError) {
 			secret, found := previous[key]
 			if !found {
 				return nil, invalidField(fmt.Sprintf("radius.%s[%d].secret", list, index), "a new server needs its shared secret")
+			}
+			server["secret"] = secret
+		}
+	}
+	// CoA servers keep their stored secret the same way (by host and port).
+	if coa, ok := radius["coa"].(map[string]any); ok {
+		previousCoA := map[string]string{}
+		if stored.RADIUS != nil && stored.RADIUS.CoA != nil {
+			for _, server := range stored.RADIUS.CoA.Servers {
+				previousCoA[fmt.Sprintf("%s:%d", strings.ToLower(server.Host), server.Port)] = server.Secret
+			}
+		}
+		servers, _ := coa["servers"].([]any)
+		for index, item := range servers {
+			server, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, has := server["secret"]; has {
+				continue
+			}
+			port, _ := asInt(server["port"])
+			secret, found := previousCoA[fmt.Sprintf("%s:%d", strings.ToLower(fmt.Sprint(server["host"])), port)]
+			if !found {
+				return nil, invalidField(fmt.Sprintf("radius.coa.servers[%d].secret", index), "a new CoA server needs its shared secret")
 			}
 			server["secret"] = secret
 		}

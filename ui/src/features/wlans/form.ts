@@ -198,13 +198,13 @@ export function toForm(view: WLANView): WlanForm {
           dynamic_vlan: {
             enabled: view.radius.dynamic_vlan?.enabled ?? false,
             type: view.radius.dynamic_vlan?.type ?? 'standard',
-            vlan_ids: (view.radius.dynamic_vlan?.vlan_ids ?? []).join(', '),
+            vlan_ids: (view.radius.dynamic_vlan?.vlans ?? []).join(', '),
           },
           reauth_sec: view.radius.reauth_sec || null,
           reauth_on_session_timeout: view.radius.reauth_on_session_timeout ?? false,
           coa: {
             enabled: view.radius.coa?.enabled ?? false,
-            servers: (view.radius.coa?.servers ?? []).map((s) => ({ host: s.host, local_port: s.local_port, secret: '', has_secret: Boolean(s.has_secret) })),
+            servers: (view.radius.coa?.servers ?? []).map((s) => ({ host: s.host, local_port: s.port || 3799, secret: '', has_secret: Boolean(s.has_secret) })),
             event_timestamp_optional: view.radius.coa?.event_timestamp_optional ?? false,
           },
         }
@@ -218,7 +218,7 @@ export function toForm(view: WLANView): WlanForm {
             name: k.name,
             passphrase: '',
             has_passphrase: k.has_passphrase,
-            vlan_id: k.vlan_id,
+            vlan_id: k.vlan_id || null, // 0 = the WLAN's VLAN
             mac: k.mac,
             expires: k.expires ? k.expires.slice(0, 10) : '',
           })),
@@ -227,7 +227,9 @@ export function toForm(view: WLANView): WlanForm {
     schedule: view.schedule
       ? {
           enabled: view.schedule.enabled,
-          days: Object.fromEntries(DAYS.map((d) => [d, scheduleText(view.schedule?.days[d])])) as Record<Day, string>,
+          days: Object.fromEntries(
+            DAYS.map((d) => [d, scheduleText((view.schedule?.windows ?? []).filter((w) => w.day === d).map((w) => `${w.start}-${w.end}`))]),
+          ) as Record<Day, string>,
         }
       : base.schedule,
   }
@@ -239,18 +241,20 @@ function serverInput(rows: ServerRow[]) {
   return rows.map((row) => ({ host: row.host.trim(), port: num(row.port) ?? 0, ...(row.secret ? { secret: row.secret } : {}) }))
 }
 
+/** The form's "HH:MM-HH:MM, …" per weekday as ScheduleView windows (internal/api). */
 function scheduleInput(schedule: WlanForm['schedule']): ScheduleView {
   return {
     enabled: schedule.enabled,
-    days: Object.fromEntries(
-      DAYS.map((d) => [
-        d,
-        schedule.days[d]
-          .split(',')
-          .map((r) => r.trim())
-          .filter(Boolean),
-      ]),
-    ) as ScheduleView['days'],
+    windows: DAYS.flatMap((day) =>
+      schedule.days[day]
+        .split(',')
+        .map((range) => range.trim())
+        .filter(Boolean)
+        .map((range) => {
+          const [start = '', end = ''] = range.split('-').map((part) => part.trim())
+          return { day, start, end }
+        }),
+    ),
   }
 }
 
@@ -281,7 +285,7 @@ const composite: Record<string, (values: WlanForm) => unknown> = {
       ? {
           enabled: true,
           type: v.radius.dynamic_vlan.type,
-          vlan_ids: v.radius.dynamic_vlan.vlan_ids
+          vlans: v.radius.dynamic_vlan.vlan_ids
             .split(/[\s,]+/)
             .filter(Boolean)
             .map(Number),
@@ -292,7 +296,7 @@ const composite: Record<string, (values: WlanForm) => unknown> = {
     coa: v.radius.coa.enabled
       ? {
           enabled: true,
-          servers: v.radius.coa.servers.map((s) => ({ host: s.host.trim(), local_port: num(s.local_port) ?? 3799, ...(s.secret ? { secret: s.secret } : {}) })),
+          servers: v.radius.coa.servers.map((s) => ({ host: s.host.trim(), port: num(s.local_port) ?? 3799, ...(s.secret ? { secret: s.secret } : {}) })),
           event_timestamp_optional: v.radius.coa.event_timestamp_optional,
         }
       : null,

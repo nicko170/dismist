@@ -31,13 +31,16 @@ export const PROTOCOL_FEATURES = [
 
 export type ProtocolFeatureName = (typeof PROTOCOL_FEATURES)[number]['name']
 
+/** The stored AP management override (model.ManagementOverride). */
 export type ManagementOverride = {
-  ip_mode: 'dhcp' | 'static'
+  static: boolean
   address: string
-  prefix: number | null
+  prefix: number
   gateway: string
   dns: string[]
-  vlan: { mode: 'inherit' | 'untagged' | 'tagged'; id: number | null }
+  /** null inherits the site; 1 is untagged; 2 to 4094 tagged. */
+  vlan_id: number | null
+  /** null inherits the site's NTP servers. */
   ntp: string[] | null
 }
 
@@ -103,8 +106,14 @@ export type APPatch = {
   }
 }
 
+/**
+ * PATCH /api/aps/$id. The API takes the override keys at the top level
+ * (internal/api APPatch: led_brightness, ssh_enabled, rf, management, eth1,
+ * wired_client_stats); the screens group them under `overrides`.
+ */
 export function patchAP(apId: string, body: APPatch, options: MutationOptions = {}) {
-  return api.patch<MutationResponse<APSettingsView>>(apPath(apId), body, {
+  const { overrides, ...rest } = body
+  return api.patch<MutationResponse<APSettingsView>>(apPath(apId), { ...rest, ...overrides }, {
     query: dryRunQuery(options),
     ifMatch: options.ifMatch,
     signal: options.signal,

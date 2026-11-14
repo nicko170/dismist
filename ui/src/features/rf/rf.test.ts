@@ -59,7 +59,7 @@ describe('AU/890 channels', () => {
   })
 
   it('prefers the server’s valid channel list', () => {
-    const valid = [{ width: 80, primaries: [{ channel: 36, dfs: false }, { channel: 40, dfs: false }] }]
+    const valid = [{ width: 80, primaries: [{ channel: 36, dfs: false }, { channel: 40, dfs: false }], blocks: [[36, 40, 44, 48]] }]
     expect(channelChips('5', 80, valid).map((c) => c.label)).toEqual(['36–40'])
   })
 })
@@ -72,8 +72,8 @@ describe('RF form', () => {
     expect(form.band_5).toMatchObject({ width: 80, power: { mode: 'fixed', dbm: 17 } })
     expect(form.band_24).toMatchObject({ width: 20, power: { mode: 'fixed', dbm: 12 } })
     const input = toRFInput(form, view)
-    expect(input.band_5.power).toEqual({ mode: 'fixed', dbm: 17 })
-    expect(input.band_24.power).toEqual({ mode: 'fixed', dbm: 12 })
+    expect(input.band_5?.power).toEqual({ mode: 'fixed', dbm: 17 })
+    expect(input.band_24?.power).toEqual({ mode: 'fixed', dbm: 12 })
     expect(input.scanning_radio).toBeNull()
     expect(rfSchema(view).safeParse(form).success).toBe(true)
   })
@@ -97,9 +97,8 @@ describe('neighbour histogram', () => {
   it('counts other networks per channel and marks the site’s own channels', () => {
     const bins = histogram(
       [
-        { ssid: 'A', bssid: '02-bb-00-00-00-01', band: '5', channel: 36, width: 80, rssi: -70, seen_by: 'x', station_count: null, util: null, last_seen: '' },
-        { ssid: 'B', bssid: '02-bb-00-00-00-02', band: '5', channel: 36, width: 80, rssi: -60, seen_by: 'x', station_count: null, util: null, last_seen: '' },
-        { ssid: 'own', bssid: '02-aa-00-00-01-11', band: '5', channel: 149, width: 80, rssi: -40, seen_by: 'x', station_count: null, util: null, last_seen: '', own: true },
+        { ssid: 'A', bssid: '02-bb-00-00-00-01', band: '5', channel: 36, width: 80, rssi: -70, seen_by: 'x', seen_by_name: 'X', station_count: null, util: null, last_seen: '' },
+        { ssid: 'B', bssid: '02-bb-00-00-00-02', band: '5', channel: 36, width: 80, rssi: -60, seen_by: 'x', seen_by_name: 'X', station_count: null, util: null, last_seen: '' },
       ],
       new Map([[149, ['Hallway']]]),
     )

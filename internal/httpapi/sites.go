@@ -359,7 +359,7 @@ func cloneJSON(value map[string]any) map[string]any {
 var (
 	siteLegacyKeys = map[string]bool{"name": true, "country": true, "timezone": true}
 	siteTypedKeys  = map[string]bool{"experimental": true, "ssh": true, "syslog": true, "management": true,
-		"ap_defaults": true, "protection": true, "rf": true}
+		"ap_defaults": true, "protection": true, "rf": true, "roaming": true}
 	siteReadOnly = func() map[string]bool {
 		keys := jsonKeys(api.SiteView{})
 		for key := range siteLegacyKeys {
@@ -442,7 +442,13 @@ func (s *Server) updateSite(writer http.ResponseWriter, request *http.Request, s
 			if edit.name != nil && s.siteNameTaken(*state, *edit.name, siteID) {
 				return conflict("a site with this name exists").withField("name", "site names must be unique")
 			}
-			return edit.apply(site)
+			if err := edit.apply(site); err != nil {
+				return err
+			}
+			if edit.rotateRoamingKey {
+				return compile.RotateRoamingKey(state, siteID)
+			}
+			return nil
 		},
 	})
 	if err != nil {
@@ -467,7 +473,10 @@ type siteEdit struct {
 	legacyKeys              []string
 	typed                   map[string]any
 	rf                      bool
-	parts                   []string
+	// rotateRoamingKey replaces the site's 802.11r/OKC roaming key
+	// ("roaming": {"rotate_key": true}, design §3.11).
+	rotateRoamingKey bool
+	parts            []string
 }
 
 func (e siteEdit) summary(site model.Site) string {
@@ -554,6 +563,18 @@ func (s *Server) parseSitePatch(state model.State, site model.Site, patch map[st
 	for key := range siteTypedKeys {
 		if value, ok := patch[key]; ok {
 			typed[key] = value
+		}
+	}
+	if roaming, ok := typed["roaming"]; ok {
+		delete(typed, "roaming")
+		object, isObject := roaming.(map[string]any)
+		rotate, isBool := object["rotate_key"].(bool)
+		if !isObject || len(object) != 1 || !isBool {
+			return edit, invalidField("roaming", `roaming takes {"rotate_key": true}`)
+		}
+		if rotate {
+			edit.rotateRoamingKey = true
+			edit.parts = append(edit.parts, "roaming key rotated")
 		}
 	}
 	if sshPatch, ok := typed["ssh"].(map[string]any); ok {
