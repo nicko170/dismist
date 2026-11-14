@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -8,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 // TestRulesAndDashboardsUseEmittedMetrics collects every dismist_* name the
@@ -38,13 +41,25 @@ func TestRulesAndDashboardsUseEmittedMetrics(t *testing.T) {
 		t.Fatal("no dismist_* metrics found in the chart's rules")
 	}
 
+	// Every source wired, per-client mode and names on: the union of what
+	// any install can emit.
 	store, sessions := fixture(t)
+	instruments := NewInstruments()
+	instruments.HTTP(http.NotFoundHandler()).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/aps", nil))
 	c := testCollector(store, sessions, Options{
-		StoreSchema:   func() (int, int, bool) { return 1, 1, true },
-		CompileStatus: func() map[string]CompileStatus { return map[string]CompileStatus{} },
+		StoreSchema:    func() (int, int, bool) { return 1, 1, true },
+		CompileStatus:  func() map[string]CompileStatus { return map[string]CompileStatus{} },
+		Names:          true,
+		Clients:        ClientsPerClient,
+		ClientLimit:    100,
+		Build:          BuildInfo{Version: "dev"},
+		Certificates:   []Certificate{{Listener: "ap-wss", Role: "leaf", NotAfter: fixtureNow}},
+		StoreUsage:     func() (StoreUsage, bool) { return StoreUsage{SizeBytes: 1, FreeBytes: 1, HasFree: true}, true },
+		MigrationState: func() (string, bool) { return "committed", true },
+		Backups:        func() (BackupStatus, bool) { return BackupStatus{LastSuccess: fixtureNow}, true },
 	})
 	registry := prometheus.NewPedanticRegistry()
-	registry.MustRegister(c)
+	registry.MustRegister(c, instruments)
 	families, err := registry.Gather()
 	if err != nil {
 		t.Fatal(err)
@@ -52,6 +67,12 @@ func TestRulesAndDashboardsUseEmittedMetrics(t *testing.T) {
 	emitted := map[string]bool{}
 	for _, family := range families {
 		emitted[family.GetName()] = true
+		// Histograms are queried by their series names.
+		if family.GetType() == dto.MetricType_HISTOGRAM {
+			for _, suffix := range []string{"_bucket", "_sum", "_count"} {
+				emitted[family.GetName()+suffix] = true
+			}
+		}
 	}
 	var missing []string
 	for metric, where := range used {

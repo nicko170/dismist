@@ -1,7 +1,10 @@
-// Package metrics exposes bounded, read-only Prometheus telemetry for the controller.
+// Package metrics exposes bounded, read-only Prometheus telemetry for the
+// controller (design §6).
 //
-// Labels carry IDs only (site UUID, AP ID). Names, IP addresses, SSIDs, client
-// MACs, passphrases and secret paths never appear in the default mode.
+// Labels carry IDs only (site UUID, AP ID, network ID). Names, IP
+// addresses, SSIDs, host names, client MACs, passphrases and secret paths
+// never appear in the default mode: names only with -metrics-names, client
+// MACs only with -metrics-clients=per-client.
 package metrics
 
 import (
@@ -12,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -48,7 +52,8 @@ type CompileStatus struct {
 	Failures uint64
 }
 
-// Options configures the scrape handler. Store and Manager are required.
+// Options configures the scrape handler. Store and Manager are required;
+// every other source is optional and, when nil, its series are left out.
 type Options struct {
 	Store   model.StateStore
 	Manager *controller.Manager
@@ -57,10 +62,13 @@ type Options struct {
 	// <token>" on every scrape (-metrics-token-file).
 	Token string
 
-	// Names adds a name label to dismist_site_info and dismist_ap_info
-	// (-metrics-names). Clients and ClientLimit select the client series
-	// (-metrics-clients, -metrics-client-limit); phase 0 exports no client
-	// series yet, so those are accepted and kept for the collectors that use them.
+	// Names adds a name label to dismist_site_info, dismist_ap_info and
+	// dismist_wlan_info, the leaf certificate's CN, LLDP neighbours and (in
+	// per-client mode) client host names (-metrics-names). Clients selects
+	// the client series (-metrics-clients): off exports no client quality
+	// series, aggregate the per-radio aggregates, per-client also one set
+	// of series per client, at most ClientLimit clients in MAC order
+	// (-metrics-client-limit).
 	Names       bool
 	Clients     ClientMode
 	ClientLimit int
@@ -73,6 +81,27 @@ type Options struct {
 	// map are reported as compiling cleanly. Nil omits the
 	// dismist_ap_config_compile_error(s) series.
 	CompileStatus func() map[string]CompileStatus
+
+	// Detail returns the telemetry v2 and status v2 view of one registered
+	// AP's session (design §8.2). Nil exports only what controller.Status,
+	// TelemetrySnapshot and Counters carry.
+	Detail func(apID string, session Session) APDetail
+	// Build labels dismist_build_info.
+	Build BuildInfo
+	// Certificates are the served chain and onboarding CAs
+	// (CertificateSeries).
+	Certificates []Certificate
+	// StoreUsage reports the database size and free space; MigrationState
+	// meta.migration_state's state; Backups the scheduled backup state.
+	StoreUsage     func() (StoreUsage, bool)
+	MigrationState func() (string, bool)
+	Backups        func() (BackupStatus, bool)
+	// Instruments are the listener and UI counters; nil leaves out the TLS,
+	// DNS, observation, HTTP and UI series.
+	Instruments *Instruments
+
+	// Now is the clock for staleness gating; nil is time.Now.
+	Now func() time.Time
 
 	// ErrorLog receives scrape errors. Nil logs to the standard logger.
 	ErrorLog promhttp.Logger
@@ -123,6 +152,11 @@ func NewHandler(options Options) (http.Handler, error) {
 	}
 	if err := registry.Register(newCollector(options)); err != nil {
 		return nil, err
+	}
+	if options.Instruments != nil {
+		if err := registry.Register(options.Instruments); err != nil {
+			return nil, err
+		}
 	}
 	errorLog := options.ErrorLog
 	if errorLog == nil {
