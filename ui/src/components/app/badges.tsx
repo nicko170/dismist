@@ -68,12 +68,12 @@ export function ShadowedBadge({
         <span className="break-words">{text}</span>
       </span>
       {patch ? (
-        <Link to={patch.to as never} className="text-xs text-brand underline-offset-4 hover:underline" data-inline-link="">
+        <Link to={patch.to as never} className="inline-flex min-h-11 items-center text-xs text-brand underline-offset-4 hover:underline fine:md:min-h-0" data-inline-link="">
           {patch.label}
         </Link>
       ) : null}
       {elsewhere?.links.map((link) => (
-        <Link key={link.to} to={link.to as never} className="text-xs text-brand underline-offset-4 hover:underline" data-inline-link="">
+        <Link key={link.to} to={link.to as never} className="inline-flex min-h-11 items-center text-xs text-brand underline-offset-4 hover:underline fine:md:min-h-0" data-inline-link="">
           {link.label}
         </Link>
       ))}

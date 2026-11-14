@@ -48,7 +48,7 @@ export const editorTheme = EditorView.theme({
 const highlight = HighlightStyle.define([
   { tag: tags.propertyName, color: 'var(--chart-4)' },
   { tag: tags.string, color: 'var(--success)' },
-  { tag: tags.number, color: 'var(--chart-2)' },
+  { tag: tags.number, color: 'var(--info)' },
   { tag: [tags.bool, tags.null], color: 'var(--brand)', fontWeight: '600' },
   { tag: tags.invalid, color: 'var(--destructive)' },
 ])

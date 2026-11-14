@@ -54,7 +54,7 @@ type Props<T> = {
   /** Accessible name of the row link (defaults to the text of the title cell). */
   rowLabel?: (row: T) => string
   /** Trailing per-row actions (a ⋯ menu), kept above the stretched link. */
-  rowActions?: (row: T) => ReactNode
+  renderActions?: (row: T) => ReactNode
   /** A coloured edge for rows that need attention; the row's text must still say why. */
   rowTone?: (row: T) => 'crit' | 'warn' | undefined
   sort?: ListSort
@@ -130,7 +130,7 @@ export function ResponsiveList<T>({
   label,
   rowLink,
   rowLabel,
-  rowActions,
+  renderActions,
   rowTone,
   sort,
   onSortChange,
@@ -187,7 +187,7 @@ export function ResponsiveList<T>({
                   </th>
                 )
               })}
-              {rowActions ? (
+              {renderActions ? (
                 <th scope="col" className="w-14 pr-2">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -221,7 +221,7 @@ export function ResponsiveList<T>({
                       {index === titleIndex ? titleContent(row) : cell(column, row)}
                     </td>
                   ))}
-                  {rowActions ? <td className="py-1 pr-2 text-right">{rowActions(row)}</td> : null}
+                  {renderActions ? <td className="py-1 pr-2 text-right">{renderActions(row)}</td> : null}
                 </tr>
               )
             })}
@@ -253,7 +253,7 @@ export function ResponsiveList<T>({
                     {cell(column, row)}
                   </div>
                 ))}
-                {rowActions ? <div className="-my-2 -mr-2 shrink-0">{rowActions(row)}</div> : null}
+                {renderActions ? <div className="-my-2 -mr-2 shrink-0">{renderActions(row)}</div> : null}
               </div>
               {pick('subtitle').map((column) => (
                 <div key={column.id} className="min-w-0 text-sm break-words text-muted-foreground">

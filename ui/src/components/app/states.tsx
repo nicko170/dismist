@@ -66,7 +66,7 @@ export function ErrorState({
 
 export function SkeletonRows({ rows = 3, className }: { rows?: number; className?: string }) {
   return (
-    <div className={cn('grid gap-2', className)} aria-busy="true" aria-label="Loading">
+    <div className={cn('grid gap-2', className)} role="status" aria-busy="true" aria-label="Loading">
       {Array.from({ length: rows }, (_, i) => (
         <Skeleton key={i} className="h-14 w-full" />
       ))}
@@ -77,7 +77,7 @@ export function SkeletonRows({ rows = 3, className }: { rows?: number; className
 /** Placeholder stat tiles (two columns on phones, four from md). */
 export function SkeletonTiles({ count = 4, className }: { count?: number; className?: string }) {
   return (
-    <div className={cn('grid grid-cols-2 gap-3 md:grid-cols-4', className)} aria-busy="true" aria-label="Loading">
+    <div className={cn('grid grid-cols-2 gap-3 md:grid-cols-4', className)} role="status" aria-busy="true" aria-label="Loading">
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className="grid gap-2 rounded-lg border bg-card px-4 py-3">
           <Skeleton className="h-3.5 w-1/2" />
@@ -91,7 +91,7 @@ export function SkeletonTiles({ count = 4, className }: { count?: number; classN
 /** A placeholder card with a title and a few lines. */
 export function SkeletonCard({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
-    <div className={cn('grid gap-3 rounded-lg border bg-card p-4', className)} aria-busy="true" aria-label="Loading">
+    <div className={cn('grid gap-3 rounded-lg border bg-card p-4', className)} role="status" aria-busy="true" aria-label="Loading">
       <Skeleton className="h-5 w-1/3" />
       {Array.from({ length: lines }, (_, i) => (
         <Skeleton key={i} className={cn('h-4', i === lines - 1 ? 'w-2/3' : 'w-full')} />
@@ -103,7 +103,7 @@ export function SkeletonCard({ lines = 3, className }: { lines?: number; classNa
 /** A placeholder definition list in the KV layout. */
 export function SkeletonKV({ items = 6, className }: { items?: number; className?: string }) {
   return (
-    <div className={cn('grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4', className)} aria-busy="true" aria-label="Loading">
+    <div className={cn('grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4', className)} role="status" aria-busy="true" aria-label="Loading">
       {Array.from({ length: items }, (_, i) => (
         <div key={i} className="grid gap-1.5">
           <Skeleton className="h-3 w-1/2" />

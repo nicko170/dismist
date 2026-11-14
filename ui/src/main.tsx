@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ConfirmProvider } from '@/components/app/ConfirmDialog'
 import { Toaster } from '@/components/ui/sonner'
 import { onUnauthorized } from '@/api/client'
 import { keys } from '@/api/keys'
@@ -44,7 +45,9 @@ void enableMocks().then(() => {
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider delayDuration={300}>
-            <RouterProvider router={router} />
+            <ConfirmProvider>
+              <RouterProvider router={router} />
+            </ConfirmProvider>
             <Toaster />
           </TooltipProvider>
         </QueryClientProvider>

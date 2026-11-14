@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as DevKitRouteImport } from './routes/dev.kit'
 import { Route as SitesSiteIdRouteRouteImport } from './routes/sites/$siteId/route'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevKitRoute = DevKitRouteImport.update({
+  id: '/dev/kit',
+  path: '/dev/kit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitesSiteIdRouteRoute = SitesSiteIdRouteRouteImport.update({
   id: '/sites/$siteId',
   path: '/sites/$siteId',
@@ -33,30 +39,34 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/dev/kit': typeof DevKitRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/dev/kit': typeof DevKitRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/dev/kit': typeof DevKitRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/sites/$siteId'
+  fullPaths: '/' | '/login' | '/sites/$siteId' | '/dev/kit'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/sites/$siteId'
-  id: '__root__' | '/' | '/login' | '/sites/$siteId'
+  to: '/' | '/login' | '/sites/$siteId' | '/dev/kit'
+  id: '__root__' | '/' | '/login' | '/sites/$siteId' | '/dev/kit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   SitesSiteIdRouteRoute: typeof SitesSiteIdRouteRoute
+  DevKitRoute: typeof DevKitRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/kit': {
+      id: '/dev/kit'
+      path: '/dev/kit'
+      fullPath: '/dev/kit'
+      preLoaderRoute: typeof DevKitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sites/$siteId': {
       id: '/sites/$siteId'
       path: '/sites/$siteId'
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   SitesSiteIdRouteRoute: SitesSiteIdRouteRoute,
+  DevKitRoute: DevKitRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

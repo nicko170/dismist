@@ -79,6 +79,8 @@ export async function expectTapTargets(page: Page, selector = 'main a, main butt
       .filter((el) => {
         const r = el.getBoundingClientRect()
         if (r.width === 0 || r.height === 0) return false
+        // A stretched row link's hit area is its whole row or card (ResponsiveList).
+        if (el.hasAttribute('data-row-link')) return false
         if (el.closest('p, li > span, [data-inline-link]') && el.tagName === 'A' && getComputedStyle(el).display === 'inline') return false
         return r.width < 44 || r.height < 44
       })
