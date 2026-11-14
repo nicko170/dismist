@@ -11,7 +11,23 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ApsApIdRouteImport } from './routes/aps.$apId'
+import { Route as ClientsMacRouteImport } from './routes/clients.$mac'
+import { Route as SitesIndexRouteImport } from './routes/sites/index'
 import { Route as SitesSiteIdRouteRouteImport } from './routes/sites/$siteId/route'
+import { Route as SitesSiteIdApsRouteRouteImport } from './routes/sites/$siteId/aps/route'
+import { Route as SitesSiteIdClientsRouteRouteImport } from './routes/sites/$siteId/clients/route'
+import { Route as SitesSiteIdApsIndexRouteImport } from './routes/sites/$siteId/aps/index'
+import { Route as SitesSiteIdApsApIdRouteRouteImport } from './routes/sites/$siteId/aps/$apId/route'
+import { Route as SitesSiteIdClientsIndexRouteImport } from './routes/sites/$siteId/clients/index'
+import { Route as SitesSiteIdClientsMacRouteImport } from './routes/sites/$siteId/clients/$mac'
+import { Route as SitesSiteIdEventsIndexRouteImport } from './routes/sites/$siteId/events/index'
+import { Route as SitesSiteIdOverviewIndexRouteImport } from './routes/sites/$siteId/overview/index'
+import { Route as SitesSiteIdApsApIdIndexRouteImport } from './routes/sites/$siteId/aps/$apId/index'
+import { Route as SitesSiteIdApsApIdClientsRouteImport } from './routes/sites/$siteId/aps/$apId/clients'
+import { Route as SitesSiteIdApsApIdEventsRouteImport } from './routes/sites/$siteId/aps/$apId/events'
+import { Route as SitesSiteIdApsApIdRadiosRouteImport } from './routes/sites/$siteId/aps/$apId/radios'
+import { Route as SitesSiteIdApsApIdUplinkRouteImport } from './routes/sites/$siteId/aps/$apId/uplink'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -23,40 +39,228 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApsApIdRoute = ApsApIdRouteImport.update({
+  id: '/aps/$apId',
+  path: '/aps/$apId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClientsMacRoute = ClientsMacRouteImport.update({
+  id: '/clients/$mac',
+  path: '/clients/$mac',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitesIndexRoute = SitesIndexRouteImport.update({
+  id: '/sites/',
+  path: '/sites/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitesSiteIdRouteRoute = SitesSiteIdRouteRouteImport.update({
   id: '/sites/$siteId',
   path: '/sites/$siteId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SitesSiteIdApsRouteRoute = SitesSiteIdApsRouteRouteImport.update({
+  id: '/aps',
+  path: '/aps',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdClientsRouteRoute = SitesSiteIdClientsRouteRouteImport.update({
+  id: '/clients',
+  path: '/clients',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdApsIndexRoute = SitesSiteIdApsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SitesSiteIdApsRouteRoute,
+} as any)
+const SitesSiteIdApsApIdRouteRoute = SitesSiteIdApsApIdRouteRouteImport.update({
+  id: '/$apId',
+  path: '/$apId',
+  getParentRoute: () => SitesSiteIdApsRouteRoute,
+} as any)
+const SitesSiteIdClientsIndexRoute = SitesSiteIdClientsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SitesSiteIdClientsRouteRoute,
+} as any)
+const SitesSiteIdClientsMacRoute = SitesSiteIdClientsMacRouteImport.update({
+  id: '/$mac',
+  path: '/$mac',
+  getParentRoute: () => SitesSiteIdClientsRouteRoute,
+} as any)
+const SitesSiteIdEventsIndexRoute = SitesSiteIdEventsIndexRouteImport.update({
+  id: '/events/',
+  path: '/events/',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdOverviewIndexRoute =
+  SitesSiteIdOverviewIndexRouteImport.update({
+    id: '/overview/',
+    path: '/overview/',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdIndexRoute = SitesSiteIdApsApIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+} as any)
+const SitesSiteIdApsApIdClientsRoute =
+  SitesSiteIdApsApIdClientsRouteImport.update({
+    id: '/clients',
+    path: '/clients',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdEventsRoute =
+  SitesSiteIdApsApIdEventsRouteImport.update({
+    id: '/events',
+    path: '/events',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdRadiosRoute =
+  SitesSiteIdApsApIdRadiosRouteImport.update({
+    id: '/radios',
+    path: '/radios',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdUplinkRoute =
+  SitesSiteIdApsApIdUplinkRouteImport.update({
+    id: '/uplink',
+    path: '/uplink',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/aps/$apId': typeof ApsApIdRoute
+  '/clients/$mac': typeof ClientsMacRoute
+  '/sites/': typeof SitesIndexRoute
+  '/sites/$siteId/aps': typeof SitesSiteIdApsRouteRouteWithChildren
+  '/sites/$siteId/clients': typeof SitesSiteIdClientsRouteRouteWithChildren
+  '/sites/$siteId/aps/$apId': typeof SitesSiteIdApsApIdRouteRouteWithChildren
+  '/sites/$siteId/clients/$mac': typeof SitesSiteIdClientsMacRoute
+  '/sites/$siteId/aps/': typeof SitesSiteIdApsIndexRoute
+  '/sites/$siteId/clients/': typeof SitesSiteIdClientsIndexRoute
+  '/sites/$siteId/events/': typeof SitesSiteIdEventsIndexRoute
+  '/sites/$siteId/overview/': typeof SitesSiteIdOverviewIndexRoute
+  '/sites/$siteId/aps/$apId/clients': typeof SitesSiteIdApsApIdClientsRoute
+  '/sites/$siteId/aps/$apId/events': typeof SitesSiteIdApsApIdEventsRoute
+  '/sites/$siteId/aps/$apId/radios': typeof SitesSiteIdApsApIdRadiosRoute
+  '/sites/$siteId/aps/$apId/uplink': typeof SitesSiteIdApsApIdUplinkRoute
+  '/sites/$siteId/aps/$apId/': typeof SitesSiteIdApsApIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/aps/$apId': typeof ApsApIdRoute
+  '/clients/$mac': typeof ClientsMacRoute
+  '/sites': typeof SitesIndexRoute
+  '/sites/$siteId/clients/$mac': typeof SitesSiteIdClientsMacRoute
+  '/sites/$siteId/aps': typeof SitesSiteIdApsIndexRoute
+  '/sites/$siteId/clients': typeof SitesSiteIdClientsIndexRoute
+  '/sites/$siteId/events': typeof SitesSiteIdEventsIndexRoute
+  '/sites/$siteId/overview': typeof SitesSiteIdOverviewIndexRoute
+  '/sites/$siteId/aps/$apId/clients': typeof SitesSiteIdApsApIdClientsRoute
+  '/sites/$siteId/aps/$apId/events': typeof SitesSiteIdApsApIdEventsRoute
+  '/sites/$siteId/aps/$apId/radios': typeof SitesSiteIdApsApIdRadiosRoute
+  '/sites/$siteId/aps/$apId/uplink': typeof SitesSiteIdApsApIdUplinkRoute
+  '/sites/$siteId/aps/$apId': typeof SitesSiteIdApsApIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/aps/$apId': typeof ApsApIdRoute
+  '/clients/$mac': typeof ClientsMacRoute
+  '/sites/': typeof SitesIndexRoute
+  '/sites/$siteId/aps': typeof SitesSiteIdApsRouteRouteWithChildren
+  '/sites/$siteId/clients': typeof SitesSiteIdClientsRouteRouteWithChildren
+  '/sites/$siteId/aps/$apId': typeof SitesSiteIdApsApIdRouteRouteWithChildren
+  '/sites/$siteId/clients/$mac': typeof SitesSiteIdClientsMacRoute
+  '/sites/$siteId/aps/': typeof SitesSiteIdApsIndexRoute
+  '/sites/$siteId/clients/': typeof SitesSiteIdClientsIndexRoute
+  '/sites/$siteId/events/': typeof SitesSiteIdEventsIndexRoute
+  '/sites/$siteId/overview/': typeof SitesSiteIdOverviewIndexRoute
+  '/sites/$siteId/aps/$apId/clients': typeof SitesSiteIdApsApIdClientsRoute
+  '/sites/$siteId/aps/$apId/events': typeof SitesSiteIdApsApIdEventsRoute
+  '/sites/$siteId/aps/$apId/radios': typeof SitesSiteIdApsApIdRadiosRoute
+  '/sites/$siteId/aps/$apId/uplink': typeof SitesSiteIdApsApIdUplinkRoute
+  '/sites/$siteId/aps/$apId/': typeof SitesSiteIdApsApIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/sites/$siteId'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/sites/$siteId'
+    | '/aps/$apId'
+    | '/clients/$mac'
+    | '/sites/'
+    | '/sites/$siteId/aps'
+    | '/sites/$siteId/clients'
+    | '/sites/$siteId/aps/$apId'
+    | '/sites/$siteId/clients/$mac'
+    | '/sites/$siteId/aps/'
+    | '/sites/$siteId/clients/'
+    | '/sites/$siteId/events/'
+    | '/sites/$siteId/overview/'
+    | '/sites/$siteId/aps/$apId/clients'
+    | '/sites/$siteId/aps/$apId/events'
+    | '/sites/$siteId/aps/$apId/radios'
+    | '/sites/$siteId/aps/$apId/uplink'
+    | '/sites/$siteId/aps/$apId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/sites/$siteId'
-  id: '__root__' | '/' | '/login' | '/sites/$siteId'
+  to:
+    | '/'
+    | '/login'
+    | '/sites/$siteId'
+    | '/aps/$apId'
+    | '/clients/$mac'
+    | '/sites'
+    | '/sites/$siteId/clients/$mac'
+    | '/sites/$siteId/aps'
+    | '/sites/$siteId/clients'
+    | '/sites/$siteId/events'
+    | '/sites/$siteId/overview'
+    | '/sites/$siteId/aps/$apId/clients'
+    | '/sites/$siteId/aps/$apId/events'
+    | '/sites/$siteId/aps/$apId/radios'
+    | '/sites/$siteId/aps/$apId/uplink'
+    | '/sites/$siteId/aps/$apId'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/sites/$siteId'
+    | '/aps/$apId'
+    | '/clients/$mac'
+    | '/sites/'
+    | '/sites/$siteId/aps'
+    | '/sites/$siteId/clients'
+    | '/sites/$siteId/aps/$apId'
+    | '/sites/$siteId/clients/$mac'
+    | '/sites/$siteId/aps/'
+    | '/sites/$siteId/clients/'
+    | '/sites/$siteId/events/'
+    | '/sites/$siteId/overview/'
+    | '/sites/$siteId/aps/$apId/clients'
+    | '/sites/$siteId/aps/$apId/events'
+    | '/sites/$siteId/aps/$apId/radios'
+    | '/sites/$siteId/aps/$apId/uplink'
+    | '/sites/$siteId/aps/$apId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
-  SitesSiteIdRouteRoute: typeof SitesSiteIdRouteRoute
+  SitesSiteIdRouteRoute: typeof SitesSiteIdRouteRouteWithChildren
+  ApsApIdRoute: typeof ApsApIdRoute
+  ClientsMacRoute: typeof ClientsMacRoute
+  SitesIndexRoute: typeof SitesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -75,6 +279,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/aps/$apId': {
+      id: '/aps/$apId'
+      path: '/aps/$apId'
+      fullPath: '/aps/$apId'
+      preLoaderRoute: typeof ApsApIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clients/$mac': {
+      id: '/clients/$mac'
+      path: '/clients/$mac'
+      fullPath: '/clients/$mac'
+      preLoaderRoute: typeof ClientsMacRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sites/': {
+      id: '/sites/'
+      path: '/sites'
+      fullPath: '/sites/'
+      preLoaderRoute: typeof SitesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sites/$siteId': {
       id: '/sites/$siteId'
       path: '/sites/$siteId'
@@ -82,13 +307,175 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sites/$siteId/aps': {
+      id: '/sites/$siteId/aps'
+      path: '/aps'
+      fullPath: '/sites/$siteId/aps'
+      preLoaderRoute: typeof SitesSiteIdApsRouteRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/clients': {
+      id: '/sites/$siteId/clients'
+      path: '/clients'
+      fullPath: '/sites/$siteId/clients'
+      preLoaderRoute: typeof SitesSiteIdClientsRouteRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/aps/': {
+      id: '/sites/$siteId/aps/'
+      path: '/'
+      fullPath: '/sites/$siteId/aps/'
+      preLoaderRoute: typeof SitesSiteIdApsIndexRouteImport
+      parentRoute: typeof SitesSiteIdApsRouteRoute
+    }
+    '/sites/$siteId/aps/$apId': {
+      id: '/sites/$siteId/aps/$apId'
+      path: '/$apId'
+      fullPath: '/sites/$siteId/aps/$apId'
+      preLoaderRoute: typeof SitesSiteIdApsApIdRouteRouteImport
+      parentRoute: typeof SitesSiteIdApsRouteRoute
+    }
+    '/sites/$siteId/clients/': {
+      id: '/sites/$siteId/clients/'
+      path: '/'
+      fullPath: '/sites/$siteId/clients/'
+      preLoaderRoute: typeof SitesSiteIdClientsIndexRouteImport
+      parentRoute: typeof SitesSiteIdClientsRouteRoute
+    }
+    '/sites/$siteId/clients/$mac': {
+      id: '/sites/$siteId/clients/$mac'
+      path: '/$mac'
+      fullPath: '/sites/$siteId/clients/$mac'
+      preLoaderRoute: typeof SitesSiteIdClientsMacRouteImport
+      parentRoute: typeof SitesSiteIdClientsRouteRoute
+    }
+    '/sites/$siteId/events/': {
+      id: '/sites/$siteId/events/'
+      path: '/events'
+      fullPath: '/sites/$siteId/events/'
+      preLoaderRoute: typeof SitesSiteIdEventsIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/overview/': {
+      id: '/sites/$siteId/overview/'
+      path: '/overview'
+      fullPath: '/sites/$siteId/overview/'
+      preLoaderRoute: typeof SitesSiteIdOverviewIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/': {
+      id: '/sites/$siteId/aps/$apId/'
+      path: '/'
+      fullPath: '/sites/$siteId/aps/$apId/'
+      preLoaderRoute: typeof SitesSiteIdApsApIdIndexRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/clients': {
+      id: '/sites/$siteId/aps/$apId/clients'
+      path: '/clients'
+      fullPath: '/sites/$siteId/aps/$apId/clients'
+      preLoaderRoute: typeof SitesSiteIdApsApIdClientsRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/events': {
+      id: '/sites/$siteId/aps/$apId/events'
+      path: '/events'
+      fullPath: '/sites/$siteId/aps/$apId/events'
+      preLoaderRoute: typeof SitesSiteIdApsApIdEventsRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/radios': {
+      id: '/sites/$siteId/aps/$apId/radios'
+      path: '/radios'
+      fullPath: '/sites/$siteId/aps/$apId/radios'
+      preLoaderRoute: typeof SitesSiteIdApsApIdRadiosRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/uplink': {
+      id: '/sites/$siteId/aps/$apId/uplink'
+      path: '/uplink'
+      fullPath: '/sites/$siteId/aps/$apId/uplink'
+      preLoaderRoute: typeof SitesSiteIdApsApIdUplinkRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
   }
 }
+
+interface SitesSiteIdApsApIdRouteRouteChildren {
+  SitesSiteIdApsApIdClientsRoute: typeof SitesSiteIdApsApIdClientsRoute
+  SitesSiteIdApsApIdEventsRoute: typeof SitesSiteIdApsApIdEventsRoute
+  SitesSiteIdApsApIdRadiosRoute: typeof SitesSiteIdApsApIdRadiosRoute
+  SitesSiteIdApsApIdUplinkRoute: typeof SitesSiteIdApsApIdUplinkRoute
+  SitesSiteIdApsApIdIndexRoute: typeof SitesSiteIdApsApIdIndexRoute
+}
+
+const SitesSiteIdApsApIdRouteRouteChildren: SitesSiteIdApsApIdRouteRouteChildren =
+  {
+    SitesSiteIdApsApIdClientsRoute: SitesSiteIdApsApIdClientsRoute,
+    SitesSiteIdApsApIdEventsRoute: SitesSiteIdApsApIdEventsRoute,
+    SitesSiteIdApsApIdRadiosRoute: SitesSiteIdApsApIdRadiosRoute,
+    SitesSiteIdApsApIdUplinkRoute: SitesSiteIdApsApIdUplinkRoute,
+    SitesSiteIdApsApIdIndexRoute: SitesSiteIdApsApIdIndexRoute,
+  }
+
+const SitesSiteIdApsApIdRouteRouteWithChildren =
+  SitesSiteIdApsApIdRouteRoute._addFileChildren(
+    SitesSiteIdApsApIdRouteRouteChildren,
+  )
+
+interface SitesSiteIdApsRouteRouteChildren {
+  SitesSiteIdApsApIdRouteRoute: typeof SitesSiteIdApsApIdRouteRouteWithChildren
+  SitesSiteIdApsIndexRoute: typeof SitesSiteIdApsIndexRoute
+}
+
+const SitesSiteIdApsRouteRouteChildren: SitesSiteIdApsRouteRouteChildren = {
+  SitesSiteIdApsApIdRouteRoute: SitesSiteIdApsApIdRouteRouteWithChildren,
+  SitesSiteIdApsIndexRoute: SitesSiteIdApsIndexRoute,
+}
+
+const SitesSiteIdApsRouteRouteWithChildren =
+  SitesSiteIdApsRouteRoute._addFileChildren(SitesSiteIdApsRouteRouteChildren)
+
+interface SitesSiteIdClientsRouteRouteChildren {
+  SitesSiteIdClientsMacRoute: typeof SitesSiteIdClientsMacRoute
+  SitesSiteIdClientsIndexRoute: typeof SitesSiteIdClientsIndexRoute
+}
+
+const SitesSiteIdClientsRouteRouteChildren: SitesSiteIdClientsRouteRouteChildren =
+  {
+    SitesSiteIdClientsMacRoute: SitesSiteIdClientsMacRoute,
+    SitesSiteIdClientsIndexRoute: SitesSiteIdClientsIndexRoute,
+  }
+
+const SitesSiteIdClientsRouteRouteWithChildren =
+  SitesSiteIdClientsRouteRoute._addFileChildren(
+    SitesSiteIdClientsRouteRouteChildren,
+  )
+
+interface SitesSiteIdRouteRouteChildren {
+  SitesSiteIdApsRouteRoute: typeof SitesSiteIdApsRouteRouteWithChildren
+  SitesSiteIdClientsRouteRoute: typeof SitesSiteIdClientsRouteRouteWithChildren
+  SitesSiteIdEventsIndexRoute: typeof SitesSiteIdEventsIndexRoute
+  SitesSiteIdOverviewIndexRoute: typeof SitesSiteIdOverviewIndexRoute
+}
+
+const SitesSiteIdRouteRouteChildren: SitesSiteIdRouteRouteChildren = {
+  SitesSiteIdApsRouteRoute: SitesSiteIdApsRouteRouteWithChildren,
+  SitesSiteIdClientsRouteRoute: SitesSiteIdClientsRouteRouteWithChildren,
+  SitesSiteIdEventsIndexRoute: SitesSiteIdEventsIndexRoute,
+  SitesSiteIdOverviewIndexRoute: SitesSiteIdOverviewIndexRoute,
+}
+
+const SitesSiteIdRouteRouteWithChildren =
+  SitesSiteIdRouteRoute._addFileChildren(SitesSiteIdRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
-  SitesSiteIdRouteRoute: SitesSiteIdRouteRoute,
+  SitesSiteIdRouteRoute: SitesSiteIdRouteRouteWithChildren,
+  ApsApIdRoute: ApsApIdRoute,
+  ClientsMacRoute: ClientsMacRoute,
+  SitesIndexRoute: SitesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
