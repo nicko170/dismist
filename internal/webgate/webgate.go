@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -148,6 +150,7 @@ type Gate struct {
 	mu        sync.Mutex
 	sessions  map[string]time.Time
 	touched   map[string]time.Time // token ID -> last Touch call
+	logins    *loginLimiter
 }
 
 // New protects the operator API while allowing the static login UI to load.
@@ -158,6 +161,7 @@ func New(token string, next http.Handler) *Gate {
 	return &Gate{
 		next: next, tokenHash: sha256.Sum256([]byte(token)), now: time.Now,
 		sessions: make(map[string]time.Time), touched: make(map[string]time.Time),
+		logins: newLoginLimiter(),
 	}
 }
 
@@ -290,6 +294,13 @@ func sessionView(p Principal) api.AuthSession {
 func (g *Gate) login(writer http.ResponseWriter, request *http.Request) {
 	if !sameOrigin(request) {
 		writeError(writer, http.StatusForbidden, api.ErrorCodeForbidden, "cross-origin request refused", nil)
+		return
+	}
+	// Every attempt counts, before the token is checked, so a refused
+	// client learns nothing about the token (design §4.9).
+	if ok, wait := g.logins.allow(proxytrust.ClientAddr(request), g.now()); !ok {
+		writer.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
+		writeError(writer, http.StatusTooManyRequests, api.ErrorCodeRateLimited, "too many sign-in attempts; wait a moment and try again", nil)
 		return
 	}
 	var body struct {

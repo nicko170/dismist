@@ -1,12 +1,15 @@
 package webgate
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nicko170/dismist/internal/proxytrust"
 )
@@ -206,5 +209,94 @@ func TestGateIgnoresNonBearerAuthorization(t *testing.T) {
 		if !strings.Contains(string(body["error"]), "token") {
 			t.Fatalf("%q: %s, want the bad-token message", authorization, response.Body.String())
 		}
+	}
+}
+
+func TestGateLoginRateLimit(t *testing.T) {
+	token := strings.Repeat("e", 64)
+	trusted, err := proxytrust.ParsePrefixes("10.244.0.0/16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := New(token, http.NotFoundHandler())
+	now := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
+	gate.now = func() time.Time { return now }
+	handler := proxytrust.Middleware(trusted, gate)
+	login := func(remote, forwarded, body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "http://controller.local:8088/auth/login", strings.NewReader(body))
+		request.RemoteAddr = remote
+		if forwarded != "" {
+			request.Header.Set("X-Forwarded-For", forwarded)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response
+	}
+	wrong := `{"token":"` + strings.Repeat("0", 64) + `"}`
+	right := `{"token":"` + token + `"}`
+	for attempt := 1; attempt <= 10; attempt++ {
+		if response := login("192.0.2.5:4000", "", wrong); response.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: %d %s", attempt, response.Code, response.Body.String())
+		}
+	}
+	// The 11th attempt in the minute is refused, even with the right
+	// token, so it reveals nothing.
+	limited := login("192.0.2.5:4000", "", right)
+	checkErrorBody(t, "11th attempt", limited, http.StatusTooManyRequests, "rate_limited")
+	if retry := limited.Header().Get("Retry-After"); retry != "6" {
+		t.Fatalf("Retry-After %q, want 6", retry)
+	}
+	if len(limited.Result().Cookies()) != 0 {
+		t.Fatal("a rate-limited login set a cookie")
+	}
+	// Other clients are not affected; a forged X-Forwarded-For from an
+	// untrusted peer does not get a fresh bucket.
+	if response := login("192.0.2.6:4000", "", right); response.Code != http.StatusOK {
+		t.Fatalf("another client: %d %s", response.Code, response.Body.String())
+	}
+	if response := login("192.0.2.5:4000", "198.51.100.1", right); response.Code != http.StatusTooManyRequests {
+		t.Fatalf("forged X-Forwarded-For: %d", response.Code)
+	}
+	// Behind a trusted proxy, each forwarded client has its own bucket.
+	for attempt := 1; attempt <= 10; attempt++ {
+		if response := login("10.244.3.199:4000", "198.51.100.7", wrong); response.Code != http.StatusUnauthorized {
+			t.Fatalf("proxied attempt %d: %d", attempt, response.Code)
+		}
+	}
+	if response := login("10.244.3.199:4000", "198.51.100.7", right); response.Code != http.StatusTooManyRequests {
+		t.Fatalf("proxied 11th attempt: %d", response.Code)
+	}
+	if response := login("10.244.3.199:4000", "198.51.100.8", right); response.Code != http.StatusOK {
+		t.Fatalf("another proxied client: %d %s", response.Code, response.Body.String())
+	}
+	// One attempt comes back every 6 seconds.
+	now = now.Add(6 * time.Second)
+	if response := login("192.0.2.5:4000", "", right); response.Code != http.StatusOK {
+		t.Fatalf("after 6 s: %d %s", response.Code, response.Body.String())
+	}
+	if response := login("192.0.2.5:4000", "", right); response.Code != http.StatusTooManyRequests {
+		t.Fatalf("second attempt after 6 s: %d", response.Code)
+	}
+	// IPv6 clients share their /64.
+	for attempt := 1; attempt <= 10; attempt++ {
+		login(fmt.Sprintf("[2001:db8::%x]:4000", attempt), "", wrong)
+	}
+	if response := login("[2001:db8::ffff]:4000", "", right); response.Code != http.StatusTooManyRequests {
+		t.Fatalf("same /64: %d", response.Code)
+	}
+	if response := login("[2001:db8:0:1::1]:4000", "", right); response.Code != http.StatusOK {
+		t.Fatalf("another /64: %d", response.Code)
+	}
+}
+
+func TestLoginLimiterDropsIdleClients(t *testing.T) {
+	limiter := newLoginLimiter()
+	now := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
+	for index := 0; index < loginLimiterSweep; index++ {
+		limiter.allow(netip.AddrFrom4([4]byte{10, 0, byte(index >> 8), byte(index)}), now)
+	}
+	limiter.allow(netip.MustParseAddr("192.0.2.1"), now.Add(loginWindow))
+	if len(limiter.buckets) != 1 {
+		t.Fatalf("%d buckets after a sweep, want 1", len(limiter.buckets))
 	}
 }

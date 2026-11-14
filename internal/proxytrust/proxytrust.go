@@ -13,6 +13,9 @@ import (
 
 type contextKey struct{}
 
+// prefixesKey carries the trusted prefixes, for ClientAddr.
+type prefixesKey struct{}
+
 // ParsePrefixes reads a comma-separated list of CIDR prefixes or single IP
 // addresses. An empty string yields no prefixes.
 func ParsePrefixes(value string) ([]netip.Prefix, error) {
@@ -43,15 +46,16 @@ func Middleware(trusted []netip.Prefix, next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		ctx := context.WithValue(request.Context(), prefixesKey{}, trusted)
 		if addr, ok := peer(request); ok {
 			for _, prefix := range trusted {
 				if prefix.Contains(addr) {
-					request = request.WithContext(context.WithValue(request.Context(), contextKey{}, true))
+					ctx = context.WithValue(ctx, contextKey{}, true)
 					break
 				}
 			}
 		}
-		next.ServeHTTP(writer, request)
+		next.ServeHTTP(writer, request.WithContext(ctx))
 	})
 }
 
@@ -77,4 +81,48 @@ func peer(request *http.Request) (netip.Addr, bool) {
 		return netip.Addr{}, false
 	}
 	return addrPort.Addr().Unmap(), true
+}
+
+// ClientAddr returns the address of the client that sent the request. It
+// is the peer's address unless the peer is loopback or a trusted proxy
+// (Middleware); then X-Forwarded-For is read from the right, skipping
+// entries that are themselves loopback or trusted, and the first other
+// address is the client. A malformed entry ends the walk at the last
+// trusted hop, so a client cannot choose its own address by sending the
+// header. The zero Addr means RemoteAddr does not parse.
+func ClientAddr(request *http.Request) netip.Addr {
+	addr, ok := peer(request)
+	if !ok {
+		return netip.Addr{}
+	}
+	prefixes, _ := request.Context().Value(prefixesKey{}).([]netip.Prefix)
+	trusted := func(addr netip.Addr) bool {
+		if addr.IsLoopback() {
+			return true
+		}
+		for _, prefix := range prefixes {
+			if prefix.Contains(addr) {
+				return true
+			}
+		}
+		return false
+	}
+	if !trusted(addr) {
+		return addr
+	}
+	var hops []string
+	for _, value := range request.Header.Values("X-Forwarded-For") {
+		hops = append(hops, strings.Split(value, ",")...)
+	}
+	for index := len(hops) - 1; index >= 0; index-- {
+		hop, err := netip.ParseAddr(strings.TrimSpace(hops[index]))
+		if err != nil {
+			break
+		}
+		addr = hop.Unmap().WithZone("")
+		if !trusted(addr) {
+			break
+		}
+	}
+	return addr
 }
