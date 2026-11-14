@@ -76,6 +76,9 @@ func deepCopy(value any) any {
 	return value
 }
 
+// jsonNumber returns a json.Number for a literal.
+func jsonNumber(literal string) json.Number { return json.Number(literal) }
+
 // num returns a json.Number for an integer.
 func num(n int) json.Number { return json.Number(strconv.Itoa(n)) }
 

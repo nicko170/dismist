@@ -212,6 +212,21 @@ func dfsFallback(site model.Site, band string, width, channel int, cost func(int
 	return best
 }
 
+// DefaultDFSFallback is the non-DFS fallback for a DFS channel when no
+// plan names one: the first non-DFS default Auto channel at the width.
+func DefaultDFSFallback(site model.Site, band string, width int) int {
+	domain, ok := Domain(site)
+	if !ok {
+		return 0
+	}
+	for _, candidate := range domain.DefaultAuto[band] {
+		if dfs, valid := domain.Valid(band, width, candidate); valid && !dfs {
+			return candidate
+		}
+	}
+	return 0
+}
+
 // Assignment is one band of one AP that Initial (or Plan) wrote.
 type Assignment struct {
 	APID string             `json:"ap_id"`
