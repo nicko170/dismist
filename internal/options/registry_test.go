@@ -64,6 +64,11 @@ func TestGeneratedFilesAreCurrent(t *testing.T) {
 		{filepath.Join("..", "..", "ui", "src", "gen", "options.gen.ts"), func(b *bytes.Buffer) error { return GenerateTS(b, Default()) }},
 		{filepath.Join("..", "..", "docs", "design", "options.gen.md"), func(b *bytes.Buffer) error { return GenerateMarkdown(b, Default()) }},
 	} {
+		// docs/design is not part of the public repository; without it
+		// (a clean checkout, CI) the generator skips the reference too.
+		if _, err := os.Stat(filepath.Dir(target.path)); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
 		var want bytes.Buffer
 		if err := target.gen(&want); err != nil {
 			t.Fatal(err)
