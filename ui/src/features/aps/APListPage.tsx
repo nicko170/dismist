@@ -14,7 +14,7 @@ import { RelativeTime } from '@/components/app/RelativeTime'
 import { EmptyState, ErrorState, SkeletonRows } from '@/components/app/states'
 import { formatDuration } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { Dash } from '@/features/overview/kit/Card'
+import { Dash, actionLink } from '@/features/overview/kit/Card'
 import { NativeSelect } from '@/features/overview/kit/FilterBar'
 import { ResponsiveList, type Column } from '@/features/overview/kit/ResponsiveList'
 import { APStatus, PushChip } from './APChips'
@@ -157,7 +157,7 @@ export function APListPage({ siteId, search, onSearch }: { siteId: string; searc
       {pendingRows.length ? (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-status-warn/50 bg-status-warn/10 px-4 py-2.5 text-sm">
           <span>{pendingRows.length === 1 ? '1 AP is trying to connect.' : `${pendingRows.length} APs are trying to connect.`}</span>
-          <a href="#pending" className="font-medium text-brand underline-offset-4 hover:underline">
+          <a href="#pending" className={cn(actionLink, 'font-medium')}>
             Review
           </a>
         </div>
@@ -203,7 +203,7 @@ export function APListPage({ siteId, search, onSearch }: { siteId: string; searc
         </EmptyState>
       ) : rows.length === 0 ? (
         <EmptyState title="No access points match">
-          <Link to="." search={{} as never} className="text-brand underline-offset-4 hover:underline">
+          <Link to="." search={{} as never} data-inline-link className="text-brand underline underline-offset-4 hover:no-underline">
             Clear the search and filters
           </Link>
         </EmptyState>

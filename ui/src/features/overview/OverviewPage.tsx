@@ -19,7 +19,7 @@ import { EventDrawer } from '@/features/events/EventDrawer'
 import { EventList } from '@/features/events/EventList'
 import { AttentionCard } from './AttentionCard'
 import { attentionItems } from './attention'
-import { Card } from './kit/Card'
+import { Card, actionLink } from './kit/Card'
 import { StatTile } from './kit/StatTile'
 import { TimeSeries } from './kit/TimeSeries'
 import { ccrevFor, recommendationCountQuery, siteViewQuery } from './site'
@@ -137,7 +137,7 @@ export function OverviewPage({ siteId, range }: { siteId: string; range: History
                 replace
                 aria-current={r === range ? 'true' : undefined}
                 className={cn(
-                  'inline-flex h-9 min-w-11 items-center justify-center rounded px-2 text-xs text-muted-foreground fine:md:h-7',
+                  'inline-flex h-11 min-w-11 items-center justify-center rounded px-2 text-xs text-muted-foreground fine:md:h-7',
                   r === range && 'bg-accent font-medium text-foreground',
                 )}
               >
@@ -162,7 +162,7 @@ export function OverviewPage({ siteId, range }: { siteId: string; range: History
         <Card
           title="Access points"
           action={
-            <Link to="/sites/$siteId/aps" params={{ siteId }} className="text-sm text-brand hover:underline">
+            <Link to="/sites/$siteId/aps" params={{ siteId }} className={actionLink}>
               All access points
             </Link>
           }
@@ -178,9 +178,9 @@ export function OverviewPage({ siteId, range }: { siteId: string; range: History
                   <li key={ap.id} className="relative flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 has-[a:hover]:bg-accent/50">
                     <Link
                       to={apPath(ap) as never}
-                      className="min-w-0 flex-1 truncate font-medium after:absolute after:inset-0 hover:underline"
+                      className="flex min-h-11 min-w-0 flex-1 items-center font-medium after:absolute after:inset-0 hover:underline fine:md:min-h-0"
                     >
-                      {ap.name}
+                      <span className="truncate">{ap.name}</span>
                     </Link>
                     <APStatus ap={ap} />
                     <PushChip ap={ap} push={push[ap.id]} />
@@ -198,7 +198,7 @@ export function OverviewPage({ siteId, range }: { siteId: string; range: History
         <Card
           title="Recent events"
           action={
-            <Link to="/sites/$siteId/events" params={{ siteId }} className="text-sm text-brand hover:underline">
+            <Link to="/sites/$siteId/events" params={{ siteId }} className={actionLink}>
               All events
             </Link>
           }

@@ -9,7 +9,7 @@ import { ErrorState, SkeletonRows } from '@/components/app/states'
 import { formatBytes, formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/time'
 import { ThemeSegmented } from '@/features/shell/ThemeControls'
-import { Card, Dash, Facts } from '@/features/overview/kit/Card'
+import { Card, Dash, Facts, actionLink } from '@/features/overview/kit/Card'
 import { daysLeft, expiryText, expiryTone } from './cert'
 
 // System overview (design §3.14): controller, AP endpoint and certificate
@@ -133,7 +133,7 @@ export function SystemOverview() {
       <Card
         title="Backups"
         action={
-          <Link to="/system/backups" className="text-sm text-brand hover:underline">
+          <Link to="/system/backups" className={actionLink}>
             Manage
           </Link>
         }
@@ -162,7 +162,7 @@ export function SystemOverview() {
       <Card
         title="Migration"
         action={
-          <Link to="/system/migration" className="text-sm text-brand hover:underline">
+          <Link to="/system/migration" className={actionLink}>
             Details
           </Link>
         }

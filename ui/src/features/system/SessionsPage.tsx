@@ -61,7 +61,7 @@ export function SessionsPage() {
       header: <span className="sr-only">Actions</span>,
       align: 'end',
       render: (s) => (
-        <Button variant="outline" size="sm" onClick={() => setTarget(s)} aria-label={`Revoke ${browserName(s.user_agent)} session`}>
+        <Button variant="outline" size="sm" onClick={() => setTarget(s)} aria-label={`${s.current ? 'Sign out' : 'Revoke'} ${browserName(s.user_agent)} session`}>
           {s.current ? 'Sign out' : 'Revoke'}
         </Button>
       ),
@@ -98,7 +98,7 @@ export function SessionsPage() {
                   {s.remote ? <Mono>{s.remote}</Mono> : null} · used <RelativeTime value={s.last_used} /> · expires <RelativeTime value={s.expires} />
                 </span>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setTarget(s)} aria-label={`Revoke ${browserName(s.user_agent)} session`}>
+              <Button variant="outline" size="sm" onClick={() => setTarget(s)} aria-label={`${s.current ? 'Sign out' : 'Revoke'} ${browserName(s.user_agent)} session`}>
                 {s.current ? 'Sign out' : 'Revoke'}
               </Button>
             </div>

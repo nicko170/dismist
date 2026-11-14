@@ -28,6 +28,7 @@ export function RowLinkEl({ link, className }: { link: RowLink; className?: stri
       to={link.to as never}
       params={link.params as never}
       search={link.search as never}
+      data-inline-link
       className={cn(
         'font-medium break-words outline-none after:absolute after:inset-0 after:content-[""] hover:underline focus-visible:after:rounded-lg focus-visible:after:ring-3 focus-visible:after:ring-ring/40',
         className,

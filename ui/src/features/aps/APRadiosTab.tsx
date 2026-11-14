@@ -86,7 +86,8 @@ function RadioCard({ ap, radio, trend }: { ap: APDetail; radio: RadioView; trend
                     to={'/sites/$siteId/aps/$apId/settings' as never}
                     params={{ siteId: ap.site_id, apId: ap.id } as never}
                     hash="radios"
-                    className="text-brand hover:underline"
+                    data-inline-link
+                    className="text-brand underline underline-offset-4 hover:no-underline"
                   >
                     Edit
                   </Link>

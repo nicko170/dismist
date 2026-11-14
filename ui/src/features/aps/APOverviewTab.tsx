@@ -9,7 +9,7 @@ import { RelativeTime } from '@/components/app/RelativeTime'
 import { SkeletonRows } from '@/components/app/states'
 import { formatBytes } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { Card, Dash, Facts } from '@/features/overview/kit/Card'
+import { Card, Dash, Facts, actionLink } from '@/features/overview/kit/Card'
 import { EventDrawer } from '@/features/events/EventDrawer'
 import { EventList } from '@/features/events/EventList'
 import { bandName, orderRadios, radioLine, uplinkSummary } from './format'
@@ -94,7 +94,7 @@ export function APOverviewTab({ ap, siteId }: { ap: APDetail; siteId: string }) 
       <Card
         title="Config"
         action={
-          <Link to={'/sites/$siteId/aps/$apId/config' as never} params={{ siteId, apId: ap.id } as never} className="text-sm text-brand hover:underline">
+          <Link to={'/sites/$siteId/aps/$apId/config' as never} params={{ siteId, apId: ap.id } as never} className={actionLink}>
             View config
           </Link>
         }
@@ -150,7 +150,7 @@ export function APOverviewTab({ ap, siteId }: { ap: APDetail; siteId: string }) 
       <Card
         title="Radios"
         action={
-          <Link to="/sites/$siteId/aps/$apId/radios" params={{ siteId, apId: ap.id }} className="text-sm text-brand hover:underline">
+          <Link to="/sites/$siteId/aps/$apId/radios" params={{ siteId, apId: ap.id }} className={actionLink}>
             Details
           </Link>
         }
@@ -183,7 +183,7 @@ export function APOverviewTab({ ap, siteId }: { ap: APDetail; siteId: string }) 
       <Card
         title="Uplink"
         action={
-          <Link to="/sites/$siteId/aps/$apId/uplink" params={{ siteId, apId: ap.id }} className="text-sm text-brand hover:underline">
+          <Link to="/sites/$siteId/aps/$apId/uplink" params={{ siteId, apId: ap.id }} className={actionLink}>
             Details
           </Link>
         }
@@ -222,7 +222,7 @@ export function APOverviewTab({ ap, siteId }: { ap: APDetail; siteId: string }) 
         className="lg:col-span-2"
         bodyClassName="p-0"
         action={
-          <Link to="/sites/$siteId/aps/$apId/events" params={{ siteId, apId: ap.id }} className="text-sm text-brand hover:underline">
+          <Link to="/sites/$siteId/aps/$apId/events" params={{ siteId, apId: ap.id }} className={actionLink}>
             All events
           </Link>
         }

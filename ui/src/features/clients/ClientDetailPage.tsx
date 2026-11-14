@@ -17,7 +17,7 @@ import { ErrorState, SkeletonRows } from '@/components/app/states'
 import { formatBytes, formatDuration } from '@/lib/format'
 import { isPrivateMac } from '@/lib/mac'
 import { usePageTitle } from '@/features/shell/title'
-import { Card, Dash, Facts } from '@/features/overview/kit/Card'
+import { Card, Dash, Facts, actionLink } from '@/features/overview/kit/Card'
 import { ConfirmDialog, ResponsiveDialog } from '@/features/overview/kit/ConfirmDialog'
 import { ExperimentalBadge } from '@/features/overview/kit/ExperimentalBadge'
 import { SignalChip } from '@/features/overview/kit/SignalChip'
@@ -255,7 +255,7 @@ export function ClientDetailPage({ siteId, mac }: { siteId: string; mac: string 
                 {
                   label: 'AP',
                   value: live.ap_id ? (
-                    <Link to="/sites/$siteId/aps/$apId" params={{ siteId, apId: live.ap_id }} className="text-brand hover:underline">
+                    <Link to="/sites/$siteId/aps/$apId" params={{ siteId, apId: live.ap_id }} data-inline-link className="text-brand underline underline-offset-4">
                       {live.ap_name || live.ap_id}
                     </Link>
                   ) : (
@@ -350,7 +350,7 @@ export function ClientDetailPage({ siteId, mac }: { siteId: string; mac: string 
         title="Events"
         bodyClassName={detail.events.length ? 'p-0' : undefined}
         action={
-          <Link to="/sites/$siteId/events" params={{ siteId }} search={{ client: mac }} className="text-sm text-brand hover:underline">
+          <Link to="/sites/$siteId/events" params={{ siteId }} search={{ client: mac }} className={actionLink}>
             All events for this client
           </Link>
         }

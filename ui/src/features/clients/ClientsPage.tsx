@@ -13,7 +13,7 @@ import { RelativeTime } from '@/components/app/RelativeTime'
 import { EmptyState, ErrorState, SkeletonRows } from '@/components/app/states'
 import { formatBytes } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { Dash } from '@/features/overview/kit/Card'
+import { Dash, actionLink } from '@/features/overview/kit/Card'
 import { FilterBar, NativeSelect } from '@/features/overview/kit/FilterBar'
 import { ResponsiveList, type Column } from '@/features/overview/kit/ResponsiveList'
 import { downloadCsv, toCsv } from '@/features/overview/kit/csv'
@@ -200,14 +200,14 @@ export function ClientsPage({ siteId, search, onSearch }: { siteId: string; sear
         <EmptyState
           title="No clients connected right now"
           action={
-            <Link to="." search={{ view: 'recent' } as never} className="text-sm text-brand underline-offset-4 hover:underline">
+            <Link to="." search={{ view: 'recent' } as never} className={actionLink}>
               See recent sessions
             </Link>
           }
         />
       ) : rows.length === 0 ? (
         <EmptyState title="No clients match">
-          <Link to="." search={{} as never} className="text-brand underline-offset-4 hover:underline">
+          <Link to="." search={{} as never} data-inline-link className="text-brand underline underline-offset-4 hover:no-underline">
             Clear the search and filters
           </Link>
         </EmptyState>

@@ -57,6 +57,10 @@ export function Facts({ items, className }: { items: { label: ReactNode; value: 
   )
 }
 
+/** A standalone text link (card actions): 44 px tall on touch and phones (§7.7 rule 3). */
+export const actionLink =
+  'inline-flex min-h-11 min-w-11 items-center text-sm text-brand underline-offset-4 hover:underline fine:md:min-h-0 fine:md:min-w-0'
+
 /** "–" for missing values, so empty cells never collapse. */
 export function Dash({ children }: { children?: ReactNode }): ReactNode {
   if (children === null || children === undefined || children === '' || children === false) {

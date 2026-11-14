@@ -102,7 +102,7 @@ export function SitesPage({ dialog, onDialog }: { dialog: boolean; onDialog: (op
       )}
       <p className="text-xs text-muted-foreground">
         Looking for an AP that is not in a site yet?{' '}
-        <Link to={'/onboard' as never} className="text-brand underline-offset-4 hover:underline">
+        <Link to={'/onboard' as never} className="text-brand underline underline-offset-4 hover:no-underline">
           Add an AP
         </Link>
       </p>

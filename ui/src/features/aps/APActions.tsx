@@ -262,7 +262,7 @@ function ExperimentalNote({ experimental, siteId }: { experimental: boolean; sit
       {!experimental ? (
         <span>
           Experimental options are off for this site.{' '}
-          <Link to={'/sites/$siteId/settings/advanced' as never} params={{ siteId } as never} className="text-brand underline-offset-4 hover:underline">
+          <Link to={'/sites/$siteId/settings/advanced' as never} params={{ siteId } as never} data-inline-link className="text-brand underline underline-offset-4 hover:no-underline">
             Turn them on in Site settings › Advanced
           </Link>{' '}
           to use this.

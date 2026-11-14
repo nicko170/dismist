@@ -147,7 +147,7 @@ export function EventsView({
       {search.before ? (
         <p className="text-sm text-muted-foreground">
           Showing events before {new Date(search.before).toLocaleString()}.{' '}
-          <button type="button" className="text-brand underline-offset-4 hover:underline" onClick={() => onSearch({ before: undefined })}>
+          <button type="button" className="inline-flex min-h-11 items-center text-brand underline underline-offset-4 hover:no-underline fine:md:min-h-0" onClick={() => onSearch({ before: undefined })}>
             Show the newest
           </button>
         </p>
