@@ -132,6 +132,7 @@ spec:
             {{- with .Values.apFeatures }}
             - -ap-features={{ join "," . }}
             {{- end }}
+            {{- include "dismist.controllerArgs" . | trim | nindent 12 }}
             {{- with .Values.controller.uiHost }}
             - -ui-host={{ . }}
             {{- end }}

@@ -66,6 +66,13 @@ controller:
   # Key in privateSecret holding a custom AP config template. Empty uses the
   # bundled AP33 template.
   apConfigKey: ""
+  # How a config change reaches a connected AP (-config-push, design §5.6):
+  # "reconnect" drops the AP's session so it fetches the new config, "notify"
+  # sends ep-config-change and falls back to a reconnect when the AP does not
+  # fetch within 15 s. Each AP can still be switched with its
+  # config_change_notify protocol feature. Empty keeps dismistd's default
+  # (reconnect until notify has passed its lab test).
+  configPush: ""
   # Deprecated: use metrics.*. Overrides the loopback metrics listen address
   # (default 127.0.0.1:<metrics.port>) while metrics are not exposed; an
   # empty string disables metrics. Ignored once metrics.service,
@@ -170,11 +177,14 @@ resources:
 
 # Prometheus metrics, alerts and Grafana dashboards.
 #
-# One switch ships the scrape Service, ServiceMonitor, PrometheusRule and
-# dashboard ConfigMap (the last two once the chart carries rules and
-# dashboards). Each part below also has its own `enabled`: null follows this
-# switch, true or false overrides it. The ServiceMonitor and PrometheusRule
-# need the Prometheus Operator CRDs (monitoring.coreos.com).
+# One switch ships the scrape Service, ServiceMonitor, PrometheusRule (the
+# alerts in monitoring/rules.yaml) and the dashboard ConfigMap (Dismist /
+# Overview, Access point, and Clients & RF). Each part below also has its own
+# `enabled`: null follows this switch, true or false overrides it. The
+# ServiceMonitor and PrometheusRule need the Prometheus Operator CRDs
+# (monitoring.coreos.com). The alerts are warning and info only; leave
+# prometheusRule.enabled false until your Alertmanager routes namespace
+# dismist somewhere sensible.
 monitoring:
   enabled: false
 
@@ -184,11 +194,16 @@ metrics:
   # scrapeAnnotations) makes dismistd listen on :<port>, all addresses.
   enabled: true
   port: 9090
-  # Add site, AP and WLAN names as a `name` label on *_info series
-  # (-metrics-names). Off: series carry IDs only.
+  # Add site, AP and WLAN names as a `name` label on *_info series, the
+  # served certificate's name, LLDP neighbours and (per-client) client host
+  # names (-metrics-names). Off: series carry IDs only. The dashboards show
+  # names when this is on and IDs otherwise.
   includeNames: false
-  # Client series: off, aggregate or per-client (per-client exports client
-  # MACs) (-metrics-clients), and the per-client cap (-metrics-client-limit).
+  # Client series (-metrics-clients): off (counts only), aggregate (signal,
+  # protocol and throughput per radio, no MACs) or per-client (also about 8
+  # series per client, labelled with its MAC; kept as long as Prometheus
+  # keeps data). clientLimit caps per-client series, clients in MAC order
+  # (-metrics-client-limit).
   clients: aggregate
   clientLimit: 100
   # Require a bearer token on every scrape: the name of a Secret in the
@@ -217,7 +232,8 @@ metrics:
     labels: {}
     interval: 30s
     scrapeTimeout: 10s
-    # Fail the scrape past this many samples (0: no limit).
+    # Fail the scrape past this many samples (0: no limit). A full AP is about
+    # 150 to 250 series; 20000 is a sensible backstop.
     sampleLimit: 0
     # Set instance=<fullname> on every series, so AP series stay one series
     # across pod restarts (the chart always runs one replica).
@@ -274,7 +290,24 @@ backup:
 
 # Protocol features on by default for every AP (-ap-features, design §5.7),
 # e.g. [pong2]. Each AP's protocol_features override them. Empty: all off.
+# Every feature sends the AP a frame it has not had from dismist before:
+# switch them on per AP first (AP settings, Diagnostics), one at a time.
 apFeatures: []
+
+# History retention (design §4.1): how long the pruner keeps minute samples,
+# client sessions and events (Go durations such as 720h). Empty keeps
+# dismistd's defaults (30, 180 and 90 days).
+retention:
+  samples: ""
+  sessions: ""
+  events: ""
+
+migration:
+  # AP IDs whose /rw/etc/mist/ep-control/local_* files have been reviewed,
+  # so the schema 2 migration may claim equivalence for them anyway
+  # (-migrate-accept-local-files, design §4.7). Leave empty unless the
+  # migration report names an AP and you have checked its local files.
+  acceptLocalFiles: []
 
 probes:
   # The startup probe checks /healthz every 5 s; this many failures (60 = 5

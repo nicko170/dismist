@@ -170,3 +170,35 @@ than by the pod at start.
 - -backup-tmp-max={{ include "dismist.byteSize" (list "backup.tmpSizeLimit" .) }}
 {{- end }}
 {{- end }}
+
+{{/*
+The -config-push, -retain-* and -migrate-accept-local-files flags (design
+§5.6, §4.1, §4.7). Each is passed only when set, so dismistd's own defaults
+apply otherwise.
+*/}}
+{{- define "dismist.controllerArgs" -}}
+{{- with .Values.controller.configPush }}
+{{- if not (has (toString .) (list "reconnect" "notify")) }}
+{{- fail (printf "controller.configPush must be reconnect, notify or empty, not %q" (toString .)) }}
+{{- end }}
+- -config-push={{ . }}
+{{- end }}
+{{- $retention := default dict .Values.retention }}
+{{- range $key := list "samples" "sessions" "events" }}
+{{- with (get $retention $key) }}
+{{- if not (regexMatch `^([0-9]+(\.[0-9]+)?(h|m|s))+$` (toString .)) }}
+{{- fail (printf "retention.%s must be a Go duration such as 720h, not %q" $key (toString .)) }}
+{{- end }}
+- -retain-{{ $key }}={{ . }}
+{{- end }}
+{{- end }}
+{{- $migration := default dict .Values.migration }}
+{{- with $migration.acceptLocalFiles }}
+{{- range . }}
+{{- if not (regexMatch `^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$` (toString .)) }}
+{{- fail (printf "migration.acceptLocalFiles holds AP IDs, not %q" (toString .)) }}
+{{- end }}
+{{- end }}
+- -migrate-accept-local-files={{ join "," . }}
+{{- end }}
+{{- end }}
