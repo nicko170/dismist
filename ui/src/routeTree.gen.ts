@@ -12,6 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SitesSiteIdRouteRouteImport } from './routes/sites/$siteId/route'
+import { Route as SitesSiteIdRfIndexRouteImport } from './routes/sites/$siteId/rf/index'
+import { Route as SitesSiteIdRfNeighboursRouteImport } from './routes/sites/$siteId/rf/neighbours'
+import { Route as SitesSiteIdWlansIndexRouteImport } from './routes/sites/$siteId/wlans/index'
+import { Route as SitesSiteIdWlansNewRouteImport } from './routes/sites/$siteId/wlans/new'
+import { Route as SitesSiteIdWlansWlanIdIndexRouteImport } from './routes/sites/$siteId/wlans/$wlanId/index'
+import { Route as SitesSiteIdWlansWlanIdExpertRouteImport } from './routes/sites/$siteId/wlans/$wlanId/expert'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +34,113 @@ const SitesSiteIdRouteRoute = SitesSiteIdRouteRouteImport.update({
   path: '/sites/$siteId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SitesSiteIdRfIndexRoute = SitesSiteIdRfIndexRouteImport.update({
+  id: '/rf/',
+  path: '/rf/',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdRfNeighboursRoute = SitesSiteIdRfNeighboursRouteImport.update({
+  id: '/rf/neighbours',
+  path: '/rf/neighbours',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdWlansIndexRoute = SitesSiteIdWlansIndexRouteImport.update({
+  id: '/wlans/',
+  path: '/wlans/',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdWlansNewRoute = SitesSiteIdWlansNewRouteImport.update({
+  id: '/wlans/new',
+  path: '/wlans/new',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdWlansWlanIdIndexRoute =
+  SitesSiteIdWlansWlanIdIndexRouteImport.update({
+    id: '/wlans/$wlanId/',
+    path: '/wlans/$wlanId/',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
+const SitesSiteIdWlansWlanIdExpertRoute =
+  SitesSiteIdWlansWlanIdExpertRouteImport.update({
+    id: '/wlans/$wlanId/expert',
+    path: '/wlans/$wlanId/expert',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
+  '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
+  '/sites/$siteId/rf/': typeof SitesSiteIdRfIndexRoute
+  '/sites/$siteId/wlans/': typeof SitesSiteIdWlansIndexRoute
+  '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
+  '/sites/$siteId/wlans/$wlanId/': typeof SitesSiteIdWlansWlanIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
+  '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
+  '/sites/$siteId/rf': typeof SitesSiteIdRfIndexRoute
+  '/sites/$siteId/wlans': typeof SitesSiteIdWlansIndexRoute
+  '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
+  '/sites/$siteId/wlans/$wlanId': typeof SitesSiteIdWlansWlanIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
+  '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
+  '/sites/$siteId/rf/': typeof SitesSiteIdRfIndexRoute
+  '/sites/$siteId/wlans/': typeof SitesSiteIdWlansIndexRoute
+  '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
+  '/sites/$siteId/wlans/$wlanId/': typeof SitesSiteIdWlansWlanIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/sites/$siteId'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/sites/$siteId'
+    | '/sites/$siteId/rf/neighbours'
+    | '/sites/$siteId/wlans/new'
+    | '/sites/$siteId/rf/'
+    | '/sites/$siteId/wlans/'
+    | '/sites/$siteId/wlans/$wlanId/expert'
+    | '/sites/$siteId/wlans/$wlanId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/sites/$siteId'
-  id: '__root__' | '/' | '/login' | '/sites/$siteId'
+  to:
+    | '/'
+    | '/login'
+    | '/sites/$siteId'
+    | '/sites/$siteId/rf/neighbours'
+    | '/sites/$siteId/wlans/new'
+    | '/sites/$siteId/rf'
+    | '/sites/$siteId/wlans'
+    | '/sites/$siteId/wlans/$wlanId/expert'
+    | '/sites/$siteId/wlans/$wlanId'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/sites/$siteId'
+    | '/sites/$siteId/rf/neighbours'
+    | '/sites/$siteId/wlans/new'
+    | '/sites/$siteId/rf/'
+    | '/sites/$siteId/wlans/'
+    | '/sites/$siteId/wlans/$wlanId/expert'
+    | '/sites/$siteId/wlans/$wlanId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
-  SitesSiteIdRouteRoute: typeof SitesSiteIdRouteRoute
+  SitesSiteIdRouteRoute: typeof SitesSiteIdRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -82,13 +166,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sites/$siteId/rf/': {
+      id: '/sites/$siteId/rf/'
+      path: '/rf'
+      fullPath: '/sites/$siteId/rf/'
+      preLoaderRoute: typeof SitesSiteIdRfIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/rf/neighbours': {
+      id: '/sites/$siteId/rf/neighbours'
+      path: '/rf/neighbours'
+      fullPath: '/sites/$siteId/rf/neighbours'
+      preLoaderRoute: typeof SitesSiteIdRfNeighboursRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/wlans/': {
+      id: '/sites/$siteId/wlans/'
+      path: '/wlans'
+      fullPath: '/sites/$siteId/wlans/'
+      preLoaderRoute: typeof SitesSiteIdWlansIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/wlans/new': {
+      id: '/sites/$siteId/wlans/new'
+      path: '/wlans/new'
+      fullPath: '/sites/$siteId/wlans/new'
+      preLoaderRoute: typeof SitesSiteIdWlansNewRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/wlans/$wlanId/': {
+      id: '/sites/$siteId/wlans/$wlanId/'
+      path: '/wlans/$wlanId'
+      fullPath: '/sites/$siteId/wlans/$wlanId/'
+      preLoaderRoute: typeof SitesSiteIdWlansWlanIdIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/wlans/$wlanId/expert': {
+      id: '/sites/$siteId/wlans/$wlanId/expert'
+      path: '/wlans/$wlanId/expert'
+      fullPath: '/sites/$siteId/wlans/$wlanId/expert'
+      preLoaderRoute: typeof SitesSiteIdWlansWlanIdExpertRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
   }
 }
+
+interface SitesSiteIdRouteRouteChildren {
+  SitesSiteIdRfNeighboursRoute: typeof SitesSiteIdRfNeighboursRoute
+  SitesSiteIdWlansNewRoute: typeof SitesSiteIdWlansNewRoute
+  SitesSiteIdRfIndexRoute: typeof SitesSiteIdRfIndexRoute
+  SitesSiteIdWlansIndexRoute: typeof SitesSiteIdWlansIndexRoute
+  SitesSiteIdWlansWlanIdExpertRoute: typeof SitesSiteIdWlansWlanIdExpertRoute
+  SitesSiteIdWlansWlanIdIndexRoute: typeof SitesSiteIdWlansWlanIdIndexRoute
+}
+
+const SitesSiteIdRouteRouteChildren: SitesSiteIdRouteRouteChildren = {
+  SitesSiteIdRfNeighboursRoute: SitesSiteIdRfNeighboursRoute,
+  SitesSiteIdWlansNewRoute: SitesSiteIdWlansNewRoute,
+  SitesSiteIdRfIndexRoute: SitesSiteIdRfIndexRoute,
+  SitesSiteIdWlansIndexRoute: SitesSiteIdWlansIndexRoute,
+  SitesSiteIdWlansWlanIdExpertRoute: SitesSiteIdWlansWlanIdExpertRoute,
+  SitesSiteIdWlansWlanIdIndexRoute: SitesSiteIdWlansWlanIdIndexRoute,
+}
+
+const SitesSiteIdRouteRouteWithChildren =
+  SitesSiteIdRouteRoute._addFileChildren(SitesSiteIdRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
-  SitesSiteIdRouteRoute: SitesSiteIdRouteRoute,
+  SitesSiteIdRouteRoute: SitesSiteIdRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

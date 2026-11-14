@@ -740,3 +740,28 @@ export function Stepper({ onStep, disabled, label }: { onStep: (delta: number) =
     </div>
   )
 }
+
+/**
+ * A switch bound to a form path that is part of a composite option
+ * ("mpsk.enabled" of wlan.mpsk): the option supplies badges and locking.
+ */
+export function BoundSwitch({ name, optionKey, label, help }: { name: string; optionKey: string; label: ReactNode; help?: ReactNode }) {
+  const state = useOptionState(optionKey)
+  const { control } = useFormContext()
+  const { field, fieldState } = useController({ name, control })
+  const id = useId()
+  const text = helpText(state.meta, help, state.lockReason)
+  return (
+    <FieldShell id={id} label={label} help={text} error={fieldState.error?.message} badges={state.badges} dirty={fieldState.isDirty} inline>
+      <Switch
+        id={id}
+        checked={Boolean(field.value)}
+        onCheckedChange={(checked) => field.onChange(checked)}
+        onBlur={field.onBlur}
+        disabled={!state.editable}
+        aria-describedby={describedBy(id, text, fieldState.error)}
+        aria-invalid={fieldState.error ? true : undefined}
+      />
+    </FieldShell>
+  )
+}
