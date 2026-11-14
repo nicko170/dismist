@@ -1,18 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { networksQuery } from '@/api/queries/networks'
 import { siteQuery } from '@/api/queries/sites'
 import { WlanList } from '@/features/wlans/WlanList'
+import { oneOf, text } from '@/features/settings/kit/search'
 
 // WLAN list (design §3.8). `?dialog=qr&wlan=` opens the Wi-Fi QR dialog, so
 // Back closes it (§2.5).
-const search = z.object({
-  dialog: z.enum(['qr']).optional().catch(undefined),
-  wlan: z.string().optional().catch(undefined),
-})
+const search = (input: Record<string, unknown>) => ({ dialog: oneOf(input.dialog, ['qr'] as const), wlan: text(input.wlan) })
 
 export const Route = createFileRoute('/sites/$siteId/wlans/')({
-  validateSearch: (input) => search.parse(input),
+  validateSearch: search,
   loader: ({ context, params }) => {
     void context.queryClient.prefetchQuery(networksQuery(params.siteId))
     void context.queryClient.prefetchQuery(siteQuery(params.siteId))

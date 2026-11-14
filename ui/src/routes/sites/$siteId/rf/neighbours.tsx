@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { NeighboursPage } from '@/features/rf/Neighbours'
+import { oneOf } from '@/features/settings/kit/search'
 
 // Neighbour scan (design §3.10 "Neighbours"); `?band=` filters.
-const search = z.object({ band: z.enum(['2.4', '5']).optional().catch(undefined) })
+const search = (input: Record<string, unknown>) => ({ band: oneOf(input.band, ['2.4', '5'] as const) })
 
 export const Route = createFileRoute('/sites/$siteId/rf/neighbours')({
-  validateSearch: (input) => search.parse(input),
+  validateSearch: search,
   staticData: { title: 'Neighbours', detail: true, nav: 'rf' },
   component: function NeighboursRoute() {
     const { siteId } = Route.useParams()

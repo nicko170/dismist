@@ -1,17 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { networksQuery } from '@/api/queries/networks'
 import { WlanEditor } from '@/features/wlans/WlanEditor'
+import { oneOf, text } from '@/features/settings/kit/search'
 
 // WLAN editor, create (design §3.9). `?preset=` picks Home, Guest or IoT
 // defaults; `?from=<id>` duplicates an existing WLAN.
-const search = z.object({
-  preset: z.enum(['home', 'guest', 'iot']).optional().catch(undefined),
-  from: z.string().optional().catch(undefined),
-})
+const search = (input: Record<string, unknown>) => ({ preset: oneOf(input.preset, ['home', 'guest', 'iot'] as const), from: text(input.from) })
 
 export const Route = createFileRoute('/sites/$siteId/wlans/new')({
-  validateSearch: (input) => search.parse(input),
+  validateSearch: search,
   loader: ({ context, params }) => void context.queryClient.prefetchQuery(networksQuery(params.siteId)),
   staticData: { title: 'New WLAN', detail: true, nav: 'wlans' },
   component: function NewWlanRoute() {
