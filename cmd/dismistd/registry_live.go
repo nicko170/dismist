@@ -43,6 +43,8 @@ func newAPRegistry(manager *controller.Manager, resolver *dnsserver.Resolver, op
 	for _, ap := range initial.APs {
 		if _, ok := manager.Server(ap.ID); ok {
 			registry.active[ap.ID] = bindingForAP(ap, options)
+		} else if ap.SiteID != "" && len(ap.Secret) != model.SecretSize {
+			registry.noSecret[ap.ID] = true // prepareAPs already logged it
 		}
 	}
 	return registry
