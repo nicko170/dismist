@@ -137,6 +137,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Bundle budgets (ui/.size-limit.js, design §7.9).
+      - name: Size budget
+        run: npm run --if-present size
+
       # ui/dist is not committed apart from a stub; a build that leaves the
       # stub (or no assets) in place would ship a blank UI.
       - name: Build output is not the stub
@@ -160,8 +164,14 @@ jobs:
           fi
 
   ui-e2e:
-    name: UI end-to-end (Playwright)
+    name: UI end-to-end (Playwright, ${{ matrix.project }})
     runs-on: ubuntu-latest
+    # Every route and spec at each tested size (design §7.7, §7.10), one
+    # runner per Playwright project so the sizes run in parallel.
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [phone-390, tablet-768, tablet-768-touch, laptop-1024, tablet-1024-touch, desktop-1440]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -215,12 +225,62 @@ jobs:
       - name: Playwright
         if: steps.scaffold.outputs.present == 'true'
         working-directory: ui
-        run: npx playwright test --pass-with-no-tests
+        run: npx playwright test --project=${{ matrix.project }} --grep-invert @live --pass-with-no-tests
 
       - uses: actions/upload-artifact@v4
         if: failure() && steps.scaffold.outputs.present == 'true'
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7
+
+  ui-e2e-live:
+    name: UI end-to-end against dismistd and fake APs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # dismistd embeds ui/dist, so the UI is built first.
+      - name: Build the UI, dismistd, dismist and fakeap
+        run: |
+          (cd ui && npm ci && scripts/ensure-native-typescript.sh && npm run build)
+          mkdir -p "$RUNNER_TEMP/bin"
+          go build -o "$RUNNER_TEMP/bin/dismistd" ./cmd/dismistd
+          go build -o "$RUNNER_TEMP/bin/dismist" ./cmd/dismist
+          go build -o "$RUNNER_TEMP/bin/fakeap" ./tools/fakeap/cmd/fakeap
+          {
+            echo "DISMISTD_BIN=$RUNNER_TEMP/bin/dismistd"
+            echo "DISMIST_BIN=$RUNNER_TEMP/bin/dismist"
+            echo "FAKEAP_BIN=$RUNNER_TEMP/bin/fakeap"
+          } >>"$GITHUB_ENV"
+
+      - name: Install browsers
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+
+      # The harness checks /metrics end to end with two fake APs, then runs
+      # the specs tagged @live (none is fine until the screens add them).
+      - name: Playwright @live specs
+        run: .github/workflows/scripts/live-harness.sh -- bash -c 'cd ui && npx playwright test --grep @live --pass-with-no-tests'
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-live
           path: |
             ui/playwright-report/
             ui/test-results/
@@ -299,6 +359,33 @@ jobs:
           fi
           promtool test rules "${tests[@]}"
 
+  dashboards:
+    name: Dashboards (generated, queries evaluate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Generated dashboards up to date
+        run: |
+          python3 tools/dashboards/generate.py charts/dismist/monitoring/dashboards
+          changes=$(git status --porcelain -- charts/dismist/monitoring/dashboards)
+          if [ -n "$changes" ]; then
+            echo "::error::run tools/dashboards/generate.py charts/dismist/monitoring/dashboards and commit the result:"
+            echo "$changes"
+            exit 1
+          fi
+
+      # Every panel query, loaded with the exporter's fixture, must evaluate
+      # (no parse errors, no many-to-many joins).
+      - name: Queries evaluate against the exporter fixture
+        run: tools/dashboards/check-queries.sh
+
   image:
     name: Container image
     runs-on: ubuntu-latest
@@ -326,7 +413,20 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: dismist:ci
+          build-args: |
+            VERSION=ci
+            REVISION=${{ github.sha }}
           cache-from: type=gha
+
+      # The migration-compat job runs this exact image.
+      - name: Save the image
+        run: docker save dismist:ci | gzip -1 >"$RUNNER_TEMP/dismist-ci.tar.gz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dismist-ci-image
+          path: ${{ runner.temp }}/dismist-ci.tar.gz
+          retention-days: 1
 
       - uses: azure/setup-helm@v4
 
@@ -350,3 +450,35 @@ jobs:
             fi
           done <flags.txt
           exit "$missing"
+
+  migration-compat:
+    name: Migration and rollback compatibility
+    needs: image
+    runs-on: ubuntu-latest
+    env:
+      # The M0 release: the oldest image the rollback ladder may target
+      # (design §8.8). Add later releases to PREVIOUS_IMAGES as they ship.
+      M0_IMAGE: ghcr.io/nicko170/dismist:0.3.0
+      PREVIOUS_IMAGES: ghcr.io/nicko170/dismist:0.3.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dismist-ci-image
+          path: ${{ runner.temp }}
+
+      - name: Load the image under test
+        run: gunzip -c "$RUNNER_TEMP/dismist-ci.tar.gz" | docker load
+
+      # Seeds a schema-1 database with each previous release, migrates it
+      # with this image, rolls back, re-migrates after an older write, and
+      # checks the M0 image refuses a compat 2 database (design §4.1 rule 6).
+      - name: migration-compat
+        run: NEW_IMAGE=dismist:ci tools/migrationcompat/run.sh
