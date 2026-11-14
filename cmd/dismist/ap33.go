@@ -19,6 +19,7 @@ const ap33Usage = `usage:
   dismist ap33 serial-response <challenge>
   dismist ap33 prepare-trust --stock-dir DIR --controller-ca FILE [--controller-ca FILE...]
                              [--url wss://HOST/ws] --output DIR
+  dismist ap33 check-trust --url wss://HOST/ws --bundle FILE
 
 ssh flags: -i KEY, -p PORT, -l USER, -o Key=Value (repeatable), -F ssh_config,
 --known-hosts FILE. The user defaults to root; host keys are trusted on first
@@ -49,6 +50,8 @@ func runAP33With(args []string, env ap33Env) error {
 		return runSerialResponse(args[1:], env.stdout)
 	case "prepare-trust":
 		return runPrepareTrust(args[1:], env.stdout)
+	case "check-trust":
+		return runCheckTrust(args[1:], env)
 	}
 	return errors.New(ap33Usage)
 }
