@@ -33,10 +33,15 @@ type Server struct {
 	streamMaxAge    time.Duration
 	mutationLock    *sync.Mutex
 	tokens          TokenManager
+	next            fs.FS
 }
 
 func New(store model.StateStore, control *controller.Server, base []byte, apID string, allowedHosts ...string) *Server {
 	web, err := fs.Sub(webassets.WebAssets, "web/dist")
+	if err != nil {
+		panic(err)
+	}
+	next, err := fs.Sub(webassets.UIAssets, "ui/dist")
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +55,7 @@ func New(store model.StateStore, control *controller.Server, base []byte, apID s
 		store: store, control: control, base: append([]byte(nil), base...),
 		apID: apID, web: web, assets: http.FileServer(http.FS(web)), hosts: hosts,
 		streamInterval: time.Second, streamHeartbeat: 15 * time.Second, streamMaxAge: 30 * time.Minute,
-		mutationLock: new(sync.Mutex),
+		mutationLock: new(sync.Mutex), next: next,
 	}
 	if withTokens, ok := store.(interface{ Tokens() *model.TokenStore }); ok {
 		server.tokens = withTokens.Tokens()
@@ -152,7 +157,8 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		id := strings.TrimPrefix(request.URL.Path, "/api/networks/")
 		s.removeNetwork(writer, s.currentSiteID(), id)
 	default:
-		if (request.Method == http.MethodGet || request.Method == http.MethodHead) && !strings.HasPrefix(request.URL.Path, "/api/") {
+		if (request.Method == http.MethodGet || request.Method == http.MethodHead) &&
+			!strings.HasPrefix(request.URL.Path, "/api/") && !strings.HasPrefix(request.URL.Path, "/auth/") {
 			s.serveUI(writer, request)
 		} else {
 			routeNotFound(writer)
