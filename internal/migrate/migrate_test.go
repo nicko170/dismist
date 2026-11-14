@@ -51,7 +51,7 @@ func plenty(string) (model.DiskSpace, error) {
 
 func TestNoStepsDoesNothing(t *testing.T) {
 	store := newStore(t)
-	result, err := Run(store, Steps(), Options{Context: Context{Now: now}, DiskUsage: plenty})
+	result, err := Run(store, nil, Options{Context: Context{Now: now}, DiskUsage: plenty})
 	if err != nil || result.State.State != StateNotRun || len(result.Ran) != 0 {
 		t.Fatalf("result %+v %v", result, err)
 	}
@@ -175,7 +175,7 @@ func TestRefusedOrFailedStepRollsBackToLegacy(t *testing.T) {
 
 func TestStepAboveSupportedSchemaIsRefused(t *testing.T) {
 	store := newStore(t)
-	if _, err := Run(store, []Step{renameStep("x")}, Options{Context: Context{Now: now}, DiskUsage: plenty}); err == nil {
+	if _, err := Run(store, []Step{renameStep("x")}, Options{Context: Context{Now: now}, DiskUsage: plenty, MaxSchema: 1}); err == nil {
 		t.Fatal("M0 binary migrated to schema 2")
 	}
 }

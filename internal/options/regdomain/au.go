@@ -1,10 +1,13 @@
 package regdomain
 
-// AU is the AU/890 table (design Appendix A, from [RF §5]; to be confirmed
-// with `wl chanspecs` on the Lab AP, §9 Q10). Channels 120 to 128 are
-// excluded (weather radar); 116 and 165 are 20 MHz only. DFS: 52 to 64 and
-// 100 to 144. The non-DFS 80 MHz blocks are 36-48 and 149-161, which is
-// why they are the default 5 GHz Auto list.
+// AU is the AU/890 table (design Appendix A, from [RF §5]), confirmed on
+// the production AP33 with `wl chanspecs` (§9 Q10, live findings
+// 2026-11-14): 2.4 GHz channels 1 to 13; 5 GHz 80 MHz blocks 36-48, 52-64,
+// 100-112, 132-144 and 149-161 (no 116-128 block); and no 160 MHz chanspec
+// at all, so 160 MHz is not offered. Channels 120 to 128 are excluded
+// (weather radar); 116 and 165 are 20 MHz only. DFS: 52 to 64 and 100 to
+// 144. The non-DFS 80 MHz blocks are 36-48 and 149-161, which is why they
+// are the default 5 GHz Auto list.
 var AU = Domain{
 	Country: "AU",
 	CCRev:   "AU/890",
@@ -32,11 +35,6 @@ var AU = Domain{
 				Primaries: primaries(auDFS,
 					36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 132, 136, 140, 144, 149, 153, 157, 161),
 				Blocks: [][]int{{36, 40, 44, 48}, {52, 56, 60, 64}, {100, 104, 108, 112}, {132, 136, 140, 144}, {149, 153, 157, 161}},
-			},
-			{
-				Width: 160, NeedsLabTest: true,
-				Primaries: primaries(auDFS, 36, 40, 44, 48, 52, 56, 60, 64),
-				Blocks:    [][]int{{36, 40, 44, 48, 52, 56, 60, 64}},
 			},
 		},
 	},

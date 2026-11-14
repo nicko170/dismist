@@ -46,10 +46,18 @@ type Observation struct {
 	SkipClients     bool             `json:"-"`
 	// Radios are the per-radio minute values stored on the sample (phase 1).
 	Radios []RadioSample `json:"radios,omitempty"`
+	// Model is the AP-reported model; "" keeps the stored one.
+	Model string `json:"model,omitempty"`
+	// VAPs is the AP's current field-32 VAP list, stored in ap_status as
+	// APStatusStore.SetVAPs does. nil means unknown (no full frame yet):
+	// the stored list is kept.
+	VAPs []VAPRecord `json:"vaps,omitempty"`
 }
 
 // RadioSample is one radio's values in a minute sample (design §4.1).
 type RadioSample struct {
+	// Dev is the radio interface ("r0", "r1"); optional.
+	Dev         string  `json:"dev,omitempty"`
 	Band        string  `json:"band"`
 	Channel     int     `json:"channel"`
 	Width       int     `json:"width"`
@@ -57,15 +65,6 @@ type RadioSample struct {
 	NoiseDBm    int     `json:"noise_dbm"`
 	Clients     int     `json:"clients"`
 	MaxPowerDBm int     `json:"max_power_dbm"`
-}
-
-type APStatusRecord struct {
-	SiteID          string    `json:"site_id"`
-	APID            string    `json:"ap_id"`
-	ObservedAt      time.Time `json:"observed_at"`
-	Connected       bool      `json:"connected"`
-	Firmware        string    `json:"firmware,omitempty"`
-	AppliedRevision uint64    `json:"applied_revision"`
 }
 
 type MinuteSample struct {
@@ -127,12 +126,7 @@ func (s *BoltStore) RecordObservation(observation Observation) error {
 		return errors.New("AP is not assigned to observation site")
 	}
 	return s.db.Update(func(tx *bolt.Tx) error {
-		status := APStatusRecord{
-			SiteID: observation.SiteID, APID: observation.APID,
-			ObservedAt: observation.At, Connected: observation.Connected,
-			Firmware: observation.Firmware, AppliedRevision: observation.AppliedRevision,
-		}
-		if err := putJSON(tx.Bucket([]byte("ap_status")), []byte(observation.APID), status); err != nil {
+		if err := recordStatus(tx, observation); err != nil {
 			return err
 		}
 		sample := MinuteSample{
@@ -162,6 +156,34 @@ func (s *BoltStore) RecordObservation(observation Observation) error {
 		}
 		return recordEvents(tx, observation)
 	})
+}
+
+// recordStatus merges the observation into the AP's ap_status record,
+// keeping the fields other writers own (hello, reboots, tunnel address).
+func recordStatus(tx *bolt.Tx, observation Observation) error {
+	bucket, err := statusBucket(tx)
+	if err != nil {
+		return err
+	}
+	status, _, err := readStatus(bucket, observation.APID)
+	if err != nil {
+		status = APStatusRecord{}
+	}
+	status.SiteID, status.APID = observation.SiteID, observation.APID
+	status.ObservedAt, status.Connected = observation.At, observation.Connected
+	status.Firmware, status.AppliedRevision = observation.Firmware, observation.AppliedRevision
+	if observation.Model != "" {
+		status.Model = observation.Model
+	}
+	if observation.VAPs != nil {
+		next := normaliseVAPs(observation.VAPs)
+		at := observation.At.UTC()
+		if status.VAPs == nil || !sameVAPs(status.VAPs, next) {
+			status.VAPs, status.VAPsChangedAt = next, at
+		}
+		status.VAPsSeenAt = at
+	}
+	return putJSON(bucket, []byte(observation.APID), status)
 }
 
 func recordClients(tx *bolt.Tx, observation Observation) error {
@@ -306,7 +328,12 @@ func timeKey(value int64) []byte {
 	return result[:]
 }
 
-func listHistory[T any](db *bolt.DB, bucketName, siteID, apID string, limit int) ([]T, error) {
+// listLegacy returns the newest limit records under siteID (and apID), in
+// ascending time order, for buckets keyed site \x00 ap \x00 <8-byte
+// ascending time> (samples: seconds, legacy events: nanoseconds). A
+// site-level query merges the APs by time, so with several APs it returns
+// the site's newest records, not the last AP's.
+func listLegacy[T any](db *bolt.DB, bucketName, siteID, apID string, limit int, at func(int) func([]byte) (time.Time, bool)) ([]T, error) {
 	if siteID == "" {
 		return nil, errors.New("site ID required")
 	}
@@ -314,36 +341,63 @@ func listHistory[T any](db *bolt.DB, bucketName, siteID, apID string, limit int)
 		limit = 100
 	}
 	result := make([]T, 0)
-	prefix := historyPrefix(siteID, apID)
 	err := db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(bucketName))
 		if bucket == nil {
 			return fmt.Errorf("missing %s bucket", bucketName)
 		}
-		cursor := bucket.Cursor()
-		for key, raw := cursor.Seek(prefix); key != nil && bytes.HasPrefix(key, prefix); key, raw = cursor.Next() {
+		prefixes := [][]byte{historyPrefix(siteID, apID)}
+		if apID == "" {
+			prefixes = segments(bucket, historyPrefix(siteID, ""))
+		}
+		streams := make([]*stream, len(prefixes))
+		for index, prefix := range prefixes {
+			streams[index] = openStream(bucket, prefix, nil, true, at(len(prefix)))
+		}
+		for len(result) < limit {
+			pick := pickNewest(streams)
+			if pick < 0 {
+				break
+			}
 			var item T
-			if err := json.Unmarshal(raw, &item); err != nil {
+			if err := json.Unmarshal(streams[pick].value, &item); err != nil {
 				return err
 			}
 			result = append(result, item)
-			if len(result) > limit {
-				result = result[1:]
-			}
+			streams[pick].advance()
 		}
 		return nil
 	})
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
 	return result, err
 }
 
+// ListSamples returns the newest limit minute samples of a site (all APs
+// merged by time) or one AP, oldest first.
 func (s *BoltStore) ListSamples(siteID, apID string, limit int) ([]MinuteSample, error) {
-	return listHistory[MinuteSample](s.db, "samples", siteID, apID, limit)
+	return listLegacy[MinuteSample](s.db, BucketSamples, siteID, apID, limit, ascendingSeconds)
 }
 
+// ListClientSessions returns the newest limit client sessions (by start)
+// of a site or one AP, oldest first. It reads the sessions_t index.
 func (s *BoltStore) ListClientSessions(siteID, apID string, limit int) ([]ClientSession, error) {
-	return listHistory[ClientSession](s.db, "client_sessions", siteID, apID, limit)
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+	sessions, err := s.recentSessions(SessionQuery{SiteID: siteID, APID: apID}, limit)
+	if err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(sessions)-1; i < j; i, j = i+1, j-1 {
+		sessions[i], sessions[j] = sessions[j], sessions[i]
+	}
+	return sessions, nil
 }
 
+// ListEvents returns the newest limit records of the legacy events bucket
+// (readable for one release, design §4.1), oldest first.
 func (s *BoltStore) ListEvents(siteID, apID string, limit int) ([]EventRecord, error) {
-	return listHistory[EventRecord](s.db, "events", siteID, apID, limit)
+	return listLegacy[EventRecord](s.db, BucketEvents, siteID, apID, limit, ascendingNanos)
 }

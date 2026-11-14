@@ -38,3 +38,8 @@ func Effective(template []byte, state model.State, apID string, key []byte) (Eff
 	}
 	return EffectiveView{Config: output.Config, Canonical: canonical, Hash: hash, Report: report}, nil
 }
+
+// hashConfig is the effective hash of an AP's compiled config.
+func hashConfig(key, config []byte, ap model.APRecord) (string, []byte, effective.Report, error) {
+	return effective.HashConfig(key, config, EffectiveContext(ap))
+}

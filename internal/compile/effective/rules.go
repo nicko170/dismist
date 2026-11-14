@@ -323,7 +323,9 @@ func clamp(w *value, min, max, def int64, keys ...string) {
 // index replaces the requested one. Whether a disabled WLAN takes an index
 // is unverified (§9 Q8), so a disabled WLAN ahead of an enabled one leaves
 // every index unresolved and reports bssid_unresolved, as do OWE transition
-// companions and more than 15 WLANs on a band.
+// companions and more than 15 WLANs on a band. A disabled WLAN after every
+// enabled one runs no VAP, so its requested index changes nothing the AP
+// runs: it is removed (Version 2).
 func resolveBSSIDs(root *value, report *Report) {
 	wlans := root.get("WLANs")
 	if wlans == nil || wlans.kind != 'a' {
@@ -334,6 +336,7 @@ func resolveBSSIDs(root *value, report *Report) {
 		bands []string
 	}
 	var enabled []entry
+	var disabled []*value
 	seenDisabled := false
 	for _, wlan := range wlans.arr {
 		if wlan == nil || wlan.kind != 'o' {
@@ -342,6 +345,7 @@ func resolveBSSIDs(root *value, report *Report) {
 		}
 		if !wlan.boolAt("Enabled") {
 			seenDisabled = true
+			disabled = append(disabled, wlan)
 			continue
 		}
 		if seenDisabled || wlan.boolAt("OWE", "Transition") {
@@ -400,6 +404,15 @@ func resolveBSSIDs(root *value, report *Report) {
 				resolved[e.wlan] = map[string]int64{}
 			}
 			resolved[e.wlan][band] = index
+		}
+	}
+	for _, wlan := range disabled {
+		if configs := wlan.get("BandConfigs"); configs != nil && configs.kind == 'a' {
+			for _, config := range configs.arr {
+				if config != nil && config.kind == 'o' {
+					delete(config.obj, "BSSIDIndex")
+				}
+			}
 		}
 	}
 	for wlan, bands := range resolved {

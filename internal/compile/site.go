@@ -79,6 +79,9 @@ type SiteInput struct {
 	// desired config it supplies the baseline, so the first save after an
 	// upgrade does not count every AP as changed.
 	Previous *model.State
+	// Now is the wall-clock time for locate and WLAN schedules (zero:
+	// both off).
+	Now time.Time
 }
 
 // APResult is the outcome for one AP.
@@ -175,6 +178,7 @@ func Site(in SiteInput) (SiteResult, error) {
 		one := APResult{APID: ap.ID, SiteID: ap.SiteID, Baseline: BaselineNone}
 		input, err := InputFor(in.Template, in.State, ap.ID)
 		if err == nil {
+			input.Now = in.Now
 			one.Output, err = AP(input)
 		}
 		if err != nil {
@@ -200,6 +204,7 @@ func Site(in SiteInput) (SiteResult, error) {
 		}
 		if baseline == nil && in.Previous != nil {
 			if input, err := InputFor(in.Template, *in.Previous, ap.ID); err == nil {
+				input.Now = in.Now
 				if previous, err := AP(input); err == nil {
 					one.Baseline = BaselinePrevious
 					baseline = previous.Config
@@ -277,7 +282,7 @@ func Apply(state *model.State, store DesiredStore, opts ApplyOptions) (Applied, 
 	}
 	result, err := Site(SiteInput{
 		Template: opts.Template, State: *state, Sites: opts.Sites,
-		Desired: lookup, Previous: opts.Previous,
+		Desired: lookup, Previous: opts.Previous, Now: opts.Now,
 	})
 	if err != nil {
 		return Applied{}, err
@@ -319,6 +324,7 @@ func Apply(state *model.State, store DesiredStore, opts ApplyOptions) (Applied, 
 		}
 		input.AP = next
 		input.Time = opts.Now
+		input.Now = opts.Now
 		output, err := AP(input)
 		if err != nil {
 			return Applied{}, &APError{APID: ap.ID, Err: err}
@@ -399,6 +405,7 @@ func Prepare(template []byte, state model.State, delivered DeliveredLookup) []Se
 		input, err := InputFor(template, state, ap.ID)
 		var output Output
 		if err == nil {
+			input.Now = time.Now().UTC()
 			output, err = AP(input)
 		}
 		if err == nil {
@@ -417,5 +424,23 @@ func Prepare(template []byte, state model.State, delivered DeliveredLookup) []Se
 		result = append(result, one)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].APID < result[j].APID })
+	return result
+}
+
+// SiteShadows aggregates cross-scope shadowing per site option (design
+// §4.4): for each site-scoped typed option an AP expert patch overrides,
+// the IDs of those APs, sorted ("Overridden on 1 AP").
+func (r SiteResult) SiteShadows() map[string][]string {
+	result := map[string][]string{}
+	for _, one := range r.APs {
+		for _, shadow := range one.Output.Shadowed {
+			if shadow.By == ScopeAP && shadow.Scope == ScopeSite {
+				result[shadow.Option] = append(result[shadow.Option], one.APID)
+			}
+		}
+	}
+	for option := range result {
+		sort.Strings(result[option])
+	}
 	return result
 }

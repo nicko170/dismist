@@ -1,7 +1,10 @@
 // Package compile turns stored records into the config JSON an AP runs
-// (design §4.4). In phase 0 compile.AP is exactly the ap-identity compiler
-// (BuildSiteConfig, moved here unchanged); the typed steps, keyed merge,
-// shadowing and validation arrive in phase 2 behind the same signatures.
+// (design §4.4). A schema-1 state (legacy mode) compiles with exactly the
+// ap-identity compiler (BuildSiteConfig); a schema-2 state runs the typed
+// pipeline (pipeline.go): template → site typed → site expert → AP typed
+// → AP expert, WLANs compiled on their own and inserted after, then the
+// protected fields and firmware validation, with the trace and shadow
+// report. State.Schema selects the pipeline.
 //
 // compile.Site adds change detection: which APs' compiled config changed
 // (ignoring Timestamp), so a mutation bumps and pushes only those APs, and
@@ -28,11 +31,18 @@ type Input struct {
 	Networks []model.Network
 	// Time becomes the config's Timestamp (the AP's ConfigUpdatedAt).
 	Time time.Time
+	// Schema selects the pipeline: 2 compiles the typed fields (design
+	// §4.4); anything lower is legacy mode, the v0 compiler exactly as
+	// ap-identity runs it. InputFor copies it from State.Schema.
+	Schema uint64
+	// Now is the wall-clock time for time-dependent typed fields (locate,
+	// WLAN schedules). Zero turns them off.
+	Now time.Time
 }
 
-// Output is the result of compiling one AP. Only Config is filled in phase
-// 0; the other fields are part of the frozen contract (design §8.2) and are
-// populated from phase 2.
+// Output is the result of compiling one AP. In legacy mode only Config is
+// filled; the typed pipeline also reports the trace, shadowed options,
+// ignored keys, warnings and validation errors (design §8.2).
 type Output struct {
 	Config     []byte            `json:"-"`
 	Trace      []TraceEntry      `json:"trace,omitempty"`
@@ -44,9 +54,12 @@ type Output struct {
 
 // TraceEntry records which compile step last wrote a typed option's paths.
 type TraceEntry struct {
-	Option string   `json:"option"`
-	Step   string   `json:"step"` // "template", "site", "site_expert", "ap", "ap_expert", "wlan", "wlan_expert", "protected"
-	Paths  []string `json:"paths"`
+	Option string `json:"option"`
+	// ObjectID is the network of a WLAN option ("" for site and AP
+	// options).
+	ObjectID string   `json:"object_id,omitempty"`
+	Step     string   `json:"step"` // "template", "site", "site_expert", "ap", "ap_expert", "wlan", "wlan_expert", "protected"
+	Paths    []string `json:"paths"`
 }
 
 // Shadow is a typed option whose firmware paths an expert patch changed.
@@ -76,14 +89,10 @@ type ValidationError struct {
 	Path    string `json:"path,omitempty"`
 }
 
-// AP compiles one AP. A compile error affects only this AP.
-func AP(in Input) (Output, error) {
-	config, err := BuildSiteConfig(in.Template, in.Site, in.AP, in.Networks, in.Time)
-	if err != nil {
-		return Output{}, err
-	}
-	return Output{Config: config}, nil
-}
+// AP compiles one AP. A compile error affects only this AP. A typed
+// config that breaks a firmware rule returns *ValidationFailed together
+// with the Output that explains it.
+func AP(in Input) (Output, error) { return legacyOrTyped(in) }
 
 // ErrNoSite means the AP is not assigned to a site, so nothing is compiled
 // for it (as in v0).
@@ -91,12 +100,14 @@ var ErrNoSite = errors.New("AP has no site")
 
 // NetworksForSite returns the networks an AP of siteID carries: the site's
 // networks, plus networks with an empty SiteID when the state has no sites
-// at all (the legacy rule v0 used). They are in networks-bucket key order
-// (SiteID, NUL, ID), whatever order state holds them in: a network created
-// since the last start is appended in memory but read back in key order
-// after a restart, and the compiled WLAN order must be the same either way,
-// or change detection sees a change that is not there. Key order is also
-// what legacyv0 (and v0 after a restart) produced.
+// at all (the legacy rule v0 used). In legacy mode they are in
+// networks-bucket key order (SiteID, NUL, ID), whatever order state holds
+// them in: a network created since the last start is appended in memory
+// but read back in key order after a restart, and the compiled WLAN order
+// must be the same either way, or change detection sees a change that is
+// not there. Key order is also what legacyv0 (and v0 after a restart)
+// produced. A typed state orders them by BSSID index, then ID (design
+// §4.4), so the AP's index resolution never reorders VAPs.
 func NetworksForSite(state model.State, siteID string) []model.Network {
 	legacy := len(state.Sites) == 0
 	networks := make([]model.Network, 0)
@@ -106,6 +117,9 @@ func NetworksForSite(state model.State, siteID string) []model.Network {
 		}
 	}
 	sort.SliceStable(networks, func(i, j int) bool {
+		if state.Typed() && networks[i].BSSIDIndex != networks[j].BSSIDIndex {
+			return networks[i].BSSIDIndex < networks[j].BSSIDIndex
+		}
 		return networkKey(networks[i]) < networkKey(networks[j])
 	})
 	return networks
@@ -138,6 +152,10 @@ func ConfigTimestamp(at time.Time) float64 { return float64(at.UnixNano()) / 1e9
 // config time. It returns ErrNoSite for an AP without a site and an error
 // when the AP's site does not exist.
 func InputFor(template []byte, state model.State, apID string) (Input, error) {
+	return inputFor(template, state, apID)
+}
+
+func inputFor(template []byte, state model.State, apID string) (Input, error) {
 	var ap *model.APRecord
 	for index := range state.APs {
 		if state.APs[index].ID == apID {
@@ -164,5 +182,6 @@ func InputFor(template []byte, state model.State, apID string) (Input, error) {
 	return Input{
 		Template: template, Site: *site, AP: *ap,
 		Networks: NetworksForSite(state, ap.SiteID), Time: ConfigTime(state, *ap),
+		Schema: state.Schema,
 	}, nil
 }

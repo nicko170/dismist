@@ -23,6 +23,9 @@ type Tx struct {
 	bolt    *bolt.Tx
 	hashKey []byte
 	mem     *memBuckets // the JSON Store keeps ap_config in memory
+	// schemaSet is the schema SetSchema wrote in this transaction (0 =
+	// none): the store makes it the state's config schema on commit.
+	schemaSet uint64
 }
 
 // Bolt returns the underlying bbolt write transaction, or nil for the JSON
@@ -64,6 +67,7 @@ func (t *Tx) Schema() (SchemaInfo, error) {
 
 // SetSchema writes meta.schema (the data format the newest writer used).
 func (t *Tx) SetSchema(schema uint64) error {
+	t.schemaSet = schema
 	if t.bolt == nil {
 		return nil
 	}
@@ -166,4 +170,37 @@ func (t *Tx) PutMetaJSON(key string, value any) error {
 
 type memBuckets struct {
 	apConfig map[string][]byte
+	history  []ChangeRecord
+}
+
+// VAPs returns the last-known field-32 VAP list of every AP from ap_status
+// (the migration's BSSID-index input). The JSON store has none.
+func (t *Tx) VAPs() (map[string][]VAPRecord, error) {
+	result := map[string][]VAPRecord{}
+	if t.bolt == nil {
+		return result, nil
+	}
+	bucket := t.bolt.Bucket([]byte(BucketAPStatus))
+	if bucket == nil {
+		return result, nil
+	}
+	return result, bucket.ForEach(func(key, raw []byte) error {
+		var record APStatusRecord
+		if json.Unmarshal(raw, &record) == nil && record.VAPs != nil {
+			result[string(key)] = record.VAPs
+		}
+		return nil
+	})
+}
+
+// PutMetaRaw stores raw bytes under a meta key (JSON reports, digests).
+func (t *Tx) PutMetaRaw(key string, value []byte) error {
+	if t.bolt == nil {
+		return nil
+	}
+	meta, err := metaBucket(t.bolt)
+	if err != nil {
+		return err
+	}
+	return meta.Put([]byte(key), value)
 }
