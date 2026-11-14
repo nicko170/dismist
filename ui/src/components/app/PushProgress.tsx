@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { keys } from '@/api/keys'
 import type { APView, PushEvent, PushState } from '@/api/types'
 import { cn } from '@/lib/utils'
@@ -18,11 +18,13 @@ export function pushStateFor(revision: number, push: PushEvent | undefined, ap: 
 }
 
 export function PushProgress({ siteId, revision, aps, className }: { siteId: string; revision: number; aps: readonly PushProgressAP[]; className?: string }) {
+  const qc = useQueryClient()
   const { data: pushes } = useQuery<Record<string, PushEvent>>({
     queryKey: keys.sitePush(siteId),
-    queryFn: () => ({}),
+    // The stream owns this entry: a refetch (after a reconnect invalidates the
+    // site) keeps what the stream wrote instead of wiping it.
+    queryFn: () => qc.getQueryData<Record<string, PushEvent>>(keys.sitePush(siteId)) ?? {},
     staleTime: Number.POSITIVE_INFINITY,
-    // The stream owns this cache entry; never refetch over it.
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   })
