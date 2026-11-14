@@ -22,6 +22,10 @@ const (
 	TopicConfigApplied = "ep-config-applied-"
 	TopicPaceEvent     = "ep-pace-event-"
 	TopicClientEvent   = "client-pace-event-"
+	// TopicCommandOutput carries the output of an ap-cmd-rx diagnostic
+	// (ping, traceroute, arp) as {Topic, HashKey, Payload {Session,
+	// Output}} (design §5.6, phase 4).
+	TopicCommandOutput = "ap-cmd-output-"
 )
 
 // Band labels (API, metrics). BandScan labels the scanning radio, which
@@ -61,6 +65,7 @@ const (
 	SectionScan      = "scan"      // 69
 	SectionEvent     = "event"     // JSON PACE events
 	SectionApplied   = "applied"   // ep-config-applied-
+	SectionDiag      = "diag"      // 24.1, 38, 97, 103, 106 (phase 4)
 )
 
 // DecodeSections lists every decode-error section, in a fixed order.
@@ -69,6 +74,7 @@ func DecodeSections() []string {
 		SectionFrame, SectionHealth, SectionCloud, SectionRadio, SectionProbe,
 		SectionWLAN, SectionClient, SectionInterface, SectionPort, SectionLLDP,
 		SectionPower, SectionIP, SectionVLANs, SectionScan, SectionEvent, SectionApplied,
+		SectionDiag,
 	}
 }
 
@@ -101,8 +107,16 @@ type Update struct {
 	InactiveVLANs []int          `json:"inactive_vlans,omitempty"`
 	Scan          *Scan          `json:"scan,omitempty"` // 69
 
+	// Phase 4 (design §5.2): the kernel log lines of this frame (24.1),
+	// BLE radio counters (38) and datapath diagnostics (97, 103, 106).
+	KMsg []string   `json:"kmsg,omitempty"`
+	BLE  []BLERadio `json:"ble,omitempty"`
+	Diag *Diag      `json:"diag,omitempty"`
+
 	Event   *Event   `json:"event,omitempty"`
 	Applied *Applied `json:"applied,omitempty"`
+	// CommandOutput is an ap-cmd-output- message (phase 4).
+	CommandOutput *CommandOutput `json:"command_output,omitempty"`
 
 	// Present is the set of APStats field numbers the frame carried.
 	Present FieldSet `json:"-"`
@@ -152,17 +166,21 @@ type Health struct {
 	Cloud       *Cloud       `json:"cloud,omitempty"`       // 48
 }
 
-// MergeFast overlays the fields a fast frame carries (When, Configured,
-// Cloud) on h, the Health of the last full frame.
-func (h *Health) MergeFast(fast *Health) {
+// MergeFast overlays the fields a fast frame carried (When, Configured,
+// Cloud) on h, the Health of the last full frame. present is the fast
+// frame's Update.Present: a field the frame did not carry keeps the full
+// frame's value.
+func (h *Health) MergeFast(fast *Health, present FieldSet) {
 	if fast == nil {
 		return
 	}
-	if !fast.When.IsZero() {
+	if present.Has(5) && !fast.When.IsZero() {
 		h.When = fast.When
 	}
-	h.Configured = fast.Configured
-	if fast.Cloud != nil {
+	if present.Has(21) {
+		h.Configured = fast.Configured
+	}
+	if present.Has(48) && fast.Cloud != nil {
 		h.Cloud = fast.Cloud
 	}
 }
@@ -862,3 +880,57 @@ type Applied struct {
 	Count                  int     `json:"count,omitempty"`
 	AuditID                string  `json:"audit_id,omitempty"`
 }
+
+// BLERadio is one BLE radio's counters (38, BTRadioStats.BLE): enough to
+// show "BLE alive" (phase 4).
+type BLERadio struct {
+	MAC          string `json:"mac,omitempty"` // 38.1.1
+	TxBytes      uint64 `json:"tx_bytes"`      // 38.1.3
+	TxCommands   uint64 `json:"tx_commands"`   // 38.1.4
+	RxBytes      uint64 `json:"rx_bytes"`      // 38.1.5
+	RxEvents     uint64 `json:"rx_events"`     // 38.1.6
+	TxAdverts    uint64 `json:"tx_adverts"`    // 38.1.7
+	Scans        uint64 `json:"scans"`         // 38.1.9
+	RxScanPkts   uint64 `json:"rx_scan_pkts"`  // 38.1.10
+	RxAdverts    uint64 `json:"rx_adverts"`    // 38.1.13
+	TxErrors     uint64 `json:"tx_errors"`     // 38.1.16
+	RxErrors     uint64 `json:"rx_errors"`     // 38.1.17
+	ResetsHung   uint64 `json:"resets_hung"`   // 38.1.18
+	ResetsHungRx uint64 `json:"resets_hung_rx"`
+}
+
+// Diag is the agent and datapath diagnostics (phase 4): 97 WxlanPkts,
+// 103 PaceDispatchPkt and 106 LACP.
+type Diag struct {
+	Wxlan    []WxlanCounters   `json:"wxlan,omitempty"`
+	Dispatch map[string]uint64 `json:"dispatch,omitempty"`
+	LACP     *LACP             `json:"lacp,omitempty"`
+}
+
+// WxlanCounters is one WxlanStats entry (97).
+type WxlanCounters struct {
+	Dev       string `json:"dev"`
+	RxPackets uint64 `json:"rx_packets"`
+	TxPackets uint64 `json:"tx_packets"`
+	ARPRx     uint64 `json:"arp_rx"`
+	ARPReply  uint64 `json:"arp_reply"`
+	ARPDrop   uint64 `json:"arp_drop"`
+	BCMCDrop  uint64 `json:"bcmc_drop"`
+	PktDrop   uint64 `json:"pkt_drop"`
+}
+
+// LACP is LACPStats (106).
+type LACP struct {
+	FailCount   uint64 `json:"fail_count"`
+	ActivePorts uint64 `json:"active_ports"`
+}
+
+// CommandOutput is the payload of an ap-cmd-output- message: the output of
+// one ap-cmd-rx diagnostic session.
+type CommandOutput struct {
+	Session string `json:"session"`
+	Output  string `json:"output"`
+}
+
+// MaxCommandOutput bounds CommandOutput.Output.
+const MaxCommandOutput = 16 << 10

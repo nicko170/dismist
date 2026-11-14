@@ -65,7 +65,7 @@ func TestDecodeClientOnlyTopicsArrayEvent(t *testing.T) {
 
 func TestDecodeTopicsArrayIgnoresUnknownAndRejectsMalformed(t *testing.T) {
 	got, err := Decode([]byte(`{"Topics":["unrelated-topic"],"Type":3,"Title":"Private event","impacted_client_mac":"02-aa-00-00-00-01"}`))
-	if err != nil || got.Topic != "" || got.Event != nil {
+	if err != nil || got.Topic != "unrelated-topic" || got.Event != nil {
 		t.Fatalf("unknown topic was treated as client event: %+v %v", got, err)
 	}
 	if _, err := Decode([]byte(`{"Topics":["client-pace-event-",7],"Type":3}`)); err == nil {
