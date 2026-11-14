@@ -199,3 +199,79 @@ func TestRegisterAPBumpsOnlyTheNewAP(t *testing.T) {
 		t.Fatal("new AP has no desired config")
 	}
 }
+
+// serveStore builds a handler over store the way dismistd does at startup:
+// each AP's control session serves what compile.Prepare gives it.
+func serveStore(t *testing.T, store *model.BoltStore, base []byte) (http.Handler, map[string]*controller.Server) {
+	t.Helper()
+	manager := controller.NewManager()
+	controls := map[string]*controller.Server{}
+	for _, served := range compile.Prepare(base, store.Snapshot(), nil) {
+		if served.Config == nil {
+			continue
+		}
+		control, err := controller.NewServer(controller.Options{ID: served.APID, CertDER: []byte{1}, Config: served.Config, Revision: served.Revision})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := manager.Register(served.APID, "", control); err != nil {
+			t.Fatal(err)
+		}
+		controls[served.APID] = control
+	}
+	return NewWithManager(store, manager, base, "02-aa-00-00-00-01", "*"), controls
+}
+
+// A network created before a restart is read back in bucket order after
+// it; the compiled WLAN order (and so change detection) must not depend on
+// which of the two the state holds.
+func TestNetworkOrderSurvivesRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "controller.db")
+	store, err := model.OpenBolt(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	configTime := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	if err := store.Update(func(state *model.State) error {
+		state.Sites = []model.Site{{ID: "a", Name: "Home"}}
+		state.APs = []model.APRecord{{ID: "02-aa-00-00-00-01", Name: "Hallway", SiteID: "a", Secret: bytes.Repeat([]byte{1}, 32), ConfigRevision: 1, ConfigUpdatedAt: configTime}}
+		// "zzzz" sorts after any generated network ID.
+		state.Networks = []model.Network{{ID: "zzzz", SiteID: "a", SSID: "Example", PSK: "example-passphrase-01", VLANID: 1, Enabled: true}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	base := []byte(`{"ID":"x","Timestamp":1,"WLANs":[{"ID":"t","SSID":"T","Enabled":true,"Vlans":["1"],"Auth":{"Type":"psk","PSK":"example-passphrase-00"}}]}`)
+	handler, _ := serveStore(t, store, base)
+	if response := request(t, handler, http.MethodPost, "/api/sites/a/networks", `{"ssid":"Example-IoT","psk":"example-passphrase-02","vlan_id":30}`); response.Code != http.StatusOK {
+		t.Fatalf("create network: %d %s", response.Code, response.Body.String())
+	}
+	created := store.Snapshot().APs[0].ConfigRevision
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err = model.OpenBolt(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	handler, controls := serveStore(t, store, base)
+	served, revision := controls["02-aa-00-00-00-01"].ConfigSnapshot()
+	desired, found, err := store.APConfig().Desired("02-aa-00-00-00-01")
+	if err != nil || !found {
+		t.Fatalf("desired: found=%v err=%v", found, err)
+	}
+	if revision != created || !bytes.Equal(served, desired.Bytes) {
+		t.Fatalf("after restart the AP is served revision %d (want %d) and a config other than its desired one:\nserved  %s\ndesired %s", revision, created, served, desired.Bytes)
+	}
+	if response := request(t, handler, http.MethodPut, "/api/sites/a", `{"name":"Renamed"}`); response.Code != http.StatusOK {
+		t.Fatalf("rename: %d %s", response.Code, response.Body.String())
+	}
+	if got := store.Snapshot().APs[0].ConfigRevision; got != created {
+		t.Fatalf("a site rename after a restart moved the AP from revision %d to %d", created, got)
+	}
+	if _, after := controls["02-aa-00-00-00-01"].ConfigSnapshot(); after != created {
+		t.Fatalf("a site rename after a restart pushed revision %d", after)
+	}
+}

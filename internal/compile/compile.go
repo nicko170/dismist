@@ -11,6 +11,7 @@ package compile
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/nicko170/dismist/internal/model"
@@ -88,9 +89,14 @@ func AP(in Input) (Output, error) {
 // for it (as in v0).
 var ErrNoSite = errors.New("AP has no site")
 
-// NetworksForSite returns the networks an AP of siteID carries, in stored
-// order: the site's networks, plus networks with an empty SiteID when the
-// state has no sites at all (the legacy rule v0 used).
+// NetworksForSite returns the networks an AP of siteID carries: the site's
+// networks, plus networks with an empty SiteID when the state has no sites
+// at all (the legacy rule v0 used). They are in networks-bucket key order
+// (SiteID, NUL, ID), whatever order state holds them in: a network created
+// since the last start is appended in memory but read back in key order
+// after a restart, and the compiled WLAN order must be the same either way,
+// or change detection sees a change that is not there. Key order is also
+// what legacyv0 (and v0 after a restart) produced.
 func NetworksForSite(state model.State, siteID string) []model.Network {
 	legacy := len(state.Sites) == 0
 	networks := make([]model.Network, 0)
@@ -99,8 +105,14 @@ func NetworksForSite(state model.State, siteID string) []model.Network {
 			networks = append(networks, network)
 		}
 	}
+	sort.SliceStable(networks, func(i, j int) bool {
+		return networkKey(networks[i]) < networkKey(networks[j])
+	})
 	return networks
 }
+
+// networkKey is a network's key in the networks bucket.
+func networkKey(network model.Network) string { return network.SiteID + "\x00" + network.ID }
 
 // ConfigTime is the Timestamp source for an AP: ConfigUpdatedAt, or the
 // state's UpdatedAt for a record that predates it.

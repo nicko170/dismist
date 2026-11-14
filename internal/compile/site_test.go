@@ -354,3 +354,29 @@ func TestEffectiveViewIsKeyedAndUsesLocalFiles(t *testing.T) {
 		t.Fatal("unkeyed hash")
 	}
 }
+
+func TestNetworksForSiteIsInBucketKeyOrder(t *testing.T) {
+	ids := func(networks []model.Network) []string {
+		var result []string
+		for _, network := range networks {
+			result = append(result, network.ID)
+		}
+		return result
+	}
+	// The order a running store holds after appends, and the order it
+	// reads back after a restart, compile the same.
+	appended := model.State{
+		Sites: []model.Site{{ID: "a"}, {ID: "b"}},
+		Networks: []model.Network{
+			{ID: "zzzz", SiteID: "a"}, {ID: "m", SiteID: "b"}, {ID: "0123", SiteID: "a"}, {ID: "b", SiteID: "a"},
+		},
+	}
+	if got, want := ids(compile.NetworksForSite(appended, "a")), []string{"0123", "b", "zzzz"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("site a networks %v, want %v", got, want)
+	}
+	// Legacy rule: site-less networks key before the site's own.
+	legacy := model.State{Networks: []model.Network{{ID: "a", SiteID: "s"}, {ID: "z"}, {ID: "b"}}}
+	if got, want := ids(compile.NetworksForSite(legacy, "s")), []string{"b", "z", "a"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("legacy networks %v, want %v", got, want)
+	}
+}
