@@ -325,6 +325,9 @@ func (s *Server) streamSite(writer http.ResponseWriter, request *http.Request, p
 // reportPush emits push applied/rejected/timeout for a tracked reconnect
 // push once per stream.
 func (s *Server) reportPush(writer io.Writer, flusher http.Flusher, live api.APLive, reported map[string]uint64) error {
+	if s.pushEvents {
+		return nil
+	}
 	push, ok := s.pushes.get(live.ID)
 	if !ok || reported[live.ID] == push.revision {
 		return nil

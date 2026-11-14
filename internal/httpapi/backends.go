@@ -200,11 +200,3 @@ var ErrCommandUnsupported = errors.New("the AP has no verified command channel")
 type Commands interface {
 	SendCommand(apID string, command APCommand) (string, error)
 }
-
-// Pusher delivers a committed config to a connected AP (workstream B's
-// push lifecycle, design §5.6). It is called after the control session
-// holds the new config; it returns the mode used ("notify" or
-// "reconnect"). nil means reconnect (today's behaviour).
-type Pusher interface {
-	Push(apID string, revision uint64) string
-}

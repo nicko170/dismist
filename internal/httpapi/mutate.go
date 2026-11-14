@@ -190,7 +190,9 @@ func (s *Server) publishConfig(m mutation, out outcome) {
 	affected := make([]string, 0, len(out.applied.Pushes))
 	for _, push := range out.applied.Pushes {
 		affected = append(affected, push.APID)
-		s.pushes.track(push.APID, push.Revision, s.now())
+		if !s.pushEvents {
+			s.pushes.track(push.APID, push.Revision, s.now())
+		}
 	}
 	kind := m.kind
 	if kind == "" {
@@ -207,9 +209,10 @@ func (s *Server) publishConfig(m mutation, out outcome) {
 	}
 }
 
-// push hands committed configs to the APs' control sessions, then lets the
-// push lifecycle deliver them (design §5.6). Without one it reconnects the
-// AP, which fetches the new config when it comes back.
+// push hands committed configs to the APs' control sessions, whose push
+// lifecycle delivers them (design §5.6): an ep-config-change notification
+// when the AP has config_change_notify on, otherwise a reconnect, after
+// which the AP fetches the new config.
 func (s *Server) push(pushes []compile.Push) error {
 	var failed error
 	for _, push := range pushes {
@@ -217,20 +220,10 @@ func (s *Server) push(pushes []compile.Push) error {
 		if control == nil {
 			continue
 		}
-		changed, err := control.SetConfigIfNewer(push.Config, push.Revision)
-		if err != nil {
-			log.Printf("AP %s: set config revision %d: %v", push.APID, push.Revision, err)
+		if _, err := control.Push(push.Config, push.Revision); err != nil {
+			log.Printf("AP %s: push config revision %d: %v", push.APID, push.Revision, err)
 			failed = internalError("AP config update failed")
-			continue
 		}
-		if !changed {
-			continue
-		}
-		if s.pusher != nil {
-			s.pusher.Push(push.APID, push.Revision)
-			continue
-		}
-		control.Disconnect()
 	}
 	return failed
 }

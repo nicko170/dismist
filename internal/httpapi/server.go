@@ -41,11 +41,14 @@ type Server struct {
 	routes   router
 	config   Config
 	commands Commands
-	pusher   Pusher
-	sessions SessionManager
-	hub      *streamHub
-	pushes   *pushTracker
-	now      func() time.Time
+	// pushEvents is set when the controller's push lifecycle reports
+	// every state through PublishPush (design §5.6); the API then stops
+	// inferring applied, rejected and timeout from the AP views.
+	pushEvents bool
+	sessions   SessionManager
+	hub        *streamHub
+	pushes     *pushTracker
+	now        func() time.Time
 	// defaultFeatures are the -ap-features defaults.
 	defaultFeatures controller.Features
 	// legacyUI serves the legacy app at /legacy/ (until the release that
@@ -106,9 +109,11 @@ func (s *Server) UseCommands(commands Commands) *Server {
 	return s
 }
 
-// UsePusher sets the config push lifecycle (workstream B).
-func (s *Server) UsePusher(pusher Pusher) *Server {
-	s.pusher = pusher
+// UsePushEvents tells the API that the controller's push lifecycle
+// (workstream B, controller.Options.OnPush) publishes every push state
+// through PublishPush.
+func (s *Server) UsePushEvents() *Server {
+	s.pushEvents = true
 	return s
 }
 

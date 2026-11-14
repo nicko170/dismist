@@ -114,14 +114,15 @@ func (s *Server) apAction(writer http.ResponseWriter, request *http.Request, p p
 			writeAPIError(writer, conflict("the AP has no control session; it gets its config when it connects"))
 			return
 		}
-		via := "reconnect"
-		_, revision := control.ConfigSnapshot()
-		if s.pusher != nil {
-			via = s.pusher.Push(ap.ID, revision)
-		} else {
-			control.DisconnectBecause("config re-sent by operator")
+		handle, err := control.Resend()
+		if err != nil {
+			writeAPIError(writer, conflict("the AP has no config to re-send yet"))
+			return
 		}
-		s.pushes.track(ap.ID, revision, s.now())
+		via, revision := handle.Mode, handle.Revision
+		if !s.pushEvents {
+			s.pushes.track(ap.ID, revision, s.now())
+		}
 		s.recordAction(request, ap.SiteID, "Re-sent config to AP "+name)
 		respond(writer, http.StatusOK, api.ActionResult{Action: string(api.APActionPushConfig), State: "accepted", Via: via, Revision: revision})
 	case api.APActionLocate, api.APActionUnlocate:

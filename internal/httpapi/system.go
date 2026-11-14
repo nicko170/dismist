@@ -62,6 +62,9 @@ type SystemInfo struct {
 	// which statfs does not report and which evicts the pod when
 	// exceeded). 0 means only the free-space check applies.
 	BackupTempMax int64
+	// Retention is how long history is kept, by kind ("samples",
+	// "samples_hourly", "sessions", "events", "config_history").
+	Retention map[string]string
 }
 
 // UseSystem sets the daemon facts /api/system and /api/onboarding report.
@@ -112,6 +115,9 @@ func (s *Server) systemView() api.SystemView {
 	}
 	if info.Ready != nil {
 		view.Ready = info.Ready()
+	}
+	for kind, keep := range info.Retention {
+		view.DB.Retention[kind] = keep
 	}
 	if view.Metrics.Clients == "" {
 		view.Metrics.Clients = api.MetricsClientsAggregate

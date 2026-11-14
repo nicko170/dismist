@@ -1838,13 +1838,23 @@ export interface ConfigEvent {
 /**
  * PushState is a config push lifecycle state (design §5.6, phase 2).
  */
+/**
+ * PushStateReconnecting: the AP was disconnected so it fetches the new
+ * config when it reconnects (reconnect mode).
+ */
+export const PushStateReconnecting = "reconnecting";
+/**
+ * PushStateOffline: the AP is not connected; it gets the config when
+ * it connects.
+ */
+export const PushStateOffline = "offline";
 export const PushStateNotified = "notified";
 export const PushStateFetched = "fetched";
 export const PushStateApplied = "applied";
 export const PushStateRejected = "rejected";
 export const PushStateFallbackReconnect = "fallback_reconnect";
 export const PushStateTimeout = "timeout";
-export type PushState = typeof PushStateNotified | typeof PushStateFetched | typeof PushStateApplied | typeof PushStateRejected | typeof PushStateFallbackReconnect | typeof PushStateTimeout;
+export type PushState = typeof PushStateReconnecting | typeof PushStateOffline | typeof PushStateNotified | typeof PushStateFetched | typeof PushStateApplied | typeof PushStateRejected | typeof PushStateFallbackReconnect | typeof PushStateTimeout;
 /**
  * PushEvent is the `push` event (phase 2).
  */
@@ -1853,6 +1863,11 @@ export interface PushEvent {
   revision: number /* uint64 */;
   state: PushState;
   error: string;
+  /**
+   * Mode is how the config is delivered: "notify" or "reconnect" (empty
+   * when the API inferred the state from the AP's view).
+   */
+  mode?: string;
 }
 /**
  * PendingEvent is the `pending` event: the pending-AP count changed.

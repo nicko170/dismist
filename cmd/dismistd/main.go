@@ -26,7 +26,6 @@ import (
 	"github.com/nicko170/dismist/internal/metrics"
 	"github.com/nicko170/dismist/internal/migrate"
 	"github.com/nicko170/dismist/internal/model"
-	"github.com/nicko170/dismist/internal/options"
 	"github.com/nicko170/dismist/internal/protocol"
 	"github.com/nicko170/dismist/internal/proxytrust"
 )
@@ -63,7 +62,12 @@ func main() {
 	notify := registerNotifyFlags(flag.CommandLine)
 	acceptLocalFiles := flag.String("migrate-accept-local-files", "", "comma-separated AP IDs whose /rw/etc/mist/ep-control/local_* files the operator accepts, so the schema-2 migration may claim equivalence for them (design §4.7 step 5)")
 	legacyUI := flag.Bool("legacy-ui", true, "serve the legacy web app at /legacy/ (until the release that deletes it)")
+	configPush := flag.String("config-push", controller.PushModeReconnect, "how a changed config reaches an AP by default: reconnect (the AP is disconnected and refetches) or notify (ep-config-change, experimental); each AP's protocol_features override it (design §5.6)")
+	retainSamples := flag.Duration("retain-samples", model.DefaultRetainSamples, "how long minute samples are kept (hourly rollups are kept 400 days)")
+	retainSessions := flag.Duration("retain-sessions", model.DefaultRetainSessions, "how long ended client sessions are kept")
+	retainEvents := flag.Duration("retain-events", model.DefaultRetainEvents, "how long AP and client events are kept")
 	flag.Parse()
+	instruments := metrics.NewInstruments()
 	if err := notify.validate(); err != nil {
 		log.Fatal(err)
 	}
@@ -71,6 +75,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("-ap-features: %v", err)
 	}
+	defaultFeatures, err = configPushFeatures(defaultFeatures, *configPush)
+	if err != nil {
+		log.Fatalf("-config-push: %v", err)
+	}
+	retention := model.DefaultRetention()
+	retention.Samples, retention.Sessions, retention.Events = *retainSamples, *retainSessions, *retainEvents
 	startedAt := time.Now().UTC()
 	if *apURL != "" {
 		if err := httpapi.CheckAPURL(*apURL); err != nil {
@@ -171,7 +181,7 @@ func main() {
 		log.Fatal(err)
 	}
 	uiServer := &http.Server{
-		Handler:           proxytrust.Middleware(proxyPrefixes, startup),
+		Handler:           instruments.HTTP(proxytrust.Middleware(proxyPrefixes, startup)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
@@ -213,6 +223,17 @@ func main() {
 		state.UpdatedAt = time.Now().UTC()
 	}
 	mutationLock := new(sync.Mutex)
+	// The API is built before the registry so the controller's push
+	// lifecycle can publish its states on the site streams (design §4.10).
+	var operatorAPI *httpapi.Server
+	siteOf := siteOfAP(store)
+	events := newEventSink(store.Events2(), siteOf, nil)
+	eventsCtx, stopEvents := context.WithCancel(context.Background())
+	eventsDone := make(chan struct{})
+	go func() {
+		defer close(eventsDone)
+		events.Run(eventsCtx)
+	}()
 	registryConfig := registryOptions{
 		DefaultID: *apID, DefaultIP: *apIP, Base: base,
 		CertDER: certificate.Certificate[0], ServerName: *serverName,
@@ -224,6 +245,34 @@ func main() {
 		UDPProbeRekeyDelay: *udpProbeRekeyDelay,
 		APConfig:           store.APConfig(),
 		Features:           defaultFeatures,
+		Events:             events.Event,
+		Status:             newAPStatusSink(store.APStatus()),
+		LastKnownVAPs:      lastKnownVAPs(store.APStatus()),
+		OnPush: func(event controller.PushEvent) {
+			if operatorAPI != nil {
+				operatorAPI.PublishPush(api.PushEvent{APID: event.APID, Revision: event.Revision,
+					State: api.PushState(event.State), Error: event.Error, Mode: event.Mode})
+				switch event.State {
+				case controller.PushStateApplied, controller.PushStateRejected, controller.PushStateTimeout:
+					at := event.At.UTC()
+					operatorAPI.RecordResult(event.APID, event.Revision, api.APState{State: event.State, At: &at, Error: event.Error})
+				}
+			}
+		},
+		OnPushModeLearned: func(apID, mode string) {
+			if err := store.Update(func(state *model.State) error {
+				for index := range state.APs {
+					if state.APs[index].ID == apID {
+						state.APs[index].PushMode = mode
+					}
+				}
+				return nil
+			}); err != nil {
+				log.Printf("AP %s: cannot store the learned push mode %q: %v", apID, mode, err)
+			}
+		},
+		PushMode: func(ap model.APRecord) string { return ap.PushMode },
+		OnScan:   storeScan(store, siteOf),
 	}
 	manager, addresses, err := prepareAPs(withSecrets(state), registryConfig)
 	if err != nil {
@@ -242,7 +291,7 @@ func main() {
 		log.Fatal(err)
 	}
 	registry := newAPRegistry(manager, resolver, registryConfig, state)
-	service, err := dnsserver.Start(*dnsListen, resolver)
+	service, err := dnsserver.Start(*dnsListen, instruments.DNS(resolver))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -255,6 +304,7 @@ func main() {
 	httpServer := &http.Server{
 		Handler: manager, ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}},
+		ErrorLog:  instruments.TLSErrorLog(log.Writer()),
 	}
 	go func() {
 		err := httpServer.Serve(tls.NewListener(listener, httpServer.TLSConfig))
@@ -269,17 +319,16 @@ func main() {
 	builtVersion, builtCommit := buildVersion()
 	migrations := &migrationRunner{store: store, template: base, tempDir: os.TempDir(), accept: splitList(*acceptLocalFiles),
 		steps: migrate.Steps, logf: log.Printf}
-	operatorAPI := httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock).UseSystem(httpapi.SystemInfo{
+	operatorAPI = httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock).UseSystem(httpapi.SystemInfo{
 		Version: builtVersion, Commit: builtCommit, StartedAt: startedAt, Ready: ready.Ready,
 		APURL: *apURL, WSSListen: listener.Addr().String(), Chain: certificate.Certificate, ExtraCAs: apCAs,
 		TrustedProxies: splitList(*trustedProxies), DBPath: *dbPath, BackupTempMax: int64(backups.tmpMax),
 		Metrics:   systemMetricsView(metricsFlags),
 		Backups:   backupScheduler,
 		Migration: func() api.MigrationView { return migrationView(store) },
-	}).UseConfig(httpapi.Config{
-		Registry:  options.Default(),
-		Migration: migrations,
-	}).UseDefaultFeatures(defaultFeatures).UseLegacyUI(*legacyUI)
+		Retention: retention.Describe(),
+	}).UseConfig(withRegistry(apiBackends(store, migrations))).UseCommands(apCommands{manager: manager}).
+		UsePushEvents().UseDefaultFeatures(defaultFeatures).UseLegacyUI(*legacyUI)
 	uiHandler, err := operatorGate(*adminTokenFile, operatorAPI, gateOptions{tokens: store.Tokens(), sessions: store.Sessions()})
 	if err != nil {
 		log.Fatalf("initialize administrator access: %v", err)
@@ -288,6 +337,7 @@ func main() {
 	log.Printf("UI API listening on %s", uiListener.Addr())
 	metricsServer, err := startMetrics(metricsFlags, metrics.Options{
 		Store: store, Manager: manager, StoreSchema: storeSchema(store), CompileStatus: compileStatus(manager),
+		Instruments: instruments, Backups: backupMetrics(backupScheduler),
 	})
 	if err != nil {
 		log.Fatalf("start metrics listener: %v", err)
@@ -305,6 +355,11 @@ func main() {
 	backgroundCtx, stopBackground := context.WithCancel(context.Background())
 	defer stopBackground()
 	go operatorAPI.RunLocateExpiry(backgroundCtx, 15*time.Second)
+	go store.RunRetention(backgroundCtx, retention, model.DefaultRetentionInterval, func(result model.PruneResult, err error) {
+		if err != nil {
+			log.Printf("history retention: %v", err)
+		}
+	})
 	if notify.url != "" {
 		go newNotifier(*notify, store).run(backgroundCtx)
 		log.Printf("Webhook notifier posts %s and worse events every %s", notify.minSeverity, notify.interval)
@@ -330,6 +385,7 @@ func main() {
 					}
 					observation := makeObservation(ap.SiteID, ap.ID, control.Status(), control.TelemetrySnapshot(), time.Now().UTC())
 					if err := store.RecordObservation(observation); err != nil {
+						instruments.ObservationError()
 						log.Printf("cannot save AP observation: %v", err)
 					}
 					break
@@ -364,6 +420,8 @@ func main() {
 	<-backupsDone
 	stopRegistry()
 	<-registryDone
+	stopEvents()
+	<-eventsDone
 	close(recordStop)
 	<-recordDone
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
