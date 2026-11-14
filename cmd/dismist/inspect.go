@@ -167,7 +167,7 @@ type LogTail struct {
 }
 
 // collectInspect gathers the report over runner. Only a transport failure
-// (or a non-root login) stops it; anything missing on the AP is a warning.
+// stops it; anything missing or unreadable on the AP becomes a warning.
 func collectInspect(ctx context.Context, runner remoteRunner, options inspectOptions) (*InspectReport, error) {
 	report := &InspectReport{CollectedAt: time.Now().UTC(), EPControlPIDs: []int{}, LocalFiles: []LocalFile{}}
 	c := &collector{ctx: ctx, runner: runner, report: report}
