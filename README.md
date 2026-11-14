@@ -18,7 +18,10 @@ backhaul is not yet validated. See [monitoring and SSH operations](docs/deployme
 
 ## Quick start
 
-Install both commands with Go 1.27, or download the binaries from
+On Kubernetes, use the Helm chart and image published with each release
+(`oci://ghcr.io/nicko170/charts/dismist`, `ghcr.io/nicko170/dismist`); see
+[Kubernetes deployment](docs/kubernetes.md). Otherwise, install both commands
+with Go 1.27, or download the binaries from
 [GitHub Releases](https://github.com/nicko170/dismist/releases):
 
 ```sh

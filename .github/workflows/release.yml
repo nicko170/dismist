@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -15,9 +15,11 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out tagged source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -66,7 +68,7 @@ jobs:
             os=${target%/*}
             arch=${target#*/}
             stage="staging/${os}-${arch}"
-            mkdir -p "$stage/docs/juniper/tools" "$stage/docs/juniper/images" "$stage/ops/kubernetes"
+            mkdir -p "$stage/docs/juniper/tools" "$stage/docs/juniper/images" "$stage/ops"
             cp "dist/dismist-${os}-${arch}" "$stage/dismist"
             cp "dist/dismistd-${os}-${arch}" "$stage/dismistd"
             cp README.md LICENSE prepare_rw_overlay.py "$stage/"
@@ -75,7 +77,6 @@ jobs:
             cp docs/juniper/images/ap33-uart.png "$stage/docs/juniper/images/"
             cp docs/{deployment,onboarding,sites-and-history,config-surface,kubernetes}.md "$stage/docs/"
             cp ops/dismistd.service "$stage/ops/"
-            cp ops/kubernetes/* "$stage/ops/kubernetes/"
             tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
               -C "$stage" -cf - . | gzip -n > "dist/dismist-${os}-${arch}.tar.gz"
           done
@@ -85,3 +86,73 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/dismist
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  chart:
+    # Publish the chart only once the image it points at exists.
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Package and push Helm chart
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          owner="${OWNER,,}"
+          helm lint charts/dismist --set privateSecret.name=lint
+          helm package charts/dismist --version "$version" --app-version "$version" --destination dist
+          echo "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          helm push "dist/dismist-${version}.tgz" "oci://ghcr.io/${owner}/charts"

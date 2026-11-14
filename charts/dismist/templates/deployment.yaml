@@ -1,0 +1,215 @@
+{{- if not .Values.privateSecret.name }}
+{{- fail "privateSecret.name is required: a Secret with admin.token and each AP's <name>.bin" }}
+{{- end }}
+{{- $tlsSecret := include "dismist.tlsSecretName" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dismist.fullname" . }}
+  labels:
+    {{- include "dismist.labels" . | nindent 4 }}
+spec:
+  # One controller owns the bbolt database: never run two.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "dismist.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "dismist.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.hostNetwork }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        # dismistd refuses group- or world-readable secrets, and Secret volumes
+        # can't be owned by the daemon user, so copy them to a private tmpfs.
+        - name: prepare-private-files
+          image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+          imagePullPolicy: {{ .Values.initImage.pullPolicy }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              uid={{ .Values.podSecurityContext.runAsUser }}
+              gid={{ .Values.podSecurityContext.runAsGroup }}
+              for file in /bootstrap/*; do
+                [ -f "$file" ] || continue
+                dest="/private/${file##*/}"
+                cp -L "$file" "$dest"
+                chmod 0600 "$dest"
+                chown "$uid:$gid" "$dest"
+              done
+              chown "$uid:$gid" /state /private
+              chmod 0700 /state /private
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, FOWNER]
+          volumeMounts:
+            - name: state
+              mountPath: /state
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+            - name: private
+              mountPath: /private
+      containers:
+        - name: dismistd
+          image: {{ include "dismist.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            {{- if .Values.controller.advertisedIP }}
+            - -controller-ip={{ .Values.controller.advertisedIP }}
+            {{- else if .Values.hostNetwork }}
+            - -controller-ip=$(NODE_IP)
+            {{- end }}
+            - -db=/state/controller.db
+            - -admin-token-file=/private/admin.token
+            {{- if $tlsSecret }}
+            - -tls-cert=/tls/tls.crt
+            - -tls-key=/tls/tls.key
+            {{- else }}
+            - -tls-cert=/private/tls.crt
+            - -tls-key=/private/tls.key
+            {{- end }}
+            {{- with .Values.controller.apConfigKey }}
+            - -ap-config=/private/{{ . }}
+            {{- end }}
+            - -ui-listen=0.0.0.0:{{ .Values.listen.ui }}
+            - -ws-listen=0.0.0.0:{{ .Values.listen.wss }}
+            - -dns-listen=0.0.0.0:{{ .Values.listen.dns }}
+            - -upstream-dns={{ .Values.controller.upstreamDNS }}
+            - -metrics-listen={{ .Values.controller.metricsListen }}
+            {{- with .Values.controller.uiHost }}
+            - -ui-host={{ . }}
+            {{- end }}
+            {{- with .Values.controller.trustedProxies }}
+            - -trusted-proxies={{ join "," . }}
+            {{- end }}
+            {{- with .Values.controller.serverName }}
+            - -server-name={{ . }}
+            {{- end }}
+            {{- with .Values.controller.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.hostNetwork }}
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          {{- end }}
+          ports:
+            - name: ui
+              containerPort: {{ .Values.listen.ui }}
+              protocol: TCP
+            - name: ap-wss
+              containerPort: {{ .Values.listen.wss }}
+              protocol: TCP
+            - name: ap-dns-udp
+              containerPort: {{ .Values.listen.dns }}
+              protocol: UDP
+            - name: ap-dns-tcp
+              containerPort: {{ .Values.listen.dns }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: ui
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: ui
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: ui
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- $sc := deepCopy .Values.securityContext }}
+            {{- if or (lt (int .Values.listen.wss) 1024) (lt (int .Values.listen.dns) 1024) (lt (int .Values.listen.ui) 1024) }}
+            {{- $_ := set $sc "capabilities" (dict "drop" (list "ALL") "add" (list "NET_BIND_SERVICE")) }}
+            {{- end }}
+            {{- toYaml $sc | nindent 12 }}
+          volumeMounts:
+            - name: state
+              mountPath: /state
+            - name: private
+              mountPath: /private
+              readOnly: true
+            {{- if $tlsSecret }}
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: state
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "dismist.pvcName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: bootstrap
+          secret:
+            secretName: {{ .Values.privateSecret.name }}
+        - name: private
+          emptyDir:
+            medium: Memory
+            sizeLimit: 4Mi
+        {{- if $tlsSecret }}
+        # Mounted directly (not copied) so renewals reach the pod; dismistd
+        # restarts itself to serve them.
+        - name: tls
+          secret:
+            secretName: {{ $tlsSecret }}
+            defaultMode: 0440
+            items:
+              - { key: tls.crt, path: tls.crt }
+              - { key: tls.key, path: tls.key }
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

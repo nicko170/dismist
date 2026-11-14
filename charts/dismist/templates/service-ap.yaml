@@ -1,0 +1,47 @@
+{{- if and .Values.apService.enabled (not .Values.hostNetwork) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dismist.fullname" . }}-ap
+  labels:
+    {{- include "dismist.labels" . | nindent 4 }}
+  {{- with .Values.apService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.apService.type }}
+  {{- if eq .Values.apService.type "LoadBalancer" }}
+  {{- with .Values.apService.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  {{- with .Values.apService.loadBalancerClass }}
+  loadBalancerClass: {{ . }}
+  {{- end }}
+  {{- with .Values.apService.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  {{- if or (eq .Values.apService.type "LoadBalancer") (eq .Values.apService.type "NodePort") }}
+  # APs are identified by source address: keep it.
+  externalTrafficPolicy: {{ .Values.apService.externalTrafficPolicy }}
+  {{- end }}
+  selector:
+    {{- include "dismist.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: ap-wss
+      port: {{ .Values.apService.ports.wss }}
+      targetPort: ap-wss
+      protocol: TCP
+    {{- if .Values.apService.exposeDNS }}
+    - name: ap-dns-udp
+      port: {{ .Values.apService.ports.dns }}
+      targetPort: ap-dns-udp
+      protocol: UDP
+    - name: ap-dns-tcp
+      port: {{ .Values.apService.ports.dns }}
+      targetPort: ap-dns-tcp
+      protocol: TCP
+    {{- end }}
+{{- end }}

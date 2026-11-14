@@ -12,6 +12,7 @@ import (
 
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
+	"github.com/nicko170/dismist/internal/proxytrust"
 	"github.com/nicko170/dismist/internal/telemetry"
 )
 
@@ -536,5 +537,31 @@ func TestLoopbackHTTPSProxyOrigin(t *testing.T) {
 	handler.ServeHTTP(response, req)
 	if response.Code != http.StatusForbidden || store.Snapshot().Sites[0].Name != "Via proxy" {
 		t.Fatalf("untrusted proxy accepted: %d", response.Code)
+	}
+}
+
+func TestConfiguredHTTPSProxyOrigin(t *testing.T) {
+	inner, store, _ := platformFixture(t)
+	trusted, err := proxytrust.ParsePrefixes("10.244.0.0/16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := proxytrust.Middleware(trusted, inner)
+	edit := func(remote, name string) int {
+		req := httptest.NewRequest(http.MethodPut, "/api/sites/a", bytes.NewBufferString(`{"name":"`+name+`"}`))
+		req.Host = "dismist.example"
+		req.RemoteAddr = remote
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-Proto", "https")
+		req.Header.Set("Origin", "https://dismist.example")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		return response.Code
+	}
+	if code := edit("10.244.3.199:41000", "Via gateway"); code != http.StatusOK || store.Snapshot().Sites[0].Name != "Via gateway" {
+		t.Fatalf("configured HTTPS proxy rejected: %d", code)
+	}
+	if code := edit("192.0.2.5:41000", "Spoofed"); code != http.StatusForbidden || store.Snapshot().Sites[0].Name != "Via gateway" {
+		t.Fatalf("peer outside the trusted proxies accepted: %d", code)
 	}
 }

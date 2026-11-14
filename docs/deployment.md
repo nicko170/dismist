@@ -71,6 +71,17 @@ data; restrict the data directory to the service user. `-db`, `-ap-config`,
 file is created with mode `0600` when absent; read it locally and enter its
 64-character value in the UI login. The session is held in an HttpOnly cookie.
 Operators may place HTTPS in front of the UI for access beyond a trusted LAN.
+A proxy on the same host is trusted automatically. For one elsewhere, pass its
+source addresses to `-trusted-proxies` (comma-separated CIDRs) so dismistd
+accepts its `X-Forwarded-Proto: https` header. Otherwise sign-in is refused as
+cross-origin.
+
+dismistd checks `-tls-cert` and `-tls-key` every `-tls-check-interval`
+(default one minute). AP authentication is bound to the certificate the AP
+saw, so the daemon does not swap in a renewed certificate. When the files
+hold a new valid pair, it shuts down cleanly and exits with status 75, and
+its supervisor starts it again. The sample systemd unit restarts on failure,
+which covers this. Set the interval to `0` to disable the check.
 
 ## AP preparation and initial state
 

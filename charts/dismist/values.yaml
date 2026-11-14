@@ -1,0 +1,166 @@
+# Dismist runs as a single controller: one replica, Recreate upgrades, one
+# ReadWriteOnce volume for its bbolt database. Never scale it above one.
+
+image:
+  repository: ghcr.io/nicko170/dismist
+  # Defaults to the chart's appVersion.
+  tag: ""
+  # Optional sha256 digest; when set it pins the image and the tag is ignored.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Secret holding the controller's private files. Required. Expected keys:
+#   admin.token   64-character UI administrator token (dismist init writes one)
+#   <name>.bin    one raw 32-byte EEPROM secret per AP; register the AP with
+#                 secret file /private/<name>.bin
+#   tls.crt/key   the AP WSS certificate and key, unless tls.secretName or
+#                 tls.certificate supplies them
+# An init container copies the keys to a memory volume at /private, owned by
+# the daemon user with mode 0600, because dismistd rejects readable secrets.
+# Restart the pod after changing the Secret.
+privateSecret:
+  name: ""
+
+# The certificate APs see on the WSS endpoint. AP authentication is bound to
+# it, so TLS must end at dismistd: never put an AP-facing TLS proxy in front.
+# A public certificate (for example Let's Encrypt) works once the AP's
+# cloud.ini points at its hostname and its CA bundle includes that root.
+tls:
+  # Existing kubernetes.io/tls Secret, mounted directly. dismistd checks it
+  # every minute and restarts itself to serve a renewed certificate.
+  secretName: ""
+  # Or let cert-manager issue one into <fullname>-ap-tls (or secretName).
+  certificate:
+    enabled: false
+    dnsNames: []
+    issuerRef:
+      kind: ClusterIssuer
+      name: ""
+    privateKey:
+      algorithm: ECDSA
+      size: 256
+      rotationPolicy: Always
+
+controller:
+  # IPv4 address dismist's AP DNS returns for ep-terminator.mistsys.net.
+  # Only APs still using the stock endpoint name need it. Defaults to the
+  # node IP with hostNetwork, otherwise the pod IP.
+  advertisedIP: ""
+  # DNS name operators use for the UI (the Host header the UI accepts).
+  uiHost: ""
+  # CIDRs of reverse proxies (an ingress or Gateway) whose X-Forwarded-Proto
+  # header the UI trusts. Needed for sign-in behind an HTTPS proxy: set it to
+  # the proxy's source range, for example the cluster pod CIDRs.
+  trustedProxies: []
+  # Resolver for the APs' other DNS questions.
+  upstreamDNS: 1.1.1.1:53
+  # Server name in the AP authentication reply. Empty keeps dismistd's default.
+  serverName: ""
+  # Key in privateSecret holding a custom AP config template. Empty uses the
+  # bundled AP33 template.
+  apConfigKey: ""
+  # Prometheus metrics listen address inside the pod (loopback only; empty
+  # disables).
+  metricsListen: 127.0.0.1:9090
+  extraArgs: []
+
+# Container listen ports. The AP Service maps 443 (and 53 if exposed) onto
+# these, so the daemon needs no privileged ports. With hostNetwork the APs
+# connect to these ports directly: set wss to 443 and dns to 53.
+listen:
+  ui: 8088
+  wss: 8443
+  dns: 5353
+
+# Bind straight to the node's network instead of using the AP Service. APs
+# then reach the node IP, and their source address is seen unchanged.
+hostNetwork: false
+
+# Operator UI and API (plain HTTP; publish it through httpRoute or your own
+# HTTPS proxy).
+service:
+  type: ClusterIP
+  port: 8088
+  annotations: {}
+
+# The AP-facing endpoint: WSS on TCP 443, plus AP DNS on UDP/TCP 53 if
+# exposeDNS is set (only for APs still resolving ep-terminator.mistsys.net
+# through dismist). Dismist identifies APs by source IP, so keep
+# externalTrafficPolicy Local (or another path without source NAT) and
+# register each AP with the address it arrives from.
+apService:
+  enabled: true
+  type: LoadBalancer
+  annotations: {}
+  loadBalancerIP: ""
+  loadBalancerClass: ""
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges: []
+  exposeDNS: false
+  ports:
+    wss: 443
+    dns: 53
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 2Gi
+  annotations: {}
+
+# Gateway API HTTPRoute for the UI. Server-sent events stream for up to 30
+# minutes, so disable or raise the proxy's request timeout.
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs: []
+  #  - name: public
+  #    namespace: gateway
+  #    sectionName: https-dismist
+  hostnames: []
+  timeouts:
+    request: "0s"
+  filters: []
+
+initImage:
+  repository: busybox
+  tag: 1.37.0
+  pullPolicy: IfNotPresent
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+terminationGracePeriodSeconds: 30

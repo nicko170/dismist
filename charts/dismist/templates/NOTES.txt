@@ -1,0 +1,8 @@
+Dismist {{ .Chart.AppVersion }} is running as {{ include "dismist.fullname" . }} in {{ .Release.Namespace }}.
+
+UI: {{ if .Values.httpRoute.enabled }}{{ range .Values.httpRoute.hostnames }}https://{{ . }}/ {{ end }}{{ else }}kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "dismist.fullname" . }} 8088 (then http://localhost:8088/){{ end }}
+Sign in with the admin.token from Secret {{ .Values.privateSecret.name }}.
+
+AP endpoint:{{ if .Values.hostNetwork }} the node's IP, port {{ .Values.listen.wss }}.{{ else if .Values.apService.enabled }} kubectl -n {{ .Release.Namespace }} get svc {{ include "dismist.fullname" . }}-ap{{ end }}
+Point each AP's cloud.ini url at wss://<that hostname>/ws, make sure its CA bundle trusts the
+certificate, and register the AP with the source address dismist sees for it.

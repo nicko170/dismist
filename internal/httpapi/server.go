@@ -20,6 +20,7 @@ import (
 	webassets "github.com/nicko170/dismist"
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
+	"github.com/nicko170/dismist/internal/proxytrust"
 	"github.com/nicko170/dismist/internal/telemetry"
 )
 
@@ -1506,14 +1507,8 @@ func (s *Server) allowedOrigin(request *http.Request) bool {
 		return s.allowedHost(parsed.Host)
 	}
 	scheme := "http"
-	if request.TLS != nil {
+	if proxytrust.HTTPS(request) {
 		scheme = "https"
-	} else if forwarded := request.Header.Get("X-Forwarded-Proto"); forwarded == "https" {
-		if host, _, err := net.SplitHostPort(request.RemoteAddr); err == nil {
-			if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
-				scheme = "https"
-			}
-		}
 	}
 	requested, err := url.Parse(scheme + "://" + request.Host)
 	if err != nil || requested.User != nil || parsed.Scheme != scheme || !strings.EqualFold(parsed.Hostname(), requested.Hostname()) {
