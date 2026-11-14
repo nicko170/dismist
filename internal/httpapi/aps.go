@@ -168,6 +168,8 @@ func (s *Server) updateAPFields(writer http.ResponseWriter, request *http.Reques
 	}
 	if !v1 {
 		readOnly = map[string]bool{}
+	} else {
+		delete(patch, "model")
 	}
 	if bad := checkKeys(patch, apTypedKeys, apPhase1Keys, readOnly, s.typedEnabled()); bad != nil {
 		writeAPIError(writer, bad)
@@ -399,8 +401,8 @@ func (s *Server) parseAPPatch(state model.State, current model.APRecord, patch m
 			}
 		}
 		for name := range features {
-			if !controller.ValidFeature(name) {
-				errs.add("protocol_features."+name, "unknown protocol feature; known: "+strings.Join(controller.FeatureNames(), ", "))
+			if !knownFeature(name) {
+				errs.add("protocol_features."+name, "unknown protocol feature; known: "+strings.Join(featureNames(), ", "))
 			}
 		}
 		edit.features = features
@@ -504,6 +506,18 @@ func (s *Server) unassign(state *model.State, tx *model.Tx, ap *model.APRecord, 
 		return tx.APConfig().Delete(ap.ID)
 	}
 	return nil
+}
+
+// knownFeature accepts the controller's fixed features plus ap_cmd, the
+// experimental command channel the API gates on (design §5.6).
+func knownFeature(name string) bool { return controller.ValidFeature(name) || name == FeatureAPCmd }
+
+func featureNames() []string {
+	names := controller.FeatureNames()
+	if !controller.ValidFeature(FeatureAPCmd) {
+		names = append(names, FeatureAPCmd)
+	}
+	return names
 }
 
 // applyFeatures switches a changed AP's protocol features on its control

@@ -567,8 +567,8 @@ func (s *Server) apDetail(ctx apContext, ap model.APRecord) api.APDetail {
 		}
 	}
 	detail.ProtocolFeatures = map[string]bool{}
-	for _, name := range controller.FeatureNames() {
-		detail.ProtocolFeatures[name] = features.Has(controller.Feature(name))
+	for _, name := range featureNames() {
+		detail.ProtocolFeatures[name] = features.Has(controller.Feature(name)) || (name == FeatureAPCmd && apCmdOn(ap, obs))
 	}
 	if ap.LocalFiles != nil {
 		detail.LocalFiles = make([]api.LocalFileView, 0, len(ap.LocalFiles))
@@ -591,7 +591,7 @@ func (s *Server) apDetail(ctx apContext, ap model.APRecord) api.APDetail {
 	}
 	detail.Overrides, detail.RFPlan, detail.LocateUntil = apOverrides(ap)
 	detail.Capabilities = api.APCapabilities{
-		APCmd: features.Has(controller.Feature("ap_cmd")),
+		APCmd: apCmdOn(ap, obs),
 		Pong2: features.Has(controller.FeaturePong2),
 	}
 	if notify := recordKey(ap, "push_mode"); len(notify) > 0 {

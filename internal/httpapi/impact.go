@@ -353,7 +353,11 @@ func impactSummary(aps int, wlans, bands map[string]int, allRadios, stranding, q
 		}
 	}
 	if len(parts) == 0 {
-		return fmt.Sprintf("%s get a new config; no client impact expected", plural(aps, "AP"))
+		verb := "gets"
+		if aps != 1 {
+			verb = "get"
+		}
+		return fmt.Sprintf("%s %s a new config; no client impact expected", plural(aps, "AP"), verb)
 	}
 	return strings.ToUpper(parts[0][:1]) + strings.Join(parts, "; ")[1:]
 }

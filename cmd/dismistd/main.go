@@ -26,6 +26,7 @@ import (
 	"github.com/nicko170/dismist/internal/metrics"
 	"github.com/nicko170/dismist/internal/migrate"
 	"github.com/nicko170/dismist/internal/model"
+	"github.com/nicko170/dismist/internal/options"
 	"github.com/nicko170/dismist/internal/protocol"
 	"github.com/nicko170/dismist/internal/proxytrust"
 )
@@ -59,7 +60,13 @@ func main() {
 	apCAFile := flag.String("ap-ca-file", "", "PEM bundle of CA certificates APs need to trust the WSS endpoint besides the served chain (default: ca.crt next to -tls-cert, if present)")
 	apFeatures := flag.String("ap-features", "", "comma-separated protocol features on by default for every AP (design §5.7); each AP's protocol_features override it (empty: all off)")
 	backups := registerBackupFlags(flag.CommandLine)
+	notify := registerNotifyFlags(flag.CommandLine)
+	acceptLocalFiles := flag.String("migrate-accept-local-files", "", "comma-separated AP IDs whose /rw/etc/mist/ep-control/local_* files the operator accepts, so the schema-2 migration may claim equivalence for them (design §4.7 step 5)")
+	legacyUI := flag.Bool("legacy-ui", true, "serve the legacy web app at /legacy/ (until the release that deletes it)")
 	flag.Parse()
+	if err := notify.validate(); err != nil {
+		log.Fatal(err)
+	}
 	defaultFeatures, err := controller.ParseFeatures(*apFeatures)
 	if err != nil {
 		log.Fatalf("-ap-features: %v", err)
@@ -178,7 +185,7 @@ func main() {
 	if err := importSecretFiles(store); err != nil {
 		log.Fatalf("import AP secret files into the database: %v", err)
 	}
-	migrated, err := migrate.Run(store, migrate.Steps(), migrate.Options{Context: migrate.Context{Template: base, Logf: log.Printf}})
+	migrated, err := migrate.Run(store, migrate.Steps(), migrate.Options{Context: migrate.Context{Template: base, Logf: log.Printf, AcceptLocalFiles: splitList(*acceptLocalFiles)}})
 	if err != nil {
 		log.Fatalf("database migration: %v", err)
 	}
@@ -260,6 +267,8 @@ func main() {
 
 	backupScheduler := newBackupScheduler(store, *backups, backupWarning(store))
 	builtVersion, builtCommit := buildVersion()
+	migrations := &migrationRunner{store: store, template: base, tempDir: os.TempDir(), accept: splitList(*acceptLocalFiles),
+		steps: migrate.Steps, logf: log.Printf}
 	operatorAPI := httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock).UseSystem(httpapi.SystemInfo{
 		Version: builtVersion, Commit: builtCommit, StartedAt: startedAt, Ready: ready.Ready,
 		APURL: *apURL, WSSListen: listener.Addr().String(), Chain: certificate.Certificate, ExtraCAs: apCAs,
@@ -267,8 +276,11 @@ func main() {
 		Metrics:   systemMetricsView(metricsFlags),
 		Backups:   backupScheduler,
 		Migration: func() api.MigrationView { return migrationView(store) },
-	})
-	uiHandler, err := operatorHandler(*adminTokenFile, operatorAPI, store.Tokens())
+	}).UseConfig(httpapi.Config{
+		Registry:  options.Default(),
+		Migration: migrations,
+	}).UseDefaultFeatures(defaultFeatures).UseLegacyUI(*legacyUI)
+	uiHandler, err := operatorGate(*adminTokenFile, operatorAPI, gateOptions{tokens: store.Tokens(), sessions: store.Sessions()})
 	if err != nil {
 		log.Fatalf("initialize administrator access: %v", err)
 	}
@@ -290,6 +302,13 @@ func main() {
 		log.Printf("Scheduled backups every %s into %s (keep %d)", backups.interval, backups.dir, backups.keep)
 	}
 	log.Printf("Administrator token file: %s", *adminTokenFile)
+	backgroundCtx, stopBackground := context.WithCancel(context.Background())
+	defer stopBackground()
+	go operatorAPI.RunLocateExpiry(backgroundCtx, 15*time.Second)
+	if notify.url != "" {
+		go newNotifier(*notify, store).run(backgroundCtx)
+		log.Printf("Webhook notifier posts %s and worse events every %s", notify.minSeverity, notify.interval)
+	}
 	registryCtx, stopRegistry := context.WithCancel(context.Background())
 	registryDone := make(chan struct{})
 	go func() {

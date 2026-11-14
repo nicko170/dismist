@@ -23,7 +23,7 @@ const FeatureAPCmd = "ap_cmd"
 
 // commandSupport says which actions the AP detail page offers.
 func (s *Server) commandSupport(state model.State, ap model.APRecord, obs apObs, features controller.Features) api.CommandSupport {
-	commands := s.commands != nil && features.Has(controller.Feature(FeatureAPCmd)) && obs.status.Connected
+	commands := s.commands != nil && apCmdOn(ap, obs) && obs.status.Connected
 	support := api.CommandSupport{Reboot: commands, RestartRadios: commands, Disconnect: commands}
 	if site := findSite(state, ap.SiteID); site != nil {
 		support.Locate = s.typedEnabled() && siteExperimental(*site)
@@ -33,14 +33,19 @@ func (s *Server) commandSupport(state model.State, ap model.APRecord, obs apObs,
 	return support
 }
 
+// apCmdOn reports whether the AP's ap_cmd feature is on (on the control
+// session once the controller knows the feature, else in the record).
+func apCmdOn(ap model.APRecord, obs apObs) bool {
+	return obs.features[FeatureAPCmd] || ap.Features[FeatureAPCmd]
+}
+
 // sendCommand sends an ap-cmd-rx command when the AP has a verified (or
 // explicitly switched on, experimental) command channel.
 func (s *Server) sendCommand(request *http.Request, ap model.APRecord, command APCommand) (string, error) {
 	if s.commands == nil {
 		return "", ErrCommandUnsupported
 	}
-	obs := s.observe(ap.ID)
-	if !obs.features[FeatureAPCmd] {
+	if !apCmdOn(ap, s.observe(ap.ID)) {
 		return "", ErrCommandUnsupported
 	}
 	command.Sender = "dismist"
