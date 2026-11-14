@@ -26,7 +26,7 @@ export async function api<T>(
 
 // errorMessage turns an error response into one sentence: the JSON contract
 // {error, code, fields} when the server sends it, otherwise the plain text.
-async function errorMessage(response: Response): Promise<string> {
+export async function errorMessage(response: Response): Promise<string> {
   const text = (await response.text()).trim();
   try {
     const body = JSON.parse(text) as {
@@ -43,7 +43,11 @@ async function errorMessage(response: Response): Promise<string> {
   } catch {
     // Not JSON: fall through to the text.
   }
-  return text || `Request failed (${response.status})`;
+  // A proxy's HTML error page or a long body is no sentence for humans.
+  const line = text.split("\n")[0].trim();
+  return line && !line.startsWith("<") && line.length <= 200
+    ? line
+    : `Request failed (${response.status})`;
 }
 
 export function timeLabel(value?: string): string {

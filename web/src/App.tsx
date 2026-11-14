@@ -24,6 +24,7 @@ import {
   api,
   bytesLabel,
   durationLabel,
+  errorMessage,
   timeLabel,
   UnauthorizedError,
 } from "./api";
@@ -243,7 +244,7 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
         throw new Error(
           response.status === 401
             ? "The access token was not accepted."
-            : (await response.text()).trim() || "Could not sign in.",
+            : await errorMessage(response),
         );
       setToken("");
       onSuccess();
