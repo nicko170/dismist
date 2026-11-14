@@ -117,10 +117,15 @@ func TestTLSErrorLog(t *testing.T) {
 	var forwarded bytes.Buffer
 	logger := instruments.TLSErrorLog(&forwarded)
 	logger.Printf("http: TLS handshake error from 192.0.2.9:4242: remote error: tls: unknown certificate authority")
+	logger.Printf("http: TLS handshake error from 192.0.2.9:4243: EOF")
+	logger.Printf("http: TLS handshake error from 192.0.2.9:4244: read tcp 10.0.0.1:8443->192.0.2.9:4244: read: connection reset by peer")
+	logger.Printf("http: TLS handshake error from 192.0.2.9:4245: tls: first record does not look like a TLS handshake")
 	logger.Printf("http: something else")
-	if instruments.tlsErrors.Load() != 1 {
-		t.Fatalf("tls errors = %d", instruments.tlsErrors.Load())
-	}
+	expectLines(t, scrape(t, instruments),
+		`dismist_ap_tls_handshake_errors_total{reason="client_rejected"} 1`,
+		`dismist_ap_tls_handshake_errors_total{reason="closed"} 2`,
+		`dismist_ap_tls_handshake_errors_total{reason="protocol"} 1`,
+	)
 	if !strings.Contains(forwarded.String(), "something else") || !strings.Contains(forwarded.String(), "TLS handshake error") {
 		t.Fatalf("lines not forwarded: %q", forwarded.String())
 	}
@@ -169,7 +174,7 @@ func TestDNSInstrumentation(t *testing.T) {
 		`dismist_dns_queries_total{result="refused"} 1`,
 		`dismist_dns_queries_total{result="error"} 1`,
 		"dismist_store_observation_errors_total 1",
-		"dismist_ap_tls_handshake_errors_total 0",
+		`dismist_ap_tls_handshake_errors_total{reason="client_rejected"} 0`,
 	)
 }
 

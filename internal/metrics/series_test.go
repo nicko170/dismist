@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"bytes"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -318,4 +319,53 @@ func statusAt(connected time.Time) controller.Status {
 
 func statsAt(lastFull time.Time) controller.TelemetrySnapshot {
 	return controller.TelemetrySnapshot{LastFull: lastFull}
+}
+
+// TestCardinalityIsBounded: an AP reporting hundreds of radios, ports,
+// WLANs, VLANs, decode sections and neighbours adds a bounded number of
+// series.
+func TestCardinalityIsBounded(t *testing.T) {
+	store, sessions := fixture(t)
+	noisy := sessions[ap1].(fakeSession)
+	detail := fixtureDetail()
+	for index := range 200 {
+		n := strconv.Itoa(index)
+		detail.Telemetry.Radios = append(detail.Telemetry.Radios, Radio{Dev: "r" + strconv.Itoa(index%100), Band: "5"})
+		detail.Telemetry.Ports = append(detail.Telemetry.Ports, Port{Name: "eth" + strconv.Itoa(index%100)})
+		detail.Telemetry.WLANs = append(detail.Telemetry.WLANs, WLAN{ID: "wlan-" + n, RadioIndex: index % 2})
+		detail.Telemetry.InactiveVLANs = append(detail.Telemetry.InactiveVLANs, uint16(index+1))
+		detail.Telemetry.LLDPNeighbors = append(detail.Telemetry.LLDPNeighbors, LLDPNeighbor{Port: "eth0", SystemName: strings.Repeat("s", 500) + n})
+		detail.Topics["topic-"+n] = 1
+		noisy.counters.DecodeErrors["section_"+n] = 1
+	}
+	noisy.detail = detail
+	sessions[ap1] = noisy
+	out := scrape(t, testCollector(store, sessions, Options{Names: true}))
+	count := func(prefix string) int {
+		n := 0
+		for _, line := range samples(out) {
+			if strings.HasPrefix(line, prefix+"{") && strings.Contains(line, `ap="`+ap1+`"`) {
+				n++
+			}
+		}
+		return n
+	}
+	for family, limit := range map[string]int{
+		"dismist_radio_info":                       maxRadiosPerAP,
+		"dismist_ap_port_up":                       maxPortsPerAP,
+		"dismist_wlan_clients":                     maxWLANsPerAP,
+		"dismist_ap_inactive_vlan":                 maxVLANsPerAP,
+		"dismist_ap_lldp_neighbor_info":            maxNeighborsPerAP,
+		"dismist_ap_telemetry_messages_total":      len(TelemetryTopics) + 1,
+		"dismist_ap_telemetry_decode_errors_total": maxCountedKeys + 2,
+	} {
+		if got := count(family); got > limit || got == 0 {
+			t.Errorf("%s: %d series, limit %d", family, got, limit)
+		}
+	}
+	for _, line := range samples(out) {
+		if strings.HasPrefix(line, "dismist_ap_lldp_neighbor_info{") && strings.Contains(line, strings.Repeat("s", maxLabelTextRunes+1)) {
+			t.Fatalf("system name not truncated: %.120s", line)
+		}
+	}
 }

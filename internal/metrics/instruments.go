@@ -21,7 +21,7 @@ import (
 // and passes it to the scrape handler (Options.Instruments). Every method is
 // safe on a nil *Instruments and then counts nothing.
 type Instruments struct {
-	tlsErrors         atomic.Uint64
+	tlsErrors         [len(TLSErrorReasons)]atomic.Uint64
 	observationErrors atomic.Uint64
 	dns               [len(DNSResults)]atomic.Uint64
 	streams           atomic.Int64
@@ -34,6 +34,13 @@ type Instruments struct {
 	tlsDesc, observationDesc, dnsDesc       *prometheus.Desc
 	streamsDesc, updatesDesc, loginFailDesc *prometheus.Desc
 }
+
+// TLSErrorReasons are the dismist_ap_tls_handshake_errors_total reasons:
+// client_rejected (the client sent a TLS alert, typically an AP that does
+// not trust the served chain), closed (the connection ended before a
+// handshake: load balancer checks and port scans) and protocol (anything
+// else, such as plain HTTP or an unsupported TLS version).
+var TLSErrorReasons = [...]string{"client_rejected", "closed", "protocol"}
 
 // DNSResults are the dismist_dns_queries_total results.
 var DNSResults = [...]string{"override", "forwarded", "refused", "error"}
@@ -50,7 +57,7 @@ func NewInstruments() *Instruments {
 			Help:    "Operator UI and API request duration by route (the SSE stream route is not timed).",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"route"}),
-		tlsDesc:         prometheus.NewDesc("dismist_ap_tls_handshake_errors_total", "TLS handshakes on the AP WSS listener that failed; the usual cause is an AP that does not trust the served chain.", nil, nil),
+		tlsDesc:         prometheus.NewDesc("dismist_ap_tls_handshake_errors_total", "Failed TLS handshakes on the AP WSS listener by reason: client_rejected (usually an AP that does not trust the served chain), closed (health checks, scans) or protocol.", []string{"reason"}, nil),
 		observationDesc: prometheus.NewDesc("dismist_store_observation_errors_total", "AP observations (history samples, events, client sessions) the controller could not write to its database.", nil, nil),
 		dnsDesc:         prometheus.NewDesc("dismist_dns_queries_total", "AP DNS queries by result: override (answered with the controller address), forwarded, refused (not a registered AP) or error.", []string{"result"}, nil),
 		streamsDesc:     prometheus.NewDesc("dismist_ui_streams", "Open operator UI event streams (SSE).", nil, nil),
@@ -70,7 +77,9 @@ func (i *Instruments) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect implements prometheus.Collector.
 func (i *Instruments) Collect(ch chan<- prometheus.Metric) {
-	counter(ch, i.tlsDesc, float64(i.tlsErrors.Load()))
+	for index, reason := range TLSErrorReasons {
+		counter(ch, i.tlsDesc, float64(i.tlsErrors[index].Load()), reason)
+	}
 	counter(ch, i.observationDesc, float64(i.observationErrors.Load()))
 	for index, result := range DNSResults {
 		counter(ch, i.dnsDesc, float64(i.dns[index].Load()), result)
@@ -103,12 +112,24 @@ type tlsErrorWriter struct {
 
 func (w *tlsErrorWriter) Write(line []byte) (int, error) {
 	if w.instruments != nil && bytes.Contains(line, []byte("TLS handshake error")) {
-		w.instruments.tlsErrors.Add(1)
+		w.instruments.tlsErrors[tlsErrorReason(line)].Add(1)
 	}
 	if w.next == nil {
 		return len(line), nil
 	}
 	return w.next.Write(line)
+}
+
+// tlsErrorReason classifies a "TLS handshake error" log line from net/http.
+func tlsErrorReason(line []byte) int {
+	text := string(line)
+	switch {
+	case strings.Contains(text, "remote error"):
+		return 0
+	case strings.Contains(text, "EOF") || strings.Contains(text, "connection reset") || strings.Contains(text, "i/o timeout") || strings.Contains(text, "broken pipe"):
+		return 1
+	}
+	return 2
 }
 
 // DNS wraps the AP DNS handler and counts each answer by result.
