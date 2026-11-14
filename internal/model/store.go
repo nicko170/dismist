@@ -42,6 +42,24 @@ type APRecord struct {
 	// UpdatedRev is the state revision that last changed this record. The
 	// store maintains it; it backs If-Match (design §4.8).
 	UpdatedRev uint64 `json:"updated_rev,omitempty"`
+
+	// Schema-2 typed fields (design §4.3); new keys only.
+
+	// Expert is the AP expert patch, stored folded (canonical keys).
+	Expert        json.RawMessage `json:"expert,omitempty"`
+	LEDBrightness *int            `json:"led_brightness,omitempty"`
+	SSHEnabled    *bool           `json:"ssh_enabled,omitempty"`
+	// RF holds per-band overrides keyed "2.4" and "5".
+	RF map[string]*RadioOverride `json:"rf_override,omitempty"`
+	// RFPlan is written by rfplan (initial assignment or planner).
+	RFPlan           map[string]PlannedRadio `json:"rf_plan,omitempty"`
+	Management       *ManagementOverride     `json:"management,omitempty"` // experimental
+	Eth1             *Eth1                   `json:"eth1,omitempty"`       // experimental
+	WiredClientStats *bool                   `json:"wired_client_stats,omitempty"`
+	// LocateUntil blinks the LED (LED.Locator) until this time.
+	LocateUntil time.Time `json:"locate_until,omitzero"`
+	// PushMode is learned by the controller: "notify" or "reconnect".
+	PushMode string `json:"push_mode,omitempty"`
 }
 
 // LocalFile is one local_* file the CLI found on an AP.
@@ -52,25 +70,86 @@ type LocalFile struct {
 }
 
 type Site struct {
-	ID            string          `json:"id"`
-	Name          string          `json:"name"`
-	Country       string          `json:"country,omitempty"`
-	Timezone      string          `json:"timezone,omitempty"`
-	SSHPublicKeys []string        `json:"ssh_public_keys,omitempty"`
-	Advanced      json.RawMessage `json:"advanced,omitempty"`
-	UpdatedRev    uint64          `json:"updated_rev,omitempty"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Country  string `json:"country,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
+	// SSHPublicKeys is the schema-1 key list (design calls it
+	// LegacySSHKeys); kept byte-identical until the migration is finalised.
+	SSHPublicKeys []string `json:"ssh_public_keys,omitempty"`
+	// Advanced is the schema-1 site patch (LegacyAdvanced); same rule.
+	Advanced   json.RawMessage `json:"advanced,omitempty"`
+	UpdatedRev uint64          `json:"updated_rev,omitempty"`
+
+	// Schema-2 typed fields (design §4.3); new keys only.
+	SSH          SiteSSH            `json:"ssh,omitzero"`
+	Syslog       []SyslogTarget     `json:"syslog,omitempty"`
+	Management   ManagementDefaults `json:"management,omitzero"`
+	APDefaults   APDefaults         `json:"ap_defaults,omitzero"`
+	Protection   Protection         `json:"protection,omitzero"`
+	RF           RFProfile          `json:"rf,omitzero"`
+	Roaming      SiteRoaming        `json:"roaming,omitzero"`
+	Experimental bool               `json:"experimental,omitempty"`
+	// Expert is the site expert patch, stored folded (canonical keys).
+	Expert json.RawMessage `json:"expert,omitempty"`
 }
 
 type Network struct {
-	ID       string          `json:"id"`
-	SiteID   string          `json:"site_id,omitempty"`
-	SSID     string          `json:"ssid"`
-	PSK      string          `json:"psk"`
-	VLANID   int             `json:"vlan_id"`
-	Enabled  bool            `json:"enabled"`
+	ID      string `json:"id"`
+	SiteID  string `json:"site_id,omitempty"`
+	SSID    string `json:"ssid"`
+	PSK     string `json:"psk"`
+	VLANID  int    `json:"vlan_id"`
+	Enabled bool   `json:"enabled"`
+	// Advanced is the schema-1 network patch (LegacyAdvanced); kept
+	// byte-identical until the migration is finalised.
 	Advanced json.RawMessage `json:"advanced,omitempty"`
 	// UpdatedRev is maintained by the store, as for APRecord.
 	UpdatedRev uint64 `json:"updated_rev,omitempty"`
+
+	// Schema-2 typed fields (design §4.3, §3.9); new keys only.
+	Security   string        `json:"security,omitempty"`
+	PMF        string        `json:"pmf,omitempty"` // "disabled" | "optional" | "required"; WPA2 modes only
+	RADIUS     *RADIUSConfig `json:"radius,omitempty"`
+	MPSK       *MultiPSK     `json:"mpsk,omitempty"`
+	Bands      []string      `json:"bands,omitempty"`
+	Hidden     bool          `json:"hidden,omitempty"`
+	Isolation  string        `json:"isolation,omitempty"`   // "", "clients", "clients_and_lan"
+	BSSIDIndex int           `json:"bssid_index,omitempty"` // 1..15, never 0
+	// OWEIndex is reserved for the OWE transition companion.
+	OWEIndex          int            `json:"owe_bssid_index,omitempty"`
+	BandSteering      bool           `json:"band_steering,omitempty"`
+	Rates             string         `json:"rates,omitempty"`    // "compatible" | "no_legacy" | "high_density" | "legacy_only"
+	MinRSSI           map[string]int `json:"min_rssi,omitempty"` // experimental, per band
+	DTIM              int            `json:"dtim,omitempty"`
+	IdleTimeout       int            `json:"idle_timeout_sec,omitempty"`
+	MaxClients        int            `json:"max_clients,omitempty"`
+	Roaming           Roaming        `json:"roaming,omitzero"`
+	Broadcast         Broadcast      `json:"broadcast,omitzero"`
+	DHCPOnly          bool           `json:"dhcp_only,omitempty"`
+	DHCPDNSOnly       bool           `json:"dhcp_dns_only,omitempty"`
+	WMMDisabled       bool           `json:"wmm_disabled,omitempty"`
+	UAPSDDisabled     bool           `json:"uapsd_disabled,omitempty"`
+	Disable11ax       bool           `json:"disable_11ax,omitempty"`
+	Disable11nac      bool           `json:"disable_11nac,omitempty"`
+	GroupRekeySec     int            `json:"group_rekey_sec,omitempty"`
+	EAPOLv1           bool           `json:"eapol_v1,omitempty"`
+	SAEH2EOnly        bool           `json:"sae_h2e_only,omitempty"`
+	TransitionDisable bool           `json:"transition_disable,omitempty"`
+	OWESSID           string         `json:"owe_ssid,omitempty"`   // experimental
+	RateLimit         *RateLimit     `json:"rate_limit,omitempty"` // experimental
+	QoSClass          string         `json:"qos_class,omitempty"`  // experimental: "", "best_effort", "background", "video", "voice"
+	// HonourBlocklist enforces the site's blocked clients (BlackList.Enabled).
+	HonourBlocklist bool `json:"honour_blocklist,omitempty"`
+	// UcastDisassocOnBssDown is an expert-tier default: new WLANs true,
+	// migrated WLANs nil (absent).
+	UcastDisassocOnBssDown *bool `json:"ucast_disassoc_on_bss_down,omitempty"`
+	// ReclaimTimeoutSec is an expert-tier default: new 300, legacy 600.
+	ReclaimTimeoutSec int       `json:"reclaim_timeout_sec,omitempty"`
+	Option82          *Option82 `json:"option82,omitempty"` // phase 4
+	Schedule          *Schedule `json:"schedule,omitempty"` // experimental, phase 4
+	// Expert is the WLAN expert patch, stored folded (canonical keys).
+	Expert json.RawMessage `json:"expert,omitempty"`
 }
 
 type State struct {
@@ -79,7 +158,17 @@ type State struct {
 	Sites     []Site     `json:"sites,omitempty"`
 	APs       []APRecord `json:"aps"`
 	Networks  []Network  `json:"networks"`
+	// Schema is the config schema the compiler uses for this state: 2 once
+	// the schema-2 migration has committed (and no older binary has
+	// written since), otherwise 1 (legacy mode, legacyv0 rules). The bbolt
+	// store derives it from meta at read time and never stores it in the
+	// state buckets; the JSON store keeps it in the file.
+	Schema uint64 `json:"schema,omitempty"`
 }
+
+// Typed reports whether the state compiles with the schema-2 (typed)
+// pipeline.
+func (s State) Typed() bool { return s.Schema >= 2 }
 
 // Store is the legacy JSON-file state store. dismistd uses BoltStore; Store
 // remains for tests and the one-time import of a legacy state file.
@@ -148,8 +237,12 @@ func (s *Store) UpdateTx(change func(*State, *Tx) error) error {
 	for key, value := range s.mem.apConfig {
 		staged.apConfig[key] = value
 	}
-	if err := change(&next, &Tx{mem: &staged}); err != nil {
+	tx := &Tx{mem: &staged}
+	if err := change(&next, tx); err != nil {
 		return err
+	}
+	if tx.schemaSet != 0 {
+		next.Schema = tx.schemaSet
 	}
 	if err := validate(next); err != nil {
 		return err
@@ -244,8 +337,16 @@ func clone(state State) State {
 	state.Networks = append([]Network(nil), state.Networks...)
 	state.Sites = append([]Site(nil), state.Sites...)
 	for index := range state.Sites {
-		state.Sites[index].Advanced = append(json.RawMessage(nil), state.Sites[index].Advanced...)
-		state.Sites[index].SSHPublicKeys = append([]string(nil), state.Sites[index].SSHPublicKeys...)
+		site := &state.Sites[index]
+		site.Advanced = append(json.RawMessage(nil), site.Advanced...)
+		site.SSHPublicKeys = append([]string(nil), site.SSHPublicKeys...)
+		site.Expert = append(json.RawMessage(nil), site.Expert...)
+		site.SSH = cloneJSON(site.SSH)
+		site.Syslog = cloneJSON(site.Syslog)
+		site.Management = cloneJSON(site.Management)
+		site.APDefaults = cloneJSON(site.APDefaults)
+		site.Protection = cloneJSON(site.Protection)
+		site.RF = cloneJSON(site.RF)
 	}
 	for index := range state.APs {
 		ap := &state.APs[index]
@@ -261,9 +362,58 @@ func clone(state State) State {
 			}
 			ap.Features = features
 		}
+		ap.Expert = append(json.RawMessage(nil), ap.Expert...)
+		if ap.LEDBrightness != nil {
+			value := *ap.LEDBrightness
+			ap.LEDBrightness = &value
+		}
+		if ap.SSHEnabled != nil {
+			value := *ap.SSHEnabled
+			ap.SSHEnabled = &value
+		}
+		if ap.WiredClientStats != nil {
+			value := *ap.WiredClientStats
+			ap.WiredClientStats = &value
+		}
+		if ap.RF != nil {
+			ap.RF = cloneJSON(ap.RF)
+		}
+		if ap.RFPlan != nil {
+			plans := make(map[string]PlannedRadio, len(ap.RFPlan))
+			for band, plan := range ap.RFPlan {
+				plans[band] = plan
+			}
+			ap.RFPlan = plans
+		}
+		if ap.Management != nil {
+			ap.Management = cloneJSON(ap.Management)
+		}
+		if ap.Eth1 != nil {
+			ap.Eth1 = cloneJSON(ap.Eth1)
+		}
 	}
 	for index := range state.Networks {
-		state.Networks[index].Advanced = append(json.RawMessage(nil), state.Networks[index].Advanced...)
+		network := &state.Networks[index]
+		network.Advanced = append(json.RawMessage(nil), network.Advanced...)
+		network.Expert = append(json.RawMessage(nil), network.Expert...)
+		network.Bands = append([]string(nil), network.Bands...)
+		for _, field := range []func(){
+			func() { network.RADIUS = cloneJSON(network.RADIUS) },
+			func() { network.MPSK = cloneJSON(network.MPSK) },
+			func() { network.RateLimit = cloneJSON(network.RateLimit) },
+			func() { network.Option82 = cloneJSON(network.Option82) },
+			func() { network.Schedule = cloneJSON(network.Schedule) },
+			func() { network.UcastDisassocOnBssDown = cloneJSON(network.UcastDisassocOnBssDown) },
+		} {
+			field()
+		}
+		if network.MinRSSI != nil {
+			minRSSI := make(map[string]int, len(network.MinRSSI))
+			for band, value := range network.MinRSSI {
+				minRSSI[band] = value
+			}
+			network.MinRSSI = minRSSI
+		}
 	}
 	return state
 }
@@ -292,7 +442,7 @@ func validate(state State) error {
 func checkState(state State) error {
 	sites := map[string]bool{}
 	for _, site := range state.Sites {
-		if site.ID == "" || site.Name == "" || sites[site.ID] || validateAdvanced(site.Advanced) != nil {
+		if site.ID == "" || site.Name == "" || sites[site.ID] || validateAdvanced(site.Advanced) != nil || validateAdvanced(site.Expert) != nil {
 			return errors.New("invalid or duplicate site")
 		}
 		if _, err := NormalizeSSHPublicKeys(site.SSHPublicKeys); err != nil {
@@ -302,7 +452,7 @@ func checkState(state State) error {
 	}
 	seenAP := map[string]bool{}
 	for _, ap := range state.APs {
-		if ap.ID == "" || (len(ap.Secret) != SecretSize && ap.SecretFile == "") || seenAP[ap.ID] || (len(sites) > 0 && ap.SiteID != "" && !sites[ap.SiteID]) || validateAdvanced(ap.Advanced) != nil {
+		if ap.ID == "" || (len(ap.Secret) != SecretSize && ap.SecretFile == "") || seenAP[ap.ID] || (len(sites) > 0 && ap.SiteID != "" && !sites[ap.SiteID]) || validateAdvanced(ap.Advanced) != nil || validateAdvanced(ap.Expert) != nil {
 			return errors.New("invalid or duplicate AP record")
 		}
 		seenAP[ap.ID] = true
@@ -314,11 +464,55 @@ func checkState(state State) error {
 		}
 		seenNetwork[network.SiteID+"/"+network.ID] = true
 		if len(network.SSID) < 1 || len(network.SSID) > 32 || network.VLANID < 1 || network.VLANID > 4094 ||
-			len(network.PSK) < 8 || len(network.PSK) > 63 || validateAdvanced(network.Advanced) != nil {
+			!validNetworkPSK(network) || validateAdvanced(network.Advanced) != nil || validateAdvanced(network.Expert) != nil {
 			return fmt.Errorf("invalid network %s", network.ID)
 		}
 	}
 	return nil
+}
+
+// validNetworkPSK applies the passphrase rules of the network's security
+// (design §3.9): schema-1 networks and WPA2-Personal take 8 to 63
+// characters (WPA2-Personal also exactly 64 hex digits); the SAE modes 8 to
+// 63 printable ASCII; modes without a passphrase must not carry one.
+func validNetworkPSK(network Network) bool {
+	switch network.Security {
+	case "":
+		return len(network.PSK) >= 8 && len(network.PSK) <= 63
+	case SecurityWPA2Personal:
+		return ValidPassphrase(network.PSK) || IsHexPMK(network.PSK)
+	case SecurityWPA2WPA3Personal, SecurityWPA3Personal:
+		return ValidPassphrase(network.PSK)
+	}
+	return network.PSK == ""
+}
+
+// ValidPassphrase reports whether psk is 8 to 63 printable ASCII
+// characters.
+func ValidPassphrase(psk string) bool {
+	if len(psk) < 8 || len(psk) > 63 {
+		return false
+	}
+	for index := 0; index < len(psk); index++ {
+		if psk[index] < 0x20 || psk[index] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+// IsHexPMK reports whether psk is exactly 64 hex digits (a raw PMK).
+func IsHexPMK(psk string) bool {
+	if len(psk) != 64 {
+		return false
+	}
+	for index := 0; index < len(psk); index++ {
+		c := psk[index]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+			return false
+		}
+	}
+	return true
 }
 
 func validateAdvanced(raw json.RawMessage) error {

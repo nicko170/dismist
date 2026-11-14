@@ -58,11 +58,12 @@ var bucketNames = []string{
 func BucketNames() []string { return append([]string(nil), bucketNames...) }
 
 type BoltStore struct {
-	mu      sync.RWMutex
-	db      *bolt.DB
-	path    string
-	state   State
-	hashKey []byte
+	mu           sync.RWMutex
+	db           *bolt.DB
+	path         string
+	state        State
+	hashKey      []byte
+	schemaStatus SchemaStatus
 }
 
 func OpenBolt(path, legacyJSON string) (*BoltStore, error) {
@@ -126,6 +127,11 @@ func OpenBolt(path, legacyJSON string) (*BoltStore, error) {
 		err = db.View(func(tx *bolt.Tx) error {
 			var readErr error
 			store.state, readErr = readBoltState(tx)
+			if readErr != nil {
+				return readErr
+			}
+			store.schemaStatus, readErr = readSchemaStatus(tx, store.hashKey, store.state)
+			store.state.Schema = store.schemaStatus.Config
 			return readErr
 		})
 	}
@@ -191,7 +197,22 @@ func (s *BoltStore) Update(change func(*State) error) error {
 		return err
 	}
 	s.state = next
+	s.noteCommitted()
 	return nil
+}
+
+// noteCommitted updates the cached schema status after a write: a typed
+// write keeps it typed (and records v2_revision), a legacy write leaves
+// it as it was.
+func (s *BoltStore) noteCommitted() {
+	if s.state.Typed() {
+		s.schemaStatus.Config = s.state.Schema
+		if s.schemaStatus.Meta < s.state.Schema {
+			s.schemaStatus.Meta = s.state.Schema
+		}
+		s.schemaStatus.OlderWriter = false
+		s.schemaStatus.Legacy = false
+	}
 }
 
 // UpdateTx is Update with the change function running inside the bbolt write
@@ -204,8 +225,17 @@ func (s *BoltStore) UpdateTx(change func(*State, *Tx) error) error {
 	defer s.mu.Unlock()
 	next := s.prepareNext()
 	if err := s.db.Update(func(btx *bolt.Tx) error {
-		if err := change(&next, &Tx{bolt: btx, hashKey: s.hashKey}); err != nil {
+		tx := &Tx{bolt: btx, hashKey: s.hashKey}
+		if err := change(&next, tx); err != nil {
 			return err
+		}
+		if tx.schemaSet != 0 {
+			// The schema-2 migration (or a re-migration) committed: the
+			// state compiles typed from this write on.
+			next.Schema = tx.schemaSet
+			if err := btx.Bucket([]byte(BucketMeta)).Delete([]byte(MetaMigrationState)); err != nil {
+				return err
+			}
 		}
 		if err := validate(next); err != nil {
 			return err
@@ -217,6 +247,7 @@ func (s *BoltStore) UpdateTx(change func(*State, *Tx) error) error {
 		return err
 	}
 	s.state = next
+	s.noteCommitted()
 	return nil
 }
 
@@ -274,7 +305,10 @@ func (s *BoltStore) commitState(tx *bolt.Tx, next State) error {
 			}
 		}
 	}
-	return writeBoltState(tx, next)
+	if err := writeBoltState(tx, next); err != nil {
+		return err
+	}
+	return commitSchema2(tx, s.hashKey, next)
 }
 
 // View runs fn in a read-only bbolt transaction. It is for code that must see

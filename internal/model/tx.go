@@ -23,6 +23,9 @@ type Tx struct {
 	bolt    *bolt.Tx
 	hashKey []byte
 	mem     *memBuckets // the JSON Store keeps ap_config in memory
+	// schemaSet is the schema SetSchema wrote in this transaction (0 =
+	// none): the store makes it the state's config schema on commit.
+	schemaSet uint64
 }
 
 // Bolt returns the underlying bbolt write transaction, or nil for the JSON
@@ -64,6 +67,7 @@ func (t *Tx) Schema() (SchemaInfo, error) {
 
 // SetSchema writes meta.schema (the data format the newest writer used).
 func (t *Tx) SetSchema(schema uint64) error {
+	t.schemaSet = schema
 	if t.bolt == nil {
 		return nil
 	}

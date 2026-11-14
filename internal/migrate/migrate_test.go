@@ -175,7 +175,7 @@ func TestRefusedOrFailedStepRollsBackToLegacy(t *testing.T) {
 
 func TestStepAboveSupportedSchemaIsRefused(t *testing.T) {
 	store := newStore(t)
-	if _, err := Run(store, []Step{renameStep("x")}, Options{Context: Context{Now: now}, DiskUsage: plenty}); err == nil {
+	if _, err := Run(store, []Step{renameStep("x")}, Options{Context: Context{Now: now}, DiskUsage: plenty, MaxSchema: 1}); err == nil {
 		t.Fatal("M0 binary migrated to schema 2")
 	}
 }
