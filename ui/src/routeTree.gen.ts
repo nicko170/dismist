@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SitesSiteIdRouteRouteImport } from './routes/sites/$siteId/route'
 import { Route as SitesSiteIdSettingsRouteRouteImport } from './routes/sites/$siteId/settings/route'
+import { Route as SitesSiteIdChangesIndexRouteImport } from './routes/sites/$siteId/changes/index'
+import { Route as SitesSiteIdChangesRevRouteImport } from './routes/sites/$siteId/changes/$rev'
 import { Route as SitesSiteIdRfIndexRouteImport } from './routes/sites/$siteId/rf/index'
 import { Route as SitesSiteIdRfNeighboursRouteImport } from './routes/sites/$siteId/rf/neighbours'
 import { Route as SitesSiteIdSettingsIndexRouteImport } from './routes/sites/$siteId/settings/index'
@@ -25,6 +27,8 @@ import { Route as SitesSiteIdSettingsNetworkRouteImport } from './routes/sites/$
 import { Route as SitesSiteIdSettingsProtectionRouteImport } from './routes/sites/$siteId/settings/protection'
 import { Route as SitesSiteIdWlansIndexRouteImport } from './routes/sites/$siteId/wlans/index'
 import { Route as SitesSiteIdWlansNewRouteImport } from './routes/sites/$siteId/wlans/new'
+import { Route as SitesSiteIdApsApIdConfigRouteImport } from './routes/sites/$siteId/aps/$apId/config'
+import { Route as SitesSiteIdApsApIdSettingsRouteImport } from './routes/sites/$siteId/aps/$apId/settings'
 import { Route as SitesSiteIdWlansWlanIdIndexRouteImport } from './routes/sites/$siteId/wlans/$wlanId/index'
 import { Route as SitesSiteIdWlansWlanIdExpertRouteImport } from './routes/sites/$siteId/wlans/$wlanId/expert'
 
@@ -49,6 +53,16 @@ const SitesSiteIdSettingsRouteRoute =
     path: '/settings',
     getParentRoute: () => SitesSiteIdRouteRoute,
   } as any)
+const SitesSiteIdChangesIndexRoute = SitesSiteIdChangesIndexRouteImport.update({
+  id: '/changes/',
+  path: '/changes/',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdChangesRevRoute = SitesSiteIdChangesRevRouteImport.update({
+  id: '/changes/$rev',
+  path: '/changes/$rev',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
 const SitesSiteIdRfIndexRoute = SitesSiteIdRfIndexRouteImport.update({
   id: '/rf/',
   path: '/rf/',
@@ -117,6 +131,18 @@ const SitesSiteIdWlansNewRoute = SitesSiteIdWlansNewRouteImport.update({
   path: '/wlans/new',
   getParentRoute: () => SitesSiteIdRouteRoute,
 } as any)
+const SitesSiteIdApsApIdConfigRoute =
+  SitesSiteIdApsApIdConfigRouteImport.update({
+    id: '/aps/$apId/config',
+    path: '/aps/$apId/config',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdSettingsRoute =
+  SitesSiteIdApsApIdSettingsRouteImport.update({
+    id: '/aps/$apId/settings',
+    path: '/aps/$apId/settings',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
 const SitesSiteIdWlansWlanIdIndexRoute =
   SitesSiteIdWlansWlanIdIndexRouteImport.update({
     id: '/wlans/$wlanId/',
@@ -135,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRouteRouteWithChildren
+  '/sites/$siteId/changes/$rev': typeof SitesSiteIdChangesRevRoute
   '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
   '/sites/$siteId/settings/access': typeof SitesSiteIdSettingsAccessRoute
   '/sites/$siteId/settings/advanced': typeof SitesSiteIdSettingsAdvancedRoute
@@ -144,9 +171,12 @@ export interface FileRoutesByFullPath {
   '/sites/$siteId/settings/network': typeof SitesSiteIdSettingsNetworkRoute
   '/sites/$siteId/settings/protection': typeof SitesSiteIdSettingsProtectionRoute
   '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
+  '/sites/$siteId/changes/': typeof SitesSiteIdChangesIndexRoute
   '/sites/$siteId/rf/': typeof SitesSiteIdRfIndexRoute
   '/sites/$siteId/settings/': typeof SitesSiteIdSettingsIndexRoute
   '/sites/$siteId/wlans/': typeof SitesSiteIdWlansIndexRoute
+  '/sites/$siteId/aps/$apId/config': typeof SitesSiteIdApsApIdConfigRoute
+  '/sites/$siteId/aps/$apId/settings': typeof SitesSiteIdApsApIdSettingsRoute
   '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
   '/sites/$siteId/wlans/$wlanId/': typeof SitesSiteIdWlansWlanIdIndexRoute
 }
@@ -154,6 +184,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/sites/$siteId/changes/$rev': typeof SitesSiteIdChangesRevRoute
   '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
   '/sites/$siteId/settings/access': typeof SitesSiteIdSettingsAccessRoute
   '/sites/$siteId/settings/advanced': typeof SitesSiteIdSettingsAdvancedRoute
@@ -163,9 +194,12 @@ export interface FileRoutesByTo {
   '/sites/$siteId/settings/network': typeof SitesSiteIdSettingsNetworkRoute
   '/sites/$siteId/settings/protection': typeof SitesSiteIdSettingsProtectionRoute
   '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
+  '/sites/$siteId/changes': typeof SitesSiteIdChangesIndexRoute
   '/sites/$siteId/rf': typeof SitesSiteIdRfIndexRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsIndexRoute
   '/sites/$siteId/wlans': typeof SitesSiteIdWlansIndexRoute
+  '/sites/$siteId/aps/$apId/config': typeof SitesSiteIdApsApIdConfigRoute
+  '/sites/$siteId/aps/$apId/settings': typeof SitesSiteIdApsApIdSettingsRoute
   '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
   '/sites/$siteId/wlans/$wlanId': typeof SitesSiteIdWlansWlanIdIndexRoute
 }
@@ -175,6 +209,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRouteRouteWithChildren
+  '/sites/$siteId/changes/$rev': typeof SitesSiteIdChangesRevRoute
   '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
   '/sites/$siteId/settings/access': typeof SitesSiteIdSettingsAccessRoute
   '/sites/$siteId/settings/advanced': typeof SitesSiteIdSettingsAdvancedRoute
@@ -184,9 +219,12 @@ export interface FileRoutesById {
   '/sites/$siteId/settings/network': typeof SitesSiteIdSettingsNetworkRoute
   '/sites/$siteId/settings/protection': typeof SitesSiteIdSettingsProtectionRoute
   '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
+  '/sites/$siteId/changes/': typeof SitesSiteIdChangesIndexRoute
   '/sites/$siteId/rf/': typeof SitesSiteIdRfIndexRoute
   '/sites/$siteId/settings/': typeof SitesSiteIdSettingsIndexRoute
   '/sites/$siteId/wlans/': typeof SitesSiteIdWlansIndexRoute
+  '/sites/$siteId/aps/$apId/config': typeof SitesSiteIdApsApIdConfigRoute
+  '/sites/$siteId/aps/$apId/settings': typeof SitesSiteIdApsApIdSettingsRoute
   '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
   '/sites/$siteId/wlans/$wlanId/': typeof SitesSiteIdWlansWlanIdIndexRoute
 }
@@ -197,6 +235,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/sites/$siteId'
     | '/sites/$siteId/settings'
+    | '/sites/$siteId/changes/$rev'
     | '/sites/$siteId/rf/neighbours'
     | '/sites/$siteId/settings/access'
     | '/sites/$siteId/settings/advanced'
@@ -206,9 +245,12 @@ export interface FileRouteTypes {
     | '/sites/$siteId/settings/network'
     | '/sites/$siteId/settings/protection'
     | '/sites/$siteId/wlans/new'
+    | '/sites/$siteId/changes/'
     | '/sites/$siteId/rf/'
     | '/sites/$siteId/settings/'
     | '/sites/$siteId/wlans/'
+    | '/sites/$siteId/aps/$apId/config'
+    | '/sites/$siteId/aps/$apId/settings'
     | '/sites/$siteId/wlans/$wlanId/expert'
     | '/sites/$siteId/wlans/$wlanId/'
   fileRoutesByTo: FileRoutesByTo
@@ -216,6 +258,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/sites/$siteId'
+    | '/sites/$siteId/changes/$rev'
     | '/sites/$siteId/rf/neighbours'
     | '/sites/$siteId/settings/access'
     | '/sites/$siteId/settings/advanced'
@@ -225,9 +268,12 @@ export interface FileRouteTypes {
     | '/sites/$siteId/settings/network'
     | '/sites/$siteId/settings/protection'
     | '/sites/$siteId/wlans/new'
+    | '/sites/$siteId/changes'
     | '/sites/$siteId/rf'
     | '/sites/$siteId/settings'
     | '/sites/$siteId/wlans'
+    | '/sites/$siteId/aps/$apId/config'
+    | '/sites/$siteId/aps/$apId/settings'
     | '/sites/$siteId/wlans/$wlanId/expert'
     | '/sites/$siteId/wlans/$wlanId'
   id:
@@ -236,6 +282,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/sites/$siteId'
     | '/sites/$siteId/settings'
+    | '/sites/$siteId/changes/$rev'
     | '/sites/$siteId/rf/neighbours'
     | '/sites/$siteId/settings/access'
     | '/sites/$siteId/settings/advanced'
@@ -245,9 +292,12 @@ export interface FileRouteTypes {
     | '/sites/$siteId/settings/network'
     | '/sites/$siteId/settings/protection'
     | '/sites/$siteId/wlans/new'
+    | '/sites/$siteId/changes/'
     | '/sites/$siteId/rf/'
     | '/sites/$siteId/settings/'
     | '/sites/$siteId/wlans/'
+    | '/sites/$siteId/aps/$apId/config'
+    | '/sites/$siteId/aps/$apId/settings'
     | '/sites/$siteId/wlans/$wlanId/expert'
     | '/sites/$siteId/wlans/$wlanId/'
   fileRoutesById: FileRoutesById
@@ -286,6 +336,20 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/sites/$siteId/settings'
       preLoaderRoute: typeof SitesSiteIdSettingsRouteRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/changes/': {
+      id: '/sites/$siteId/changes/'
+      path: '/changes'
+      fullPath: '/sites/$siteId/changes/'
+      preLoaderRoute: typeof SitesSiteIdChangesIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/changes/$rev': {
+      id: '/sites/$siteId/changes/$rev'
+      path: '/changes/$rev'
+      fullPath: '/sites/$siteId/changes/$rev'
+      preLoaderRoute: typeof SitesSiteIdChangesRevRouteImport
       parentRoute: typeof SitesSiteIdRouteRoute
     }
     '/sites/$siteId/rf/': {
@@ -372,6 +436,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdWlansNewRouteImport
       parentRoute: typeof SitesSiteIdRouteRoute
     }
+    '/sites/$siteId/aps/$apId/config': {
+      id: '/sites/$siteId/aps/$apId/config'
+      path: '/aps/$apId/config'
+      fullPath: '/sites/$siteId/aps/$apId/config'
+      preLoaderRoute: typeof SitesSiteIdApsApIdConfigRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/settings': {
+      id: '/sites/$siteId/aps/$apId/settings'
+      path: '/aps/$apId/settings'
+      fullPath: '/sites/$siteId/aps/$apId/settings'
+      preLoaderRoute: typeof SitesSiteIdApsApIdSettingsRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
     '/sites/$siteId/wlans/$wlanId/': {
       id: '/sites/$siteId/wlans/$wlanId/'
       path: '/wlans/$wlanId'
@@ -419,20 +497,28 @@ const SitesSiteIdSettingsRouteRouteWithChildren =
 
 interface SitesSiteIdRouteRouteChildren {
   SitesSiteIdSettingsRouteRoute: typeof SitesSiteIdSettingsRouteRouteWithChildren
+  SitesSiteIdChangesRevRoute: typeof SitesSiteIdChangesRevRoute
   SitesSiteIdRfNeighboursRoute: typeof SitesSiteIdRfNeighboursRoute
   SitesSiteIdWlansNewRoute: typeof SitesSiteIdWlansNewRoute
+  SitesSiteIdChangesIndexRoute: typeof SitesSiteIdChangesIndexRoute
   SitesSiteIdRfIndexRoute: typeof SitesSiteIdRfIndexRoute
   SitesSiteIdWlansIndexRoute: typeof SitesSiteIdWlansIndexRoute
+  SitesSiteIdApsApIdConfigRoute: typeof SitesSiteIdApsApIdConfigRoute
+  SitesSiteIdApsApIdSettingsRoute: typeof SitesSiteIdApsApIdSettingsRoute
   SitesSiteIdWlansWlanIdExpertRoute: typeof SitesSiteIdWlansWlanIdExpertRoute
   SitesSiteIdWlansWlanIdIndexRoute: typeof SitesSiteIdWlansWlanIdIndexRoute
 }
 
 const SitesSiteIdRouteRouteChildren: SitesSiteIdRouteRouteChildren = {
   SitesSiteIdSettingsRouteRoute: SitesSiteIdSettingsRouteRouteWithChildren,
+  SitesSiteIdChangesRevRoute: SitesSiteIdChangesRevRoute,
   SitesSiteIdRfNeighboursRoute: SitesSiteIdRfNeighboursRoute,
   SitesSiteIdWlansNewRoute: SitesSiteIdWlansNewRoute,
+  SitesSiteIdChangesIndexRoute: SitesSiteIdChangesIndexRoute,
   SitesSiteIdRfIndexRoute: SitesSiteIdRfIndexRoute,
   SitesSiteIdWlansIndexRoute: SitesSiteIdWlansIndexRoute,
+  SitesSiteIdApsApIdConfigRoute: SitesSiteIdApsApIdConfigRoute,
+  SitesSiteIdApsApIdSettingsRoute: SitesSiteIdApsApIdSettingsRoute,
   SitesSiteIdWlansWlanIdExpertRoute: SitesSiteIdWlansWlanIdExpertRoute,
   SitesSiteIdWlansWlanIdIndexRoute: SitesSiteIdWlansWlanIdIndexRoute,
 }

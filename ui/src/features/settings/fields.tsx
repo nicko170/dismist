@@ -353,7 +353,7 @@ export function ToggleWithNumbers({
 }
 
 /** NTP and DNS server lists. */
-export function ServerListField({ optionKey, name, placeholder, inputMode, warning }: { optionKey: string; name: string; placeholder?: string; inputMode?: 'decimal' | 'url'; warning?: string }) {
+export function ServerListField({ optionKey, name, label, help, placeholder, inputMode, warning }: { optionKey: string; name: string; label?: string; help?: string; placeholder?: string; inputMode?: 'decimal' | 'url'; warning?: string }) {
   const state = useOptionState(optionKey)
   const { control, formState } = useFormContext()
   const { field } = useController({ control, name })
@@ -362,8 +362,8 @@ export function ServerListField({ optionKey, name, placeholder, inputMode, warni
   const value = (field.value as string[]) ?? []
   const listErrors = formState.errors && errorAt(formState.errors, name)
   return (
-    <FieldShell id={id} label={state.meta.label} help={state.lockReason ?? state.meta.help} error={listErrors} badges={state.badges} labelAs="span">
-      <ListInput id={id} value={value} onChange={field.onChange} max={state.meta.max} disabled={!state.editable} itemLabel="Server" placeholder={placeholder} inputMode={inputMode} describedBy={describedBy(id, state.meta.help, listErrors)} />
+    <FieldShell id={id} label={label ?? state.meta.label} help={state.lockReason ?? help ?? state.meta.help} error={listErrors} badges={label ? undefined : state.badges} labelAs="span">
+      <ListInput id={id} value={value} onChange={field.onChange} max={label ? null : state.meta.max} disabled={!state.editable} itemLabel="Server" placeholder={placeholder} inputMode={inputMode} describedBy={describedBy(id, help ?? state.meta.help, listErrors)} />
       {warning && value.length ? <p className="text-sm text-warning">{warning}</p> : null}
     </FieldShell>
   )
