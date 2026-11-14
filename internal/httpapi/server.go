@@ -81,7 +81,7 @@ func (s *Server) controlFor(apID string) *controller.Server {
 func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if !s.allowedHost(request.Host) || !s.allowedOrigin(request) {
-		http.Error(writer, "local access only", http.StatusForbidden)
+		writeAPIError(writer, forbidden("this host or origin is not allowed; use the controller's own address"))
 		return
 	}
 	if strings.HasPrefix(request.URL.Path, "/api/") && request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions {
@@ -138,7 +138,7 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		if (request.Method == http.MethodGet || request.Method == http.MethodHead) && !strings.HasPrefix(request.URL.Path, "/api/") {
 			s.serveUI(writer, request)
 		} else {
-			http.NotFound(writer, request)
+			routeNotFound(writer)
 		}
 	}
 }

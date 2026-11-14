@@ -22,7 +22,7 @@ func (s *Server) serveUI(writer http.ResponseWriter, request *http.Request) {
 			return
 		}
 		if path.Ext(name) != "" {
-			http.NotFound(writer, request)
+			routeNotFound(writer)
 			return
 		}
 	}

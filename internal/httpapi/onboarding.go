@@ -3,9 +3,7 @@ package httpapi
 import (
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -15,10 +13,6 @@ import (
 )
 
 func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
-	if request.Header.Get("Content-Type") != "application/json" {
-		http.Error(writer, "application/json required", http.StatusBadRequest)
-		return
-	}
 	var input struct {
 		ID           string `json:"id"`
 		Name         string `json:"name"`
@@ -27,25 +21,18 @@ func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
 		SiteID       string `json:"site_id"`
 		Secret       string `json:"secret"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024+1))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil {
-		http.Error(writer, "invalid AP registration", http.StatusBadRequest)
-		return
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		http.Error(writer, "one JSON object required", http.StatusBadRequest)
+	if err := decodeJSON(request, 64*1024, &input, "AP registration"); err != nil {
+		writeError(writer, err)
 		return
 	}
 	mac, err := net.ParseMAC(strings.ReplaceAll(strings.TrimSpace(input.ID), "-", ":"))
 	if err != nil || len(mac) != 6 {
-		http.Error(writer, "invalid AP ID: use its Ethernet MAC address", http.StatusBadRequest)
+		writeAPIError(writer, invalidField("id", "invalid AP ID: use its Ethernet MAC address"))
 		return
 	}
 	secret, err := parseAPSecret(input.Secret)
 	if err != nil {
-		http.Error(writer, err.Error(), http.StatusBadRequest)
+		writeAPIError(writer, invalidField("secret", err.Error()))
 		return
 	}
 	// The management IP is optional: it pins the AP to one source address.
@@ -53,7 +40,7 @@ func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
 	if address := strings.TrimSpace(input.ManagementIP); address != "" {
 		ip := net.ParseIP(address)
 		if ip == nil {
-			http.Error(writer, "invalid AP management IP", http.StatusBadRequest)
+			writeAPIError(writer, invalidField("management_ip", "invalid AP management IP"))
 			return
 		}
 		managementIP = ip.String()
@@ -71,11 +58,11 @@ func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
 			}
 		}
 		if !foundSite {
-			return errNotFound
+			return notFound("site").withField("site_id", "no such site")
 		}
 		for _, candidate := range state.APs {
 			if candidate.ID == id {
-				return errConflict
+				return conflict("AP already registered").withField("id", "an AP with this ID is already registered")
 			}
 		}
 		created = model.APRecord{ID: id, Name: strings.TrimSpace(input.Name), Model: strings.TrimSpace(input.Model),

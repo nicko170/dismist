@@ -2,9 +2,7 @@ package httpapi
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -82,11 +80,7 @@ func preferredFirmware(stored string, status controller.Status) string {
 func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 	apID := strings.TrimPrefix(request.URL.Path, "/api/aps/")
 	if apID == "" || strings.Contains(apID, "/") {
-		http.NotFound(writer, request)
-		return
-	}
-	if request.Header.Get("Content-Type") != "application/json" {
-		http.Error(writer, "application/json required", http.StatusBadRequest)
+		routeNotFound(writer)
 		return
 	}
 	var input struct {
@@ -95,22 +89,19 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 		ManagementIP *string `json:"management_ip"`
 		Secret       *string `json:"secret"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024+1))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil || (input.Name == nil && input.Model == nil && input.ManagementIP == nil && input.Secret == nil) {
-		http.Error(writer, "AP fields required", http.StatusBadRequest)
+	if err := decodeJSON(request, 64*1024, &input, "AP update"); err != nil {
+		writeError(writer, err)
 		return
 	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		http.Error(writer, "one JSON object required", http.StatusBadRequest)
+	if input.Name == nil && input.Model == nil && input.ManagementIP == nil && input.Secret == nil {
+		writeAPIError(writer, invalid("AP fields required: name, management_ip or secret"))
 		return
 	}
 	var ip net.IP
 	if input.ManagementIP != nil && strings.TrimSpace(*input.ManagementIP) != "" {
 		ip = net.ParseIP(strings.TrimSpace(*input.ManagementIP))
 		if ip == nil {
-			http.Error(writer, "invalid AP management IP", http.StatusBadRequest)
+			writeAPIError(writer, invalidField("management_ip", "invalid AP management IP"))
 			return
 		}
 	}
@@ -119,7 +110,7 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 	if input.Secret != nil && strings.TrimSpace(*input.Secret) != "" {
 		var err error
 		if newSecret, err = parseAPSecret(*input.Secret); err != nil {
-			http.Error(writer, err.Error(), http.StatusBadRequest)
+			writeAPIError(writer, invalidField("secret", err.Error()))
 			return
 		}
 	}
@@ -134,7 +125,7 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 			}
 		}
 		if index < 0 {
-			return errNotFound
+			return notFound("AP")
 		}
 		updated = state.APs[index]
 		if input.Name != nil {
@@ -189,7 +180,7 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 				return
 			}
 		}
-		http.NotFound(writer, request)
+		writeAPIError(writer, notFound("AP"))
 		return
 	}
 	if err != nil {
@@ -199,7 +190,7 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 	if control := s.controlFor(apID); control != nil {
 		changed, err := control.SetConfigIfNewer(config, updated.ConfigRevision)
 		if err != nil {
-			http.Error(writer, "AP config update failed", http.StatusInternalServerError)
+			writeAPIError(writer, internalError("AP config update failed"))
 			return
 		}
 		if changed {
@@ -212,29 +203,18 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 func (s *Server) moveAP(writer http.ResponseWriter, request *http.Request) {
 	parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
 	if len(parts) != 4 || parts[0] != "api" || parts[1] != "aps" || parts[3] != "site" {
-		http.NotFound(writer, request)
-		return
-	}
-	if request.Header.Get("Content-Type") != "application/json" {
-		http.Error(writer, "application/json required", http.StatusBadRequest)
+		routeNotFound(writer)
 		return
 	}
 	var input struct {
 		SiteID string `json:"site_id"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024+1))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil {
-		http.Error(writer, "invalid site assignment", http.StatusBadRequest)
-		return
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		http.Error(writer, "one JSON object required", http.StatusBadRequest)
+	if err := decodeJSON(request, 64*1024, &input, "site assignment"); err != nil {
+		writeError(writer, err)
 		return
 	}
 	if input.SiteID != "" && !s.siteExists(input.SiteID) {
-		http.NotFound(writer, request)
+		writeAPIError(writer, notFound("site").withField("site_id", "no such site"))
 		return
 	}
 	apID := parts[2]
@@ -274,7 +254,7 @@ func (s *Server) moveAP(writer http.ResponseWriter, request *http.Request) {
 			config, err = controller.BuildSiteConfig(s.base, site, state.APs[index], networks, state.APs[index].ConfigUpdatedAt)
 			return err
 		}
-		return errNotFound
+		return notFound("AP")
 	})
 	if err != nil {
 		writeChangeError(writer, err)
@@ -285,7 +265,7 @@ func (s *Server) moveAP(writer http.ResponseWriter, request *http.Request) {
 		if control := s.controlFor(apID); control != nil {
 			changed, err := control.SetConfigIfNewer(config, configRevision)
 			if err != nil {
-				http.Error(writer, "AP config update failed", http.StatusInternalServerError)
+				writeAPIError(writer, internalError("AP config update failed"))
 				return
 			}
 			if changed {

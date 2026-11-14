@@ -1,9 +1,6 @@
 package httpapi
 
 import (
-	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
 
 	"github.com/nicko170/dismist/internal/model"
@@ -27,16 +24,30 @@ type networkView struct {
 func (s *Server) createNetwork(writer http.ResponseWriter, request *http.Request, siteID string) {
 	input, err := readInput(request)
 	if err != nil {
-		http.Error(writer, err.Error(), http.StatusBadRequest)
+		writeError(writer, err)
 		return
 	}
 	if input.SSID == nil || input.PSK == nil || input.VLANID == nil {
-		http.Error(writer, "SSID, passphrase and VLAN are required", http.StatusBadRequest)
+		missing := invalid("SSID, passphrase and VLAN are required")
+		if input.SSID == nil {
+			missing.withField("ssid", "required")
+		}
+		if input.PSK == nil {
+			missing.withField("psk", "required")
+		}
+		if input.VLANID == nil {
+			missing.withField("vlan_id", "required")
+		}
+		writeAPIError(writer, missing)
+		return
+	}
+	if err := input.validate(); err != nil {
+		writeAPIError(writer, err)
 		return
 	}
 	id, err := randomID()
 	if err != nil {
-		http.Error(writer, "cannot create network", http.StatusInternalServerError)
+		writeAPIError(writer, internalError("cannot create network"))
 		return
 	}
 	enabled := true
@@ -51,7 +62,7 @@ func (s *Server) createNetwork(writer http.ResponseWriter, request *http.Request
 		return nil
 	})
 	if err != nil {
-		http.Error(writer, err.Error(), http.StatusBadRequest)
+		writeChangeError(writer, err)
 		return
 	}
 	s.listNetworks(writer, siteID)
@@ -60,7 +71,11 @@ func (s *Server) createNetwork(writer http.ResponseWriter, request *http.Request
 func (s *Server) editNetwork(writer http.ResponseWriter, request *http.Request, siteID, id string) {
 	input, err := readInput(request)
 	if err != nil {
-		http.Error(writer, err.Error(), http.StatusBadRequest)
+		writeError(writer, err)
+		return
+	}
+	if err := input.validate(); err != nil {
+		writeAPIError(writer, err)
 		return
 	}
 	err = s.applyChange(siteID, func(state *model.State) error {
@@ -83,7 +98,7 @@ func (s *Server) editNetwork(writer http.ResponseWriter, request *http.Request, 
 			}
 			return nil
 		}
-		return errNotFound
+		return notFound("network")
 	})
 	if err != nil {
 		writeChangeError(writer, err)
@@ -100,7 +115,7 @@ func (s *Server) removeNetwork(writer http.ResponseWriter, siteID, id string) {
 				return nil
 			}
 		}
-		return errNotFound
+		return notFound("network")
 	})
 	if err != nil {
 		writeChangeError(writer, err)
@@ -130,17 +145,28 @@ func (s *Server) listNetworks(writer http.ResponseWriter, siteID string) {
 
 func readInput(request *http.Request) (networkInput, error) {
 	var input networkInput
-	if request.Header.Get("Content-Type") != "application/json" {
-		return input, errors.New("application/json required")
+	err := decodeJSON(request, 64*1024, &input, "network")
+	return input, err
+}
+
+// validate checks the fields that are present with the same rules the
+// store applies, so a bad value is reported on its field.
+func (input networkInput) validate() *apiError {
+	var bad *apiError
+	field := func(path, message string) {
+		if bad == nil {
+			bad = invalid("invalid network: " + message)
+		}
+		bad.withField(path, message)
 	}
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024+1))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil {
-		return input, err
+	if input.SSID != nil && (len(*input.SSID) < 1 || len(*input.SSID) > 32) {
+		field("ssid", "SSID must be 1 to 32 bytes")
 	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return input, errors.New("one JSON object required")
+	if input.PSK != nil && (len(*input.PSK) < 8 || len(*input.PSK) > 63) {
+		field("psk", "passphrase must be 8 to 63 characters")
 	}
-	return input, nil
+	if input.VLANID != nil && (*input.VLANID < 1 || *input.VLANID > 4094) {
+		field("vlan_id", "VLAN must be 1 to 4094")
+	}
+	return bad
 }

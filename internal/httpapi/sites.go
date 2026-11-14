@@ -2,12 +2,11 @@ package httpapi
 
 import (
 	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
 	"github.com/nicko170/dismist/internal/telemetry"
@@ -49,29 +48,26 @@ func (s *Server) listSites(writer http.ResponseWriter) {
 }
 
 func (s *Server) createSite(writer http.ResponseWriter, request *http.Request) {
-	if request.Header.Get("Content-Type") != "application/json" {
-		http.Error(writer, "application/json required", http.StatusBadRequest)
-		return
-	}
 	var input struct {
 		Name     string `json:"name"`
 		Country  string `json:"country"`
 		Timezone string `json:"timezone"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024+1))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil || strings.TrimSpace(input.Name) == "" {
-		http.Error(writer, "site name required", http.StatusBadRequest)
+	if err := decodeJSON(request, 64*1024, &input, "site"); err != nil {
+		writeError(writer, err)
 		return
 	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) || !validCountry(input.Country) || !validTimezone(input.Timezone) {
-		http.Error(writer, "invalid site metadata", http.StatusBadRequest)
+	if strings.TrimSpace(input.Name) == "" {
+		writeAPIError(writer, invalidField("name", "site name required"))
+		return
+	}
+	if err := validateSiteMetadata(&input.Country, &input.Timezone); err != nil {
+		writeAPIError(writer, err)
 		return
 	}
 	id, err := randomID()
 	if err != nil {
-		http.Error(writer, "cannot create site", http.StatusInternalServerError)
+		writeAPIError(writer, internalError("cannot create site"))
 		return
 	}
 	site := model.Site{ID: id, Name: strings.TrimSpace(input.Name), Country: strings.ToUpper(strings.TrimSpace(input.Country)), Timezone: input.Timezone}
@@ -79,7 +75,7 @@ func (s *Server) createSite(writer http.ResponseWriter, request *http.Request) {
 		state.Sites = append(state.Sites, site)
 		return nil
 	}); err != nil {
-		http.Error(writer, err.Error(), http.StatusBadRequest)
+		writeChangeError(writer, err)
 		return
 	}
 	respond(writer, http.StatusCreated, map[string]any{"site": site})
@@ -88,11 +84,11 @@ func (s *Server) createSite(writer http.ResponseWriter, request *http.Request) {
 func (s *Server) siteMutation(writer http.ResponseWriter, request *http.Request) {
 	parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
 	if len(parts) != 4 || parts[0] != "api" || parts[1] != "sites" || parts[3] != "networks" {
-		http.NotFound(writer, request)
+		routeNotFound(writer)
 		return
 	}
 	if !s.siteExists(parts[2]) {
-		http.NotFound(writer, request)
+		writeAPIError(writer, notFound("site"))
 		return
 	}
 	s.createNetwork(writer, request, parts[2])
@@ -100,8 +96,12 @@ func (s *Server) siteMutation(writer http.ResponseWriter, request *http.Request)
 
 func (s *Server) siteUpdate(writer http.ResponseWriter, request *http.Request) {
 	parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
-	if len(parts) < 3 || parts[0] != "api" || parts[1] != "sites" || !s.siteExists(parts[2]) {
-		http.NotFound(writer, request)
+	if len(parts) < 3 || parts[0] != "api" || parts[1] != "sites" {
+		routeNotFound(writer)
+		return
+	}
+	if !s.siteExists(parts[2]) {
+		writeAPIError(writer, notFound("site"))
 		return
 	}
 	if len(parts) == 3 {
@@ -117,12 +117,12 @@ func (s *Server) siteUpdate(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if parts[len(parts)-1] != "advanced" {
-		http.NotFound(writer, request)
+		routeNotFound(writer)
 		return
 	}
 	patch, err := readAdvancedInput(request)
 	if err != nil {
-		http.Error(writer, err.Error(), http.StatusBadRequest)
+		writeError(writer, err)
 		return
 	}
 	siteID := parts[2]
@@ -140,14 +140,16 @@ func (s *Server) siteUpdate(writer http.ResponseWriter, request *http.Request) {
 					return setAdvanced(&state.APs[index].Advanced, patch)
 				}
 			}
+			return notFound("AP")
 		case len(parts) == 6 && parts[3] == "networks":
 			for index := range state.Networks {
 				if state.Networks[index].ID == parts[4] && state.Networks[index].SiteID == siteID {
 					return setAdvanced(&state.Networks[index].Advanced, patch)
 				}
 			}
+			return notFound("network")
 		}
-		return errNotFound
+		return newError(http.StatusNotFound, api.ErrorCodeNotFound, "no such endpoint")
 	})
 	if err != nil {
 		writeChangeError(writer, err)
@@ -157,27 +159,20 @@ func (s *Server) siteUpdate(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (s *Server) updateSiteSSHKeys(writer http.ResponseWriter, request *http.Request, siteID string) {
-	if request.Header.Get("Content-Type") != "application/json" {
-		http.Error(writer, "application/json required", http.StatusBadRequest)
-		return
-	}
 	var input struct {
 		Keys []string `json:"keys"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024+1))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil || input.Keys == nil {
-		http.Error(writer, "SSH public keys array required", http.StatusBadRequest)
+	if err := decodeJSON(request, 64*1024, &input, "SSH public keys"); err != nil {
+		writeError(writer, err)
 		return
 	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		http.Error(writer, "one JSON object required", http.StatusBadRequest)
+	if input.Keys == nil {
+		writeAPIError(writer, invalidField("keys", "SSH public keys array required"))
 		return
 	}
 	keys, err := model.NormalizeSSHPublicKeys(input.Keys)
 	if err != nil {
-		http.Error(writer, err.Error(), http.StatusBadRequest)
+		writeAPIError(writer, invalidField("keys", err.Error()))
 		return
 	}
 	err = s.applyChange(siteID, func(state *model.State) error {
@@ -187,7 +182,7 @@ func (s *Server) updateSiteSSHKeys(writer http.ResponseWriter, request *http.Req
 				return nil
 			}
 		}
-		return errNotFound
+		return notFound("site")
 	})
 	if err != nil {
 		writeChangeError(writer, err)
@@ -230,7 +225,7 @@ func setAdvanced(existing *json.RawMessage, patch json.RawMessage) error {
 func restoreRedacted(original, incoming any) (any, error) {
 	if value, ok := incoming.(string); ok && value == "[redacted]" {
 		if original == nil {
-			return nil, errors.New("redacted value has no stored secret")
+			return nil, invalidField("patch", "a [redacted] value has no stored secret to keep")
 		}
 		return original, nil
 	}
@@ -267,32 +262,25 @@ func restoreRedacted(original, incoming any) (any, error) {
 }
 
 func (s *Server) updateSiteMetadata(writer http.ResponseWriter, request *http.Request, siteID string) {
-	if request.Header.Get("Content-Type") != "application/json" {
-		http.Error(writer, "application/json required", http.StatusBadRequest)
-		return
-	}
 	var input struct {
 		Name     *string `json:"name"`
 		Country  *string `json:"country"`
 		Timezone *string `json:"timezone"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024+1))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil || (input.Name == nil && input.Country == nil && input.Timezone == nil) {
-		http.Error(writer, "site fields required", http.StatusBadRequest)
+	if err := decodeJSON(request, 64*1024, &input, "site"); err != nil {
+		writeError(writer, err)
 		return
 	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		http.Error(writer, "one JSON object required", http.StatusBadRequest)
+	if input.Name == nil && input.Country == nil && input.Timezone == nil {
+		writeAPIError(writer, invalid("site fields required: name, country or timezone"))
 		return
 	}
 	if input.Name != nil && strings.TrimSpace(*input.Name) == "" {
-		http.Error(writer, "site name required", http.StatusBadRequest)
+		writeAPIError(writer, invalidField("name", "site name required"))
 		return
 	}
-	if input.Country != nil && !validCountry(*input.Country) || input.Timezone != nil && !validTimezone(*input.Timezone) {
-		http.Error(writer, "invalid site metadata", http.StatusBadRequest)
+	if err := validateSiteMetadata(input.Country, input.Timezone); err != nil {
+		writeAPIError(writer, err)
 		return
 	}
 	err := s.applyChange(siteID, func(state *model.State) error {
@@ -311,7 +299,7 @@ func (s *Server) updateSiteMetadata(writer http.ResponseWriter, request *http.Re
 			}
 			return nil
 		}
-		return errNotFound
+		return notFound("site")
 	})
 	if err != nil {
 		writeChangeError(writer, err)
@@ -323,6 +311,24 @@ func (s *Server) updateSiteMetadata(writer http.ResponseWriter, request *http.Re
 			return
 		}
 	}
+}
+
+// validateSiteMetadata checks the country and timezone that are present.
+func validateSiteMetadata(country, timezone *string) *apiError {
+	var bad *apiError
+	field := func(path, message string) {
+		if bad == nil {
+			bad = invalid("invalid site metadata: " + message)
+		}
+		bad.withField(path, message)
+	}
+	if country != nil && !validCountry(*country) {
+		field("country", "country must be a two-letter ISO 3166 code")
+	}
+	if timezone != nil && !validTimezone(*timezone) {
+		field("timezone", "unknown timezone; use an IANA name such as Australia/Sydney")
+	}
+	return bad
 }
 
 func validCountry(country string) bool {
@@ -353,37 +359,32 @@ func validTimezone(timezone string) bool {
 
 func (s *Server) siteDelete(writer http.ResponseWriter, request *http.Request) {
 	parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
-	if len(parts) != 5 || parts[0] != "api" || parts[1] != "sites" || parts[3] != "networks" || !s.siteExists(parts[2]) {
-		http.NotFound(writer, request)
+	if len(parts) != 5 || parts[0] != "api" || parts[1] != "sites" || parts[3] != "networks" {
+		routeNotFound(writer)
+		return
+	}
+	if !s.siteExists(parts[2]) {
+		writeAPIError(writer, notFound("site"))
 		return
 	}
 	s.removeNetwork(writer, parts[2], parts[4])
 }
 
 func readAdvancedInput(request *http.Request) (json.RawMessage, error) {
-	if request.Header.Get("Content-Type") != "application/json" {
-		return nil, errors.New("application/json required")
-	}
 	var input struct {
 		Patch json.RawMessage `json:"patch"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 1<<20+1))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil {
+	if err := decodeJSON(request, 1<<20, &input, "advanced patch"); err != nil {
 		return nil, err
 	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return nil, errors.New("one JSON object required")
-	}
 	if len(input.Patch) == 0 {
-		return nil, errors.New("patch is required")
+		return nil, invalidField("patch", "patch is required")
 	}
 	if string(input.Patch) == "null" {
 		return nil, nil
 	}
 	if len(input.Patch) > 1<<20 || input.Patch[0] != '{' || !json.Valid(input.Patch) {
-		return nil, errors.New("patch must be a JSON object")
+		return nil, invalidField("patch", "patch must be a JSON object")
 	}
 	return append(json.RawMessage(nil), input.Patch...), nil
 }
@@ -409,7 +410,7 @@ func (s *Server) currentSiteID() string {
 func (s *Server) siteResource(writer http.ResponseWriter, request *http.Request) {
 	parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
 	if len(parts) < 3 || parts[0] != "api" || parts[1] != "sites" {
-		http.NotFound(writer, request)
+		routeNotFound(writer)
 		return
 	}
 	siteID := parts[2]
@@ -458,7 +459,7 @@ func (s *Server) siteResource(writer http.ResponseWriter, request *http.Request)
 				return
 			}
 		}
-		http.NotFound(writer, request)
+		writeAPIError(writer, notFound("network"))
 		return
 	}
 	if foundSite && parts[3] == "aps" && ((len(parts) == 6 && (parts[5] == "samples" || parts[5] == "sessions")) ||
@@ -466,8 +467,12 @@ func (s *Server) siteResource(writer http.ResponseWriter, request *http.Request)
 		s.apHistory(writer, request, state, siteID, parts)
 		return
 	}
-	if !foundSite || len(parts) != 6 || parts[3] != "aps" {
-		http.NotFound(writer, request)
+	if !foundSite {
+		writeAPIError(writer, notFound("site"))
+		return
+	}
+	if len(parts) != 6 || parts[3] != "aps" {
+		routeNotFound(writer)
 		return
 	}
 	apID := parts[4]
@@ -481,7 +486,7 @@ func (s *Server) siteResource(writer http.ResponseWriter, request *http.Request)
 		}
 	}
 	if !assigned {
-		http.NotFound(writer, request)
+		writeAPIError(writer, notFound("AP"))
 		return
 	}
 	control := s.controlFor(apID)
@@ -538,12 +543,12 @@ func (s *Server) siteResource(writer http.ResponseWriter, request *http.Request)
 		}
 		effective, err := controller.BuildSiteConfig(s.base, selectedSite, selectedAP, networks, state.UpdatedAt)
 		if err != nil {
-			http.Error(writer, "config preview failed", http.StatusBadRequest)
+			writeAPIError(writer, invalid("config preview failed: "+err.Error()))
 			return
 		}
 		redacted, err := redactJSON(effective)
 		if err != nil {
-			http.Error(writer, "config preview failed", http.StatusBadRequest)
+			writeAPIError(writer, invalid("config preview failed"))
 			return
 		}
 		respond(writer, http.StatusOK, map[string]any{
@@ -553,7 +558,7 @@ func (s *Server) siteResource(writer http.ResponseWriter, request *http.Request)
 		})
 		return
 	}
-	http.NotFound(writer, request)
+	routeNotFound(writer)
 }
 
 func (s *Server) siteClients(writer http.ResponseWriter, state model.State, siteID string) {

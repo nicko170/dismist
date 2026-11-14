@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/proxytrust"
 )
 
@@ -111,7 +112,7 @@ func (g *gate) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 	if path == "/auth/session" && request.Method == http.MethodGet {
 		if !g.authorized(request) {
-			writeJSON(writer, http.StatusUnauthorized, map[string]bool{"authenticated": false})
+			writeJSON(writer, http.StatusUnauthorized, unauthenticatedSession())
 			return
 		}
 		writeJSON(writer, http.StatusOK, map[string]bool{"authenticated": true})
@@ -127,11 +128,11 @@ func (g *gate) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 	if strings.HasPrefix(path, "/api/") {
 		if !g.authorized(request) {
-			writeJSON(writer, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+			writeError(writer, http.StatusUnauthorized, api.ErrorCodeUnauthorized, "sign in to continue", nil)
 			return
 		}
 		if isWrite(request.Method) && !sameOrigin(request) {
-			writeJSON(writer, http.StatusForbidden, map[string]string{"error": "cross-origin request refused"})
+			writeError(writer, http.StatusForbidden, api.ErrorCodeForbidden, "cross-origin request refused", nil)
 			return
 		}
 	}
@@ -140,7 +141,7 @@ func (g *gate) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
 func (g *gate) login(writer http.ResponseWriter, request *http.Request) {
 	if !sameOrigin(request) {
-		writeJSON(writer, http.StatusForbidden, map[string]string{"error": "cross-origin request refused"})
+		writeError(writer, http.StatusForbidden, api.ErrorCodeForbidden, "cross-origin request refused", nil)
 		return
 	}
 	var body struct {
@@ -149,17 +150,17 @@ func (g *gate) login(writer http.ResponseWriter, request *http.Request) {
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 1024))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&body); err != nil || decoder.Decode(new(any)) != io.EOF {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid login request"})
+		writeError(writer, http.StatusBadRequest, api.ErrorCodeInvalid, "invalid login request", nil)
 		return
 	}
 	provided := sha256.Sum256([]byte(body.Token))
 	if len(body.Token) != 64 || subtle.ConstantTimeCompare(provided[:], g.tokenHash[:]) != 1 {
-		writeJSON(writer, http.StatusUnauthorized, map[string]string{"error": "invalid administrator token"})
+		writeError(writer, http.StatusUnauthorized, api.ErrorCodeUnauthorized, "invalid administrator token", map[string]string{"token": "that token is not valid"})
 		return
 	}
 	var random [32]byte
 	if _, err := rand.Read(random[:]); err != nil {
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "cannot create session"})
+		writeError(writer, http.StatusInternalServerError, api.ErrorCodeInternal, "cannot create session", nil)
 		return
 	}
 	id := hex.EncodeToString(random[:])
@@ -181,7 +182,7 @@ func (g *gate) login(writer http.ResponseWriter, request *http.Request) {
 
 func (g *gate) logout(writer http.ResponseWriter, request *http.Request) {
 	if !sameOrigin(request) {
-		writeJSON(writer, http.StatusForbidden, map[string]string{"error": "cross-origin request refused"})
+		writeError(writer, http.StatusForbidden, api.ErrorCodeForbidden, "cross-origin request refused", nil)
 		return
 	}
 	if cookie, err := request.Cookie(cookieName); err == nil {
@@ -245,4 +246,26 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(value)
+}
+
+// writeError writes the {error, code, fields} error contract (design §4.8).
+func writeError(writer http.ResponseWriter, status int, code api.ErrorCode, message string, fields map[string]string) {
+	if fields == nil {
+		fields = map[string]string{}
+	}
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writeJSON(writer, status, api.ErrorBody{Error: message, Code: code, Fields: fields})
+}
+
+// unauthenticatedBody is the 401 of GET /auth/session: the error contract
+// plus "authenticated": false, so clients that read either shape work.
+type unauthenticatedBody struct {
+	api.ErrorBody
+	Authenticated bool `json:"authenticated"`
+}
+
+func unauthenticatedSession() unauthenticatedBody {
+	return unauthenticatedBody{
+		ErrorBody: api.ErrorBody{Error: "not signed in", Code: api.ErrorCodeUnauthorized, Fields: map[string]string{}},
+	}
 }

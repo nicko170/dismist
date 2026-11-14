@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
 )
@@ -48,7 +49,7 @@ func liveRecent(ap model.APRecord, activities []controller.ClientActivity) []con
 func (s *Server) siteHistory(writer http.ResponseWriter, request *http.Request, siteID, kind string) {
 	history, ok := s.store.(historyReader)
 	if !ok {
-		http.Error(writer, "history unavailable", http.StatusNotImplemented)
+		writeAPIError(writer, newError(http.StatusNotImplemented, api.ErrorCodeUnavailable, "history unavailable"))
 		return
 	}
 	limit, _ := strconv.Atoi(request.URL.Query().Get("limit"))
@@ -56,33 +57,33 @@ func (s *Server) siteHistory(writer http.ResponseWriter, request *http.Request, 
 	case "samples":
 		items, err := history.ListSamples(siteID, "", limit)
 		if err != nil {
-			http.Error(writer, "history read failed", http.StatusInternalServerError)
+			writeAPIError(writer, internalError("history read failed"))
 			return
 		}
 		respond(writer, http.StatusOK, map[string]any{"samples": items})
 	case "sessions":
 		items, err := history.ListClientSessions(siteID, "", limit)
 		if err != nil {
-			http.Error(writer, "history read failed", http.StatusInternalServerError)
+			writeAPIError(writer, internalError("history read failed"))
 			return
 		}
 		respond(writer, http.StatusOK, map[string]any{"sessions": items})
 	case "events":
 		items, err := history.ListEvents(siteID, "", limit)
 		if err != nil {
-			http.Error(writer, "history read failed", http.StatusInternalServerError)
+			writeAPIError(writer, internalError("history read failed"))
 			return
 		}
 		respond(writer, http.StatusOK, map[string]any{"events": items})
 	default:
-		http.NotFound(writer, request)
+		routeNotFound(writer)
 	}
 }
 
 func (s *Server) apHistory(writer http.ResponseWriter, request *http.Request, state model.State, siteID string, parts []string) {
 	history, ok := s.store.(historyReader)
 	if !ok {
-		http.Error(writer, "history unavailable", http.StatusNotImplemented)
+		writeAPIError(writer, newError(http.StatusNotImplemented, api.ErrorCodeUnavailable, "history unavailable"))
 		return
 	}
 	apID := parts[4]
@@ -113,11 +114,11 @@ func (s *Server) apHistory(writer http.ResponseWriter, request *http.Request, st
 		items, count, key = values, len(values), "events"
 	}
 	if err != nil {
-		http.Error(writer, "history read failed", http.StatusInternalServerError)
+		writeAPIError(writer, internalError("history read failed"))
 		return
 	}
 	if !assigned && count == 0 {
-		http.NotFound(writer, request)
+		writeAPIError(writer, notFound("AP"))
 		return
 	}
 	respond(writer, http.StatusOK, map[string]any{key: items})

@@ -31,16 +31,16 @@ type streamUpdate struct {
 func (s *Server) streamSite(writer http.ResponseWriter, request *http.Request, siteID string) {
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
-		http.Error(writer, "streaming unavailable", http.StatusInternalServerError)
+		writeAPIError(writer, internalError("streaming unavailable"))
 		return
 	}
 	update, previous, found, err := s.siteStreamSnapshot(siteID, time.Now().UTC())
 	if err != nil {
-		http.Error(writer, "stream unavailable", http.StatusInternalServerError)
+		writeAPIError(writer, internalError("stream unavailable"))
 		return
 	}
 	if !found {
-		http.NotFound(writer, request)
+		writeAPIError(writer, notFound("site"))
 		return
 	}
 	writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
