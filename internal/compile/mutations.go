@@ -350,3 +350,38 @@ func CheckExperimental(before, after model.State, siteID string) error {
 	}
 	return &options.ExperimentalError{Keys: sortedUniqueStrings(keys)}
 }
+
+// untypedSite reports a site whose typed fields were never written (every
+// typed write sets the PoE policy): a record created by a path that does
+// not know schema 2.
+func untypedSite(site model.Site) bool {
+	return site.APDefaults == (model.APDefaults{}) && site.Management.VLANID == 0 && !site.RF.Managed &&
+		site.RF.Band24.Width == 0 && site.RF.Band5.Width == 0 && !site.SSH.Enabled && len(site.SSH.Keys) == 0 &&
+		!site.Protection.ProxyARP && len(site.Protection.BlockedClients) == 0
+}
+
+// withDefaults gives records that no typed write has touched the
+// new-object defaults at compile time, so a site or WLAN created through
+// a path that does not set typed fields never compiles with the LED off
+// or 802.11k disabled. The BSSID index is never invented here: a network
+// without one fails validation.
+func withDefaults(site model.Site, networks []model.Network) (model.Site, []model.Network) {
+	if untypedSite(site) {
+		NewSiteDefaults(&site)
+		site.SSH = model.SiteSSH{Enabled: len(site.SSHPublicKeys) > 0}
+		for _, line := range site.SSHPublicKeys {
+			site.SSH.Keys = append(site.SSH.Keys, model.SSHKey{Key: line})
+		}
+	}
+	out := make([]model.Network, len(networks))
+	for index, network := range networks {
+		if network.Security == "" {
+			index0 := network.BSSIDIndex
+			security := network.Security
+			_ = NewNetworkDefaults(model.State{}, &network)
+			network.Security, network.BSSIDIndex = security, index0
+		}
+		out[index] = network
+	}
+	return site, out
+}

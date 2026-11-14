@@ -120,3 +120,21 @@ func TestImpactDiffAndDisruption(t *testing.T) {
 		t.Fatalf("disruption %v", impact.Disruption)
 	}
 }
+
+// A site and WLAN created by a path that does not set typed fields still
+// compile with the new-object defaults (never the LED off).
+func TestUntypedRecordsCompileWithDefaults(t *testing.T) {
+	state := model.State{Schema: 2,
+		Sites:    []model.Site{{ID: typedSite, Name: "Plain", Country: "AU"}},
+		APs:      []model.APRecord{{ID: typedAP, SiteID: typedSite, Secret: make([]byte, 32)}},
+		Networks: []model.Network{{ID: typedNet, SiteID: typedSite, SSID: "Example", PSK: "example-passphrase-01", VLANID: 1, Enabled: true, BSSIDIndex: 1}},
+	}
+	_, root := compileTypedAP(t, state, typedAP)
+	if root["LED"].(map[string]any)["Brightness"] == float64(0) || root["LED"].(map[string]any)["Brightness"] != jsonNumber("255") {
+		t.Fatalf("LED %v", root["LED"])
+	}
+	wlan := root["WLANs"].([]any)[0].(map[string]any)
+	if wlan["WNM"].(map[string]any)["NeighborReport"] != true || wlan["Auth"].(map[string]any)["AKM"].(map[string]any)["WPA3_PSK"] != false {
+		t.Fatalf("untyped WLAN %v", wlan["WNM"])
+	}
+}

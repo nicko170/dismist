@@ -104,6 +104,7 @@ func compileTyped(in Input) (Output, error) {
 		return output, err
 	}
 	rec := &recorder{}
+	in.Site, in.Networks = withDefaults(in.Site, in.Networks)
 
 	// Step W: every network's WLAN.
 	wlans := make([]map[string]any, 0, len(in.Networks))
