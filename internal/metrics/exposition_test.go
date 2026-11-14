@@ -22,14 +22,16 @@ func TestWriteFixtureExposition(t *testing.T) {
 	instruments := NewInstruments()
 	instruments.HTTP(http.NotFoundHandler()).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/aps", nil))
 	c := testCollector(store, sessions, Options{
-		StoreSchema:    func() (int, int, bool) { return 1, 1, true },
-		CompileStatus:  func() map[string]CompileStatus { return nil },
-		Names:          true,
-		Clients:        ClientsPerClient,
-		ClientLimit:    100,
-		Build:          BuildInfo{Version: "dev", Revision: "fixture", GoVersion: "go"},
-		Certificates:   []Certificate{{Listener: "ap-wss", Role: "leaf", NotAfter: time.Now().Add(60 * 24 * time.Hour)}},
-		StoreUsage:     func() (StoreUsage, bool) { return StoreUsage{SizeBytes: 1 << 20, FreeBytes: 1 << 30, HasFree: true}, true },
+		StoreSchema:   func() (int, int, bool) { return 1, 1, true },
+		CompileStatus: func() map[string]CompileStatus { return nil },
+		Names:         true,
+		Clients:       ClientsPerClient,
+		ClientLimit:   100,
+		Build:         BuildInfo{Version: "dev", Revision: "fixture", GoVersion: "go"},
+		Certificates:  []Certificate{{Listener: "ap-wss", Role: "leaf", NotAfter: time.Now().Add(60 * 24 * time.Hour)}},
+		StoreUsage: func() (StoreUsage, bool) {
+			return StoreUsage{SizeBytes: 1 << 20, FreeBytes: 1 << 30, HasFree: true}, true
+		},
 		MigrationState: func() (string, bool) { return "committed", true },
 		Backups:        func() (BackupStatus, bool) { return BackupStatus{LastSuccess: time.Now()}, true },
 	})
