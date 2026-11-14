@@ -180,3 +180,34 @@ func TestTypedRecordsRoundTripAndPSKRules(t *testing.T) {
 		t.Fatalf("open network without PSK refused: %v", err)
 	}
 }
+
+// A typed write followed by a restart is not mistaken for an older
+// writer, whatever form empty legacy fields had in memory.
+func TestTypedWritesSurviveRestartWithoutRemigration(t *testing.T) {
+	store, path := openTestStore(t)
+	seedSite(t, store)
+	if err := store.UpdateTx(func(state *State, tx *Tx) error {
+		state.Sites[0].SSHPublicKeys = []string{}
+		state.Sites[0].Advanced = json.RawMessage{}
+		state.Networks[0].Security = SecurityWPA2Personal
+		return tx.SetSchema(2)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Update(func(state *State) error {
+		state.APs[0].Name = "renamed"
+		state.Sites[0].SSHPublicKeys = []string{}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = store.Close()
+	reopened, err := OpenBolt(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if status := reopened.SchemaStatus(); status.OlderWriter || status.Config != 2 || !reopened.Snapshot().Typed() {
+		t.Fatalf("status after restart %+v", status)
+	}
+}

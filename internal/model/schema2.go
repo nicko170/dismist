@@ -74,11 +74,17 @@ func LegacyDigest(key []byte, state State) string {
 	sites := append([]Site(nil), state.Sites...)
 	sort.Slice(sites, func(i, j int) bool { return sites[i].ID < sites[j].ID })
 	for _, site := range sites {
+		// nil and empty lists encode the same on disk (omitempty), so the
+		// digest must not tell them apart.
+		keys := site.SSHPublicKeys
+		if len(keys) == 0 {
+			keys = nil
+		}
 		projection.Sites = append(projection.Sites, struct {
 			ID, Name, Country, Timezone string
 			SSHPublicKeys               []string
 			Advanced                    json.RawMessage
-		}{site.ID, site.Name, site.Country, site.Timezone, site.SSHPublicKeys, compactRaw(site.Advanced)})
+		}{site.ID, site.Name, site.Country, site.Timezone, keys, compactRaw(site.Advanced)})
 	}
 	aps := append([]APRecord(nil), state.APs...)
 	sort.Slice(aps, func(i, j int) bool { return aps[i].ID < aps[j].ID })
@@ -108,7 +114,7 @@ func LegacyDigest(key []byte, state State) string {
 }
 
 func compactRaw(raw json.RawMessage) json.RawMessage {
-	if len(raw) == 0 {
+	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil
 	}
 	var buf bytes.Buffer
