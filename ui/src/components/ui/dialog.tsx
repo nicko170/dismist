@@ -29,7 +29,7 @@ export function DialogContent({
   footer,
   closeLabel = 'Close',
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+}: Omit<React.ComponentProps<typeof DialogPrimitive.Content>, 'title'> & {
   title: React.ReactNode
   description?: React.ReactNode
   side?: keyof typeof sideClass

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { APStatus, PendingReason, PushState, Severity } from '@/api/types'
+import type { APStatus, Disruption, PendingReason, PushState, Severity } from '@/api/types'
 import { cn } from '@/lib/utils'
 
 // The one mapping from status enums to colour and words (design §3.4, §7.2).
@@ -117,6 +117,37 @@ export function StateChip({ on, onLabel = 'On', offLabel = 'Off', className }: {
   return (
     <Chip tone={on ? 'good' : 'idle'} className={className}>
       {on ? onLabel : offLabel}
+    </Chip>
+  )
+}
+
+/**
+ * Disruption classes (design P6), mildest first. The rank orders a union:
+ * the impact line names the worst class a change causes.
+ */
+export const disruptionMeta: Record<Disruption, { label: string; detail: string; tone: Tone; rank: number }> = {
+  none: { label: 'No disruption', detail: 'Clients stay connected.', tone: 'good', rank: 0 },
+  wlan_restart: { label: 'WLAN restarts', detail: 'Clients on the changed WLAN reconnect.', tone: 'warn', rank: 1 },
+  radio_bounce: { label: 'Radio restarts', detail: 'Clients on the changed band reconnect.', tone: 'warn', rank: 2 },
+  all_radios_bounce: { label: 'All radios restart', detail: 'Every client on the AP reconnects.', tone: 'crit', rank: 3 },
+  stranding_risk: {
+    label: 'May strand the AP',
+    detail: 'A wrong value can cut the AP off from dismist; recovery needs the LAN or SSH.',
+    tone: 'crit',
+    rank: 4,
+  },
+}
+
+/** The worst of several disruption classes ("none" for an empty list). */
+export function worstDisruption(classes: readonly Disruption[]): Disruption {
+  return classes.reduce<Disruption>((worst, next) => ((disruptionMeta[next]?.rank ?? 0) > disruptionMeta[worst].rank ? next : worst), 'none')
+}
+
+export function DisruptionChip({ disruption, className }: { disruption: Disruption; className?: string }) {
+  const meta = metaChip(disruptionMeta, disruption)
+  return (
+    <Chip tone={meta.tone} className={className}>
+      {meta.label}
     </Chip>
   )
 }
