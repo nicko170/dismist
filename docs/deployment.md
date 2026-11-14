@@ -136,8 +136,8 @@ the new config. Never paste a private key. This path requires an already
 authenticated AP and does not prepare a factory AP to trust the controller.
 
 The first start may have zero APs. Sign in to the UI, create a site with its
-country, then register APs and WLANs there. DNS refuses unregistered AP source
-addresses. New AP records activate within a few seconds, without a server
+country, then register APs and WLANs there. DNS refuses source addresses that
+no AP record pins. New AP records activate within a few seconds, without a server
 restart. For a headless migration from an existing JSON state file, `-state`
 can import it **once when creating a new database**; ordinary onboarding
 does not need that file. See [AP onboarding](onboarding.md).
