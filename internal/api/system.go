@@ -47,8 +47,14 @@ type DBView struct {
 	Compat    uint64 `json:"compat"`
 	// RollbackWithoutRestore is true while meta.compat is 1: an older
 	// release can run this database without restoring a backup first.
-	RollbackWithoutRestore bool              `json:"rollback_without_restore"`
+	RollbackWithoutRestore bool `json:"rollback_without_restore"`
+	// CompatRaisedAtRevision is the revision from which a rollback needs a
+	// database restore; null while compat is 1.
+	CompatRaisedAtRevision *uint64           `json:"compat_raised_at_revision" tstype:"number | null,required"`
 	Retention              map[string]string `json:"retention"`
+	// Records is the number of records per bucket (sites, events,
+	// samples, sessions, …).
+	Records map[string]int `json:"records"`
 }
 
 // PreMigrationCopy is one controller.db.pre-v<N>-<ts> file.

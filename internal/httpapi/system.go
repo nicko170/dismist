@@ -109,7 +109,7 @@ func (s *Server) systemView() api.SystemView {
 		Version: info.Version, Commit: info.Commit, Go: runtime.Version(), StartedAt: info.StartedAt,
 		DNSMode: info.DNSMode(), TrustedProxies: nonNil(info.TrustedProxies), Metrics: info.Metrics,
 		WSS:       api.WSSView{URL: info.APURL, Listen: info.WSSListen, Chain: []api.ChainCert{}, Cert: api.CertView{SANs: []string{}}},
-		DB:        api.DBView{Path: info.DBPath, Schema: 1, Compat: 1, Retention: map[string]string{}},
+		DB:        api.DBView{Path: info.DBPath, Schema: 1, Compat: 1, Retention: map[string]string{}, Records: map[string]int{}},
 		Backup:    api.BackupView{PreMigration: []api.PreMigrationCopy{}},
 		Migration: api.MigrationView{State: api.MigrationStateNotRun},
 	}
@@ -156,6 +156,15 @@ func (s *Server) systemView() api.SystemView {
 		}
 	}
 	view.DB.RollbackWithoutRestore = view.DB.Compat <= 1
+	if counted, ok := s.store.(recordCounter); ok {
+		if counts, err := counted.RecordCounts(); err == nil {
+			view.DB.Records = counts
+		}
+		var raised uint64
+		if found, err := counted.MetaJSON(model.MetaCompatRaisedRevision, &raised); err == nil && found && view.DB.Compat >= 2 {
+			view.DB.CompatRaisedAtRevision = &raised
+		}
+	}
 	if info.Backups != nil {
 		preMigration := view.Backup.PreMigration
 		view.Backup = info.Backups.Status()
@@ -163,6 +172,12 @@ func (s *Server) systemView() api.SystemView {
 	}
 	view.Migration = s.migrationView()
 	return view
+}
+
+// recordCounter is the bbolt store's per-bucket record count and meta read.
+type recordCounter interface {
+	RecordCounts() (map[string]int, error)
+	MetaJSON(key string, out any) (bool, error)
 }
 
 func certSANs(cert *x509.Certificate) []string {
@@ -357,5 +372,9 @@ func (s *Server) downloadBackup(writer http.ResponseWriter, request *http.Reques
 	log.Printf("audit: database backup %s (%d bytes) downloaded by %s from %s", name, info.Size(), principal(request), request.RemoteAddr)
 	if _, err := io.Copy(writer, file); err != nil {
 		log.Printf("backup download %s: %v", name, err)
+		return
 	}
+	// The file holds every PSK and AP secret: the download is a history
+	// action (design §4.11), not only a log line.
+	s.recordAction(request, "", fmt.Sprintf("Downloaded a database backup (%s, %d bytes)", name, info.Size()))
 }

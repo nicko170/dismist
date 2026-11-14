@@ -128,7 +128,7 @@ func (s *Server) listEvents(writer http.ResponseWriter, request *http.Request, p
 	if raw := query.Get("range"); raw != "" {
 		start, ok := rangeSince(raw, s.now())
 		if !ok {
-			writeAPIError(writer, invalidField("range", "range must be 1h, 24h, 7d or 30d"))
+			writeAPIError(writer, invalidField("range", "range must be a duration such as 1h, 24h, 7d, 30d or 90d (at most 400d)"))
 			return
 		}
 		if start.After(since) {
@@ -205,7 +205,7 @@ func (s *Server) samples(writer http.ResponseWriter, request *http.Request, site
 	}
 	start, ok := rangeSince(rangeValue, s.now())
 	if !ok {
-		writeAPIError(writer, invalidField("range", "range must be 1h, 24h, 7d or 30d"))
+		writeAPIError(writer, invalidField("range", "range must be a duration such as 1h, 24h, 7d, 30d or 90d (at most 400d)"))
 		return
 	}
 	stepValue := query.Get("step")
@@ -221,6 +221,15 @@ func (s *Server) samples(writer http.ResponseWriter, request *http.Request, site
 		stepValue = step.String()
 	}
 	apID := query.Get("ap")
+	// Minute samples are kept 30 days; longer ranges read the hourly
+	// rollups (kept 400 days) at a step of at least an hour.
+	if hourly, ok := s.store.(hourlyReader); ok && s.now().Sub(start) > model.DefaultRetainSamples {
+		if step < time.Hour {
+			step, stepValue = time.Hour, time.Hour.String()
+		}
+		s.hourlySamplePage(writer, hourly, siteID, apID, rangeValue, stepValue, start, step)
+		return
+	}
 	limit := int(s.now().Sub(start)/time.Minute)*maxInt(1, len(siteAPs(s.store.Snapshot(), siteID))) + 10
 	if limit > 50000 {
 		limit = 50000
@@ -278,6 +287,103 @@ func (s *Server) samples(writer http.ResponseWriter, request *http.Request, site
 			current.NoiseDBm = radio.NoiseDBm
 			if radio.Clients > current.Clients {
 				current.Clients = radio.Clients
+			}
+			b.radioN[radioKey]++
+		}
+	}
+	page := api.SamplePage{SiteID: siteID, APID: apID, Range: rangeValue, Step: stepValue, Samples: []api.Sample{}}
+	keys := make([]int64, 0, len(buckets))
+	for key := range buckets {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	for _, key := range keys {
+		b := buckets[key]
+		for _, count := range b.perAP {
+			b.sample.Clients += count
+		}
+		b.sample.APsConnected = len(b.connected)
+		if b.rssiN > 0 {
+			average := b.rssiSum / float64(b.rssiN)
+			b.sample.AverageRSSI = &average
+		}
+		radioKeys := make([]string, 0, len(b.radios))
+		for radioKey := range b.radios {
+			radioKeys = append(radioKeys, radioKey)
+		}
+		sort.Strings(radioKeys)
+		for _, radioKey := range radioKeys {
+			radio := *b.radios[radioKey]
+			radio.Util /= float64(maxInt(1, b.radioN[radioKey]))
+			b.sample.Radios = append(b.sample.Radios, radio)
+		}
+		page.Samples = append(page.Samples, b.sample)
+	}
+	respond(writer, http.StatusOK, page)
+}
+
+// hourlyReader is the bbolt store's hourly rollups (samples_hourly).
+type hourlyReader interface {
+	HourlySamples(model.HourlyQuery) ([]model.HourlySample, error)
+}
+
+// hourlySamplePage serves a samples page from the hourly rollups: clients
+// are the per-AP hourly maxima summed, traffic the hourly maxima, radio
+// utilisation the hourly averages.
+func (s *Server) hourlySamplePage(writer http.ResponseWriter, hourly hourlyReader, siteID, apID, rangeValue, stepValue string, start time.Time, step time.Duration) {
+	items, err := hourly.HourlySamples(model.HourlyQuery{SiteID: siteID, APID: apID, Since: start})
+	if err != nil {
+		writeAPIError(writer, internalError("history read failed"))
+		return
+	}
+	type bucket struct {
+		sample    api.Sample
+		perAP     map[string]int
+		connected map[string]bool
+		rssiSum   float64
+		rssiN     int
+		radios    map[string]*api.SampleRadio
+		radioN    map[string]int
+	}
+	buckets := map[int64]*bucket{}
+	for _, item := range items {
+		if item.Hour.Before(start.Truncate(time.Hour)) {
+			continue
+		}
+		key := item.Hour.Truncate(step).Unix()
+		b := buckets[key]
+		if b == nil {
+			b = &bucket{sample: api.Sample{At: time.Unix(key, 0).UTC(), Radios: []api.SampleRadio{}}, perAP: map[string]int{},
+				connected: map[string]bool{}, radios: map[string]*api.SampleRadio{}, radioN: map[string]int{}}
+			buckets[key] = b
+		}
+		if item.ClientsMax > b.perAP[item.APID] {
+			b.perAP[item.APID] = item.ClientsMax
+		}
+		if item.ConnectedMinutes > 0 {
+			b.connected[item.APID] = true
+		}
+		b.sample.TxBytes += item.TxBytesMax
+		b.sample.RxBytes += item.RxBytesMax
+		if item.AverageRSSI != 0 {
+			b.rssiSum += float64(item.AverageRSSI)
+			b.rssiN++
+		}
+		for _, radio := range item.Radios {
+			radioKey := item.APID + "\x00" + radio.Band
+			if apID == "" {
+				radioKey = radio.Band
+			}
+			current := b.radios[radioKey]
+			if current == nil {
+				current = &api.SampleRadio{Band: radio.Band}
+				b.radios[radioKey] = current
+			}
+			current.Channel, current.Width, current.MaxPowerDBm = radio.Channel, radio.Width, radio.MaxPower
+			current.Util += radio.UtilAvg
+			current.NoiseDBm = int(radio.NoiseAvg)
+			if radio.ClientsMax > current.Clients {
+				current.Clients = radio.ClientsMax
 			}
 			b.radioN[radioKey]++
 		}

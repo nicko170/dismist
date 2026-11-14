@@ -755,7 +755,25 @@ func (s *Server) apTelemetry(ap model.APRecord) api.APTelemetry {
 	view.ClockSkewSeconds, view.ConfigTimestamp, view.Country = t.ClockSkewSeconds, t.ConfigTimestamp, t.Health.Country
 	view.Health, view.Uplink, view.IP = healthView(obs), uplinkView(obs), ipView(obs)
 	view.Radios, view.WLANs = radioViews(obs), wlansLive(obs)
+	view.BLE = bleView(obs)
 	return view
+}
+
+// bleView sums the AP's BLE radios (normally one) for the indicator.
+func bleView(obs apObs) *api.APBLE {
+	if len(obs.telemetry.BLE) == 0 {
+		return nil
+	}
+	var view api.APBLE
+	for _, radio := range obs.telemetry.BLE {
+		view.TxAdverts += radio.TxAdverts
+		view.RxAdverts += radio.RxAdverts
+		view.Scans += radio.Scans
+		view.Errors += radio.TxErrors + radio.RxErrors
+		view.ResetsHung += radio.ResetsHung + radio.ResetsHungRx
+		view.Alive = view.Alive || radio.TxAdverts+radio.RxAdverts+radio.RxEvents+radio.Scans > 0
+	}
+	return &view
 }
 
 // lowerNoSpace is a search helper.

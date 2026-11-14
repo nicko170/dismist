@@ -167,6 +167,10 @@ func TestBackupDownload(t *testing.T) {
 	handler, store, _ := platformFixture(t)
 	staging := t.TempDir()
 	handler.UseSystem(SystemInfo{BackupTempDir: staging})
+	history := &fakeHistory{}
+	config := handler.config
+	config.History = history
+	handler.UseConfig(config)
 	response := request(t, handler, http.MethodGet, "/api/system/backup", "")
 	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "application/octet-stream" ||
 		!strings.HasPrefix(response.Header().Get("Content-Disposition"), `attachment; filename="dismist-controller-`) {
@@ -177,6 +181,10 @@ func TestBackupDownload(t *testing.T) {
 	}
 	if left, _ := os.ReadDir(staging); len(left) != 0 {
 		t.Fatalf("staging directory not cleaned: %v", left)
+	}
+	// The download is recorded in the history (design §4.11).
+	if len(history.entries) != 1 || history.entries[0].Kind != "action" || !strings.HasPrefix(history.entries[0].Summary, "Downloaded a database backup") {
+		t.Fatalf("history %+v", history.entries)
 	}
 	// Read tokens never download backups (they contain PSKs and AP secrets).
 	read := webgate.Principal{Via: api.AuthViaToken, Scope: api.TokenScopeRead, TokenID: "dsm_r"}

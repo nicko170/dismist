@@ -48,29 +48,34 @@ var experimentalFallback = map[string][]string{
 	"ap.locate":                        {"*"},
 }
 
-// experimentalKeys returns the option keys of changed whose new value is
-// experimental, by the registry or by the fallback list. A null (reset)
-// is never experimental.
 // experimentalKeys lists the option keys of changed whose values are
-// experimental. A value that is off (false, empty, zero) never counts; nor
-// does one equal to the object's current value (current, by option key:
-// forms send whole sections) or the option's default where the object
-// holds no value (a new object, current nil, or a migrated record).
+// experimental, by the registry or by the fallback list. A null (reset)
+// never counts. A value that is off (false, empty, zero) does not count
+// either, unless the option is on by default (turning the scanning radio
+// off is the experimental action); nor does a value equal to the object's
+// current value (current, by option key: forms send whole sections) or the
+// option's default where the object holds no value (a new object, current
+// nil, or a migrated record).
 func experimentalKeys(registry *options.Registry, changed, current map[string]any) []string {
 	var keys []string
 	for key, value := range changed {
 		if value == nil {
 			continue
 		}
-		// Writing an experimental option at its default, or off (false,
-		// empty, zero), never needs the site's switch: it asks the AP for
-		// nothing it does not do already. Forms send whole sections, so
-		// these arrive with every save.
-		if isZeroJSON(value) {
+		// Writing an experimental option off asks the AP for nothing it
+		// does not do already, so it never needs the site's switch, unless
+		// off differs from what the option does by default.
+		defaultOn := onByDefault(registry, key)
+		if isZeroJSON(value) && !defaultOn {
 			continue
 		}
 		if current != nil {
-			if stored, ok := current[key]; ok && sameJSON(value, stored) {
+			stored, ok := current[key]
+			if defaultOn && stored == nil {
+				// Nothing stored means the default: on.
+				stored, ok = true, true
+			}
+			if ok && sameJSON(value, stored) {
 				continue
 			}
 		}
@@ -109,6 +114,19 @@ func experimentalKeys(registry *options.Registry, changed, current map[string]an
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// onByDefault reports whether an option's default (or legacy default) is
+// true, so writing false changes what the AP does.
+func onByDefault(registry *options.Registry, key string) bool {
+	if registry == nil {
+		return false
+	}
+	option, ok := registry.Get(key)
+	if !ok {
+		return false
+	}
+	return option.Default == true || option.LegacyDefault == true
 }
 
 // experimentalDisabled is the 422 for experimental values on a site

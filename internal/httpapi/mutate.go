@@ -85,11 +85,11 @@ func (s *Server) run(m mutation) (outcome, error) {
 		out.applied = applied
 		out.revision = state.Revision + 1
 		out.impact, out.warnings = s.impact(previous, *state, applied, m.dryRun)
-		if compatWarning := s.compatRaise(*state); compatWarning {
+		if s.raisesCompat(previous, *state, tx) {
 			out.warnings = append(out.warnings, api.Warning{Code: "compat_raised",
 				Message: "After this change, rolling dismist back to a release without schema 2 needs a database restore."})
 			if !m.dryRun && tx != nil && model.SupportedSchema >= 2 {
-				if err := tx.SetCompat(2); err != nil {
+				if err := tx.RaiseCompat(state.Revision + 1); err != nil {
 					return err
 				}
 			}
@@ -226,6 +226,22 @@ func (s *Server) push(pushes []compile.Push) error {
 		}
 	}
 	return failed
+}
+
+// raisesCompat reports whether this change is the one that raises compat
+// to 2 (design §4.1 rule 4): the new state needs it and the stored compat
+// is still below 2 (without a transaction: the previous state did not need
+// it). Later, unrelated changes neither warn nor raise it again.
+func (s *Server) raisesCompat(previous, current model.State, tx *model.Tx) bool {
+	if !s.compatRaise(current) {
+		return false
+	}
+	if tx != nil && tx.Bolt() != nil {
+		if info, err := tx.Schema(); err == nil {
+			return info.Compat < 2
+		}
+	}
+	return !s.compatRaise(previous)
 }
 
 // compatRaise reports whether state holds something a schema-1 binary

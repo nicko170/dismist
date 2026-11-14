@@ -74,13 +74,48 @@ func defaultBand(band string) api.BandProfileView {
 func siteBand(site model.Site, band string) api.BandProfileView {
 	record := readRFRecord(site)
 	stored := record.Band5
+	key := "band_5"
 	if band == "2.4" {
-		stored = record.Band24
+		stored, key = record.Band24, "band_24"
 	}
 	if stored == nil {
 		return defaultBand(band)
 	}
-	return *stored
+	view := *stored
+	// Advanced values the record does not hold are the template's: TWT on,
+	// airtime fairness and antennas at the firmware default (design §3.10).
+	if object, err := recordMap(site); err == nil {
+		if twt, held := lookup(object, "rf."+key+".advanced.twt"); !held || twt == nil {
+			view.Advanced.TWT = true
+		}
+	}
+	if view.Advanced.TAF == "" {
+		view.Advanced.TAF = "default"
+	}
+	if view.Advanced.Antenna == "" {
+		view.Advanced.Antenna = "default"
+	}
+	return view
+}
+
+// unchangedAdvanced drops the advanced values of a band patch that equal
+// what the band does now (the view's values, template defaults included),
+// so saving a form unchanged stores nothing and the AP config stays
+// byte-identical (an explicit TWT on would add TWTDisabled:false).
+func unchangedAdvanced(current api.BandProfileView, patch map[string]any) {
+	advanced, ok := patch["advanced"].(map[string]any)
+	if !ok {
+		return
+	}
+	now := map[string]any{"twt": current.Advanced.TWT, "taf": current.Advanced.TAF, "antenna": current.Advanced.Antenna}
+	for key, value := range now {
+		if sent, present := advanced[key]; present && sent != nil && sameJSON(sent, value) {
+			delete(advanced, key)
+		}
+	}
+	if len(advanced) == 0 {
+		delete(patch, "advanced")
+	}
 }
 
 func siteBandWidth(site model.Site, band string) int {
@@ -231,6 +266,7 @@ func (s *Server) parseRFPatch(state model.State, site model.Site, raw any) (any,
 				continue
 			}
 			merged := siteBand(site, band)
+			unchangedAdvanced(merged, bandPatch)
 			mergedMap, _ := recordMap(merged)
 			mergePatch(mergedMap, bandPatch)
 			var result api.BandProfileView
@@ -507,8 +543,9 @@ func selectPlanChanges(changes []api.PlanChange, only []api.PlanSelection) []api
 	return result
 }
 
-// neighbours serves GET /api/sites/$id/rf/neighbours?band= (phase 3).
-// Neighbour SSIDs and BSSIDs stay in the authenticated API.
+// neighbours serves GET /api/sites/$id/rf/neighbours?band=&ap= (phase 3).
+// ap limits the page to what one AP's scanning radio heard (the AP
+// Radios tab). Neighbour SSIDs and BSSIDs stay in the authenticated API.
 func (s *Server) neighbours(writer http.ResponseWriter, request *http.Request, p params) {
 	siteID := p["site"]
 	state := s.store.Snapshot()
@@ -521,9 +558,23 @@ func (s *Server) neighbours(writer http.ResponseWriter, request *http.Request, p
 		writeAPIError(writer, invalidField("band", `band must be "2.4" or "5"`))
 		return
 	}
+	onlyAP := ""
+	if raw := request.URL.Query().Get("ap"); raw != "" {
+		onlyAP = raw
+		if mac := normaliseMAC(raw); mac != "" && findAP(state, mac) != nil {
+			onlyAP = mac
+		}
+		if ap := findAP(state, onlyAP); ap == nil || ap.SiteID != siteID {
+			writeAPIError(writer, notFound("AP").withField("ap", "no such AP on this site"))
+			return
+		}
+	}
 	input := s.planInput(state, siteID)
 	page := api.NeighbourPage{Neighbours: []api.Neighbour{}, Own: []api.Neighbour{}, Scans: []api.ScanAge{}}
 	for _, ap := range siteAPs(state, siteID) {
+		if onlyAP != "" && ap.ID != onlyAP {
+			continue
+		}
 		report, ok := input.Scans[ap.ID]
 		counts := map[api.Band]int{}
 		for _, neighbour := range report.Neighbours {

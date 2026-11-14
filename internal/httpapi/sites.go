@@ -224,7 +224,7 @@ func (s *Server) getSite(writer http.ResponseWriter, request *http.Request, p pa
 		return
 	}
 	if legacyClient(request) {
-		respond(writer, http.StatusOK, map[string]any{"site": legacySiteView(*site)})
+		respond(writer, http.StatusOK, map[string]any{"site": legacySiteView(*site, s.expertField())})
 		return
 	}
 	respond(writer, http.StatusOK, s.siteView(s.apContext(state), *site))
@@ -431,7 +431,7 @@ func (s *Server) updateSite(writer http.ResponseWriter, request *http.Request, s
 		return
 	}
 	if !v1 || legacyClient(request) {
-		respond(writer, http.StatusOK, map[string]any{"site": legacySiteView(*site), "revision": out.revision})
+		respond(writer, http.StatusOK, map[string]any{"site": legacySiteView(*site, s.expertField()), "revision": out.revision})
 		return
 	}
 	respondMutation(writer, http.StatusOK, out, s.siteView(s.apContext(out.state), *site))
@@ -647,7 +647,11 @@ func (s *Server) parseSSHPatch(site model.Site, patch map[string]any) (map[strin
 					continue
 				}
 				seen[blob] = true
-				stored = append(stored, map[string]any{"key": blob, "comment": comment})
+				entry := map[string]any{"key": blob}
+				if comment != "" {
+					entry["comment"] = comment
+				}
+				stored = append(stored, entry)
 			}
 			result[key] = stored
 			if key == "keys" {
@@ -704,8 +708,11 @@ func normaliseBlockedClients(protection map[string]any) *apiError {
 			continue
 		}
 		seen[mac] = true
-		note, _ := entry["note"].(string)
-		result = append(result, map[string]any{"mac": mac, "note": note})
+		clean := map[string]any{"mac": mac}
+		if note, _ := entry["note"].(string); note != "" {
+			clean["note"] = note
+		}
+		result = append(result, clean)
 	}
 	protection["blocked_clients"] = result
 	return nil

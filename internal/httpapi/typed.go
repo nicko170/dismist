@@ -107,7 +107,8 @@ func mergePatch(target map[string]any, patch map[string]any) {
 }
 
 // leaves returns the dotted paths of every leaf of a patch (objects are
-// walked; arrays, scalars and nulls are leaves).
+// walked; arrays, scalars and nulls are leaves; an empty object changes
+// nothing and has none).
 func leaves(patch map[string]any, prefix string) []string {
 	var result []string
 	for key, value := range patch {
@@ -115,7 +116,7 @@ func leaves(patch map[string]any, prefix string) []string {
 		if prefix != "" {
 			path = prefix + "." + key
 		}
-		if child, ok := value.(map[string]any); ok && len(child) > 0 {
+		if child, ok := value.(map[string]any); ok {
 			result = append(result, leaves(child, path)...)
 			continue
 		}
@@ -153,6 +154,15 @@ func isZeroJSON(value any) bool {
 	return false
 }
 
+// sameStored reports whether a patched value survived a record's round
+// trip: sameJSON with a zero object member (null, false, 0, "", [] or {})
+// counted as absent at any depth, because records drop omitempty members
+// inside list elements too (a blocked client without a note, an SSH key
+// without a comment, a syslog target without a tag).
+func sameStored(want, got any) bool {
+	return sameJSON(dropZeroMembers(want), dropZeroMembers(got))
+}
+
 // sameJSON compares two decoded JSON values, treating numbers by value.
 func sameJSON(a, b any) bool {
 	if isZeroJSON(a) && isZeroJSON(b) {
@@ -161,6 +171,29 @@ func sameJSON(a, b any) bool {
 	rawA, errA := json.Marshal(normaliseNumbers(a))
 	rawB, errB := json.Marshal(normaliseNumbers(b))
 	return errA == nil && errB == nil && bytes.Equal(rawA, rawB)
+}
+
+// dropZeroMembers returns value with every zero object member removed,
+// recursively (list elements are kept, their members cleaned).
+func dropZeroMembers(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(typed))
+		for key, child := range typed {
+			child = dropZeroMembers(child)
+			if !isZeroJSON(child) {
+				result[key] = child
+			}
+		}
+		return result
+	case []any:
+		result := make([]any, len(typed))
+		for index, child := range typed {
+			result[index] = dropZeroMembers(child)
+		}
+		return result
+	}
+	return value
 }
 
 func normaliseNumbers(value any) any {
@@ -221,7 +254,7 @@ func patchRecord(record any, patch map[string]any) error {
 	for _, path := range leaves(patch, "") {
 		want, _ := lookup(patch, path)
 		got, _ := lookup(stored, path)
-		if !sameJSON(want, got) {
+		if !sameStored(want, got) {
 			return &errUnsupported{path: path}
 		}
 	}

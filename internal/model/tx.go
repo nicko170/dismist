@@ -193,6 +193,22 @@ func (t *Tx) VAPs() (map[string][]VAPRecord, error) {
 	})
 }
 
+// RaiseCompat sets compat to 2 and records the revision whose commit
+// raised it (kept from the first raise).
+func (t *Tx) RaiseCompat(revision uint64) error {
+	if t.bolt == nil {
+		return nil
+	}
+	if err := t.SetCompat(2); err != nil {
+		return err
+	}
+	var recorded uint64
+	if found, err := t.MetaJSON(MetaCompatRaisedRevision, &recorded); err != nil || found {
+		return err
+	}
+	return t.PutMetaJSON(MetaCompatRaisedRevision, revision)
+}
+
 // PutMetaRaw stores raw bytes under a meta key (JSON reports, digests).
 func (t *Tx) PutMetaRaw(key string, value []byte) error {
 	if t.bolt == nil {

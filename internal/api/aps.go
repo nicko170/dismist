@@ -393,6 +393,20 @@ type APTelemetry struct {
 	IP               APIP        `json:"ip"`
 	Radios           []RadioView `json:"radios"`
 	WLANs            []WLANLive  `json:"wlans"`
+	// BLE is the AP's BLE radio (field 38, phase 4); null when the AP
+	// reports none.
+	BLE *APBLE `json:"ble" tstype:"APBLE | null,required"`
+}
+
+// APBLE is the BLE indicator: whether the AP reports a BLE radio and
+// whether its counters show activity (advertising, scanning or events).
+type APBLE struct {
+	Alive      bool   `json:"alive"`
+	TxAdverts  uint64 `json:"tx_adverts"`
+	RxAdverts  uint64 `json:"rx_adverts"`
+	Scans      uint64 `json:"scans"`
+	Errors     uint64 `json:"errors"`
+	ResetsHung uint64 `json:"resets_hung"`
 }
 
 // APLogLine is one kernel log line (24.1, phase 4).

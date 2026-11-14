@@ -235,6 +235,9 @@ func (s *Server) impact(previous, current model.State, applied compile.Applied, 
 		}
 		diff := diffConfigs(before, push.Config)
 		classes := map[api.Disruption]bool{}
+		// Counted once per AP: a change touches several paths of the same
+		// WLAN or radio (Power and RRM.Power, Disabled on every band).
+		apWLANs, apBands := map[string]bool{}, map[string]bool{}
 		for _, entry := range diff {
 			class := disruptionOf(entry.Path)
 			if before == nil {
@@ -243,10 +246,16 @@ func (s *Server) impact(previous, current model.State, applied compile.Applied, 
 			classes[class] = true
 			switch class {
 			case api.DisruptionWLANRestart:
-				wlanRestarts[wlanLabel(entry.Path)]++
+				apWLANs[wlanLabel(entry.Path)] = true
 			case api.DisruptionRadioBounce:
-				radioBands[radioLabel(entry.Path)]++
+				apBands[radioLabel(entry.Path)] = true
 			}
+		}
+		for label := range apWLANs {
+			wlanRestarts[label]++
+		}
+		for label := range apBands {
+			radioBands[label]++
 		}
 		obs := s.observe(push.APID)
 		if obs.fresh(ap.ConfigUpdatedAt) {

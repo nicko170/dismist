@@ -27,6 +27,9 @@ const (
 	MetaMigrationReport  = "migration_v2_report"
 	MetaMigrationState   = "migration_state"
 	MetaPreMigrationCopy = "pre_migration_copies"
+	// MetaCompatRaisedRevision is the revision whose commit raised compat
+	// to 2 (JSON number): from it on, rolling back needs a restore.
+	MetaCompatRaisedRevision = "compat_raised_revision"
 )
 
 // SupportedSchema is the newest data format this binary understands. An M0
@@ -246,4 +249,17 @@ func decodeH0(raw []byte) (map[string]H0Record, error) {
 		document.APs = map[string]H0Record{}
 	}
 	return document.APs, nil
+}
+
+// RecordCounts returns the number of keys in every top-level bucket (the
+// System › Database card's record counts).
+func (s *BoltStore) RecordCounts() (map[string]int, error) {
+	result := map[string]int{}
+	err := s.db.View(func(tx *bolt.Tx) error {
+		return tx.ForEach(func(name []byte, bucket *bolt.Bucket) error {
+			result[string(name)] = bucket.Stats().KeyN
+			return nil
+		})
+	})
+	return result, err
 }

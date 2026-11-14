@@ -298,7 +298,14 @@ func (s *Server) clientDetail(writer http.ResponseWriter, request *http.Request,
 		}
 		sort.SliceStable(detail.Events, func(i, j int) bool { return detail.Events[i].LastSeen.After(detail.Events[j].LastSeen) })
 	}
-	if detail.Live == nil && len(detail.Sessions) == 0 && len(detail.Events) == 0 {
+	if s.config.ClientMeta != nil {
+		if stored, found, err := s.config.ClientMeta.Get(mac); err != nil {
+			log.Printf("client %s: read meta: %v", mac, err)
+		} else if found {
+			detail.Meta = &stored
+		}
+	}
+	if detail.Live == nil && len(detail.Sessions) == 0 && len(detail.Events) == 0 && detail.Meta == nil {
 		writeAPIError(writer, notFound("client"))
 		return
 	}

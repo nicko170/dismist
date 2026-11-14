@@ -44,7 +44,7 @@ func Finalise(store *model.BoltStore, now time.Time, actor model.Actor) error {
 		for index := range next.Networks {
 			next.Networks[index].Advanced = nil
 		}
-		if err := tx.SetCompat(2); err != nil {
+		if err := tx.RaiseCompat(next.Revision + 1); err != nil {
 			return err
 		}
 		_, err := tx.ConfigHistory().Append(model.ChangeRecord{

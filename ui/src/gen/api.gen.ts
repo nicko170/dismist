@@ -506,6 +506,23 @@ export interface APTelemetry {
   ip: APIP;
   radios: RadioView[];
   wlans: WLANLive[];
+  /**
+   * BLE is the AP's BLE radio (field 38, phase 4); null when the AP
+   * reports none.
+   */
+  ble: APBLE | null;
+}
+/**
+ * APBLE is the BLE indicator: whether the AP reports a BLE radio and
+ * whether its counters show activity (advertising, scanning or events).
+ */
+export interface APBLE {
+  alive: boolean;
+  tx_adverts: number /* uint64 */;
+  rx_adverts: number /* uint64 */;
+  scans: number /* uint64 */;
+  errors: number /* uint64 */;
+  resets_hung: number /* uint64 */;
 }
 /**
  * APLogLine is one kernel log line (24.1, phase 4).
@@ -815,6 +832,11 @@ export interface ClientDetail {
   sessions: SessionView[];
   events: EventView[];
   next_before: string | null;
+  /**
+   * Meta is the operator's alias and notes (phase 4); null when none are
+   * stored.
+   */
+  meta: ClientMeta | null;
 }
 /**
  * ClientList is GET /api/sites/$id/clients?view=live (the bare array).
@@ -1945,7 +1967,17 @@ export interface DBView {
    * release can run this database without restoring a backup first.
    */
   rollback_without_restore: boolean;
+  /**
+   * CompatRaisedAtRevision is the revision from which a rollback needs a
+   * database restore; null while compat is 1.
+   */
+  compat_raised_at_revision: number | null;
   retention: { [key: string]: string};
+  /**
+   * Records is the number of records per bucket (sites, events,
+   * samples, sessions, …).
+   */
+  records: { [key: string]: number /* int */};
 }
 /**
  * PreMigrationCopy is one controller.db.pre-v<N>-<ts> file.
@@ -2177,6 +2209,12 @@ export interface ScheduleWindow {
 export interface ScheduleView {
   enabled: boolean;
   windows: ScheduleWindow[];
+  /**
+   * OffAir is true while the schedule holds the WLAN off air (read-only;
+   * evaluated every minute, only for APs that take config pushes by
+   * notification).
+   */
+  off_air: boolean;
 }
 /**
  * MPSKKeyView is one per-device passphrase; the passphrase is write-only.

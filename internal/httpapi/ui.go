@@ -39,6 +39,10 @@ func (s *Server) UseNextUI(files fs.FS) *Server {
 // file with an extension is a 404.
 func (s *Server) serveUI(writer http.ResponseWriter, request *http.Request) {
 	clean := path.Clean("/" + request.URL.Path)
+	// The legacy app edits the legacy advanced patches; once the schema-2
+	// migration commits they are no longer what the APs compile from, so
+	// it is not served at all (design §8.5 D).
+	legacy := s.legacyUI && !s.typedEnabled()
 	switch {
 	case clean == nextAssets || strings.HasPrefix(clean, nextAssets+"/"):
 		s.serveNextAsset(writer, request, strings.TrimPrefix(clean, "/"))
@@ -51,11 +55,11 @@ func (s *Server) serveUI(writer http.ResponseWriter, request *http.Request) {
 			target += "?" + request.URL.RawQuery
 		}
 		http.Redirect(writer, request, target, http.StatusMovedPermanently)
-	case s.legacyUI && clean == legacyPrefix && !strings.HasSuffix(request.URL.Path, "/"):
+	case legacy && clean == legacyPrefix && !strings.HasSuffix(request.URL.Path, "/"):
 		http.Redirect(writer, request, legacyPrefix+"/", http.StatusMovedPermanently)
-	case s.legacyUI && (clean == legacyPrefix || strings.HasPrefix(clean, legacyPrefix+"/")):
+	case legacy && (clean == legacyPrefix || strings.HasPrefix(clean, legacyPrefix+"/")):
 		s.serveLegacy(writer, request, strings.TrimPrefix(strings.TrimPrefix(clean, legacyPrefix), "/"))
-	case s.legacyUI && strings.HasPrefix(clean, "/assets/"):
+	case legacy && strings.HasPrefix(clean, "/assets/"):
 		s.serveLegacy(writer, request, strings.TrimPrefix(clean, "/"))
 	default:
 		if path.Ext(clean) != "" {

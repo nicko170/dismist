@@ -3,6 +3,7 @@ package httpapi
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -52,9 +53,11 @@ func (s *Server) legacyAPList(writer http.ResponseWriter, state model.State) {
 	respond(writer, http.StatusOK, map[string]any{"aps": aps})
 }
 
-func legacySiteView(site model.Site) map[string]any {
+// legacySiteView is the phase-0 site view. Its "advanced" is the patch the
+// site's expert endpoint edits (the expert field once schema 2 commits).
+func legacySiteView(site model.Site, field string) map[string]any {
 	return map[string]any{"id": site.ID, "name": site.Name, "country": site.Country,
-		"timezone": site.Timezone, "advanced": redactPatch(recordKey(site, "advanced"))}
+		"timezone": site.Timezone, "advanced": redactPatch(recordKey(site, field))}
 }
 
 func (s *Server) legacySiteList(writer http.ResponseWriter, state model.State) {
@@ -264,18 +267,24 @@ func (s *Server) siteAPAlias(writer http.ResponseWriter, request *http.Request, 
 		respond(writer, http.StatusOK, map[string]any{"events": events})
 	case "config":
 		site := findSite(state, ap.SiteID)
-		effective, err := compile.BuildSiteConfig(s.base, *site, *ap, compile.NetworksForSite(state, ap.SiteID), state.UpdatedAt)
-		if err != nil {
-			writeAPIError(writer, invalid("config preview failed: "+err.Error()))
+		input, err := compile.InputFor(s.base, state, ap.ID)
+		var output compile.Output
+		if err == nil {
+			output, err = compile.AP(input)
+		}
+		if err != nil || site == nil {
+			writeAPIError(writer, invalid(fmt.Sprintf("config preview failed: %v", err)))
 			return
 		}
+		effective := output.Config
+		field := s.expertField()
 		redacted, err := redactJSON(effective)
 		if err != nil {
 			writeAPIError(writer, invalid("config preview failed"))
 			return
 		}
 		respond(writer, http.StatusOK, map[string]any{
-			"effective": redacted, "site_patch": redactPatch(recordKey(*site, "advanced")), "ap_patch": redactPatch(recordKey(*ap, "advanced")),
+			"effective": redacted, "site_patch": redactPatch(recordKey(*site, field)), "ap_patch": redactPatch(recordKey(*ap, field)),
 		})
 	default:
 		routeNotFound(writer)

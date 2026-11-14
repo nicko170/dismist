@@ -37,7 +37,61 @@ func changeSummary(entry ChangeEntry, state model.State) api.ChangeSummary {
 	return summary
 }
 
-// listChanges serves GET /api/sites/$id/changes?before=&limit=.
+// changesPage reads one page of a site's history. With apID it keeps only
+// the revisions that affected that AP (design §3.7 AP config history),
+// reading further pages until the page is full; next is the revision to
+// pass as before for the following page (0: no more).
+func (s *Server) changesPage(siteID, apID string, before uint64, limit int) ([]ChangeEntry, uint64, error) {
+	if apID == "" {
+		return s.config.History.List(siteID, before, limit)
+	}
+	var result []ChangeEntry
+	cursor := before
+	// Bounded: a site whose history never touched the AP ends after a
+	// few thousand entries; the page then carries a cursor to continue.
+	for reads := 0; reads < 20; reads++ {
+		entries, next, err := s.config.History.List(siteID, cursor, limit)
+		if err != nil {
+			return nil, 0, err
+		}
+		for _, entry := range entries {
+			if !changeAffectsAP(entry, apID) {
+				continue
+			}
+			result = append(result, entry)
+			if len(result) == limit {
+				if next == 0 && entry.Revision == entries[len(entries)-1].Revision {
+					return result, 0, nil
+				}
+				return result, entry.Revision, nil
+			}
+		}
+		if next == 0 {
+			return result, 0, nil
+		}
+		cursor = next
+	}
+	return result, cursor, nil
+}
+
+// changeAffectsAP reports whether a history entry changed one AP's config
+// or names the AP among its objects.
+func changeAffectsAP(entry ChangeEntry, apID string) bool {
+	if _, ok := entry.Effective[apID]; ok {
+		return true
+	}
+	if _, ok := entry.Results[apID]; ok {
+		return true
+	}
+	for _, object := range entry.Objects {
+		if object.Kind == "ap" && object.ID == apID {
+			return true
+		}
+	}
+	return false
+}
+
+// listChanges serves GET /api/sites/$id/changes?before=&limit=&ap=.
 func (s *Server) listChanges(writer http.ResponseWriter, request *http.Request, p params) {
 	if s.historyUnavailable(writer) {
 		return
@@ -60,7 +114,14 @@ func (s *Server) listChanges(writer http.ResponseWriter, request *http.Request, 
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	entries, next, err := s.config.History.List(p["site"], before, limit)
+	apID := ""
+	if raw := request.URL.Query().Get("ap"); raw != "" {
+		apID = raw
+		if mac := normaliseMAC(raw); mac != "" && findAP(state, mac) != nil {
+			apID = mac
+		}
+	}
+	entries, next, err := s.changesPage(p["site"], apID, before, limit)
 	if err != nil {
 		log.Printf("config history: %v", err)
 		writeAPIError(writer, internalError("config history read failed"))

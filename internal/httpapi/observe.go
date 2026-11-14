@@ -361,6 +361,20 @@ type obsTelemetry struct {
 	// KernelLog is the AP kernel log ring (24.1, oldest first); the AP
 	// sends lines without a time of their own.
 	KernelLog []string `json:"kmsg"`
+	// BLE are the BLE radio counters (38).
+	BLE []obsBLE `json:"ble"`
+}
+
+// obsBLE is telemetry.BLERadio.
+type obsBLE struct {
+	TxAdverts    uint64 `json:"tx_adverts"`
+	RxAdverts    uint64 `json:"rx_adverts"`
+	RxEvents     uint64 `json:"rx_events"`
+	Scans        uint64 `json:"scans"`
+	TxErrors     uint64 `json:"tx_errors"`
+	RxErrors     uint64 `json:"rx_errors"`
+	ResetsHung   uint64 `json:"resets_hung"`
+	ResetsHungRx uint64 `json:"resets_hung_rx"`
 }
 
 // obsCounters is controller.Counters.
