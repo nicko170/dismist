@@ -4,6 +4,20 @@
 __pycache__/
 /web/node_modules/
 /web/*.tsbuildinfo
+# ui/dist is build output; only the stub that lets //go:embed compile without
+# Node (index.html and _ui/.keep) is committed.
+/ui/node_modules/
+/ui/*.tsbuildinfo
+/ui/dist/*
+!/ui/dist/index.html
+!/ui/dist/_ui/
+/ui/dist/_ui/*
+!/ui/dist/_ui/.keep
+/ui/test-results/
+/ui/playwright-report/
+/ui/blob-report/
+/ui/playwright/.cache/
+/ui/coverage/
 /.worktrees/
 .env
 .env.*

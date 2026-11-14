@@ -3,14 +3,229 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, v1]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The Prometheus version the production cluster runs; promtool comes with it.
+  PROMETHEUS_IMAGE: quay.io/prometheus/prometheus:v3.11.2
+  KUBECONFORM_VERSION: v0.7.0
+  YQ_VERSION: v4.44.6
+  # internal/aptemplate/ap33.json is frozen as of ap-identity (design §4.2
+  # check 6): new behaviour goes into typed options, never into the template.
+  AP33_TEMPLATE_SHA256: ffc20a417fd992fd924150c7a5fbcaa5d74271cd1086f9adfc6fa0651727472d
+
 jobs:
-  test:
+  go:
+    name: Go (fmt, vet, build, test)
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted=$(git ls-files -z '*.go' | xargs -0 gofmt -l)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      # The embedded UIs come from committed files (web/dist and the ui/dist
+      # stub), so the Go tests need no Node.
+      - name: go test
+        run: go test ./...
+
+  generate:
+    name: Generated files up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: go generate
+        run: go generate ./...
+
+      - name: No changes
+        run: |
+          changes=$(git status --porcelain)
+          if [ -n "$changes" ]; then
+            echo "::error::go generate changed files; run go generate ./... and commit the result:"
+            echo "$changes"
+            git diff
+            exit 1
+          fi
+
+  template-hash:
+    name: Frozen AP33 template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Template unchanged since ap-identity
+        run: echo "$AP33_TEMPLATE_SHA256  internal/aptemplate/ap33.json" | sha256sum --check --strict
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # The frozen v0 compiler records the same hash and the option registry
+      # tests compare them (registry check 6).
+      - name: legacyv0 and registry hash checks
+        run: |
+          packages=()
+          for dir in internal/compile internal/options; do
+            if [ -d "$dir" ]; then packages+=("./$dir/..."); fi
+          done
+          if [ ${#packages[@]} -eq 0 ]; then
+            echo "::notice::internal/compile and internal/options are not in this tree yet"
+            exit 0
+          fi
+          go test "${packages[@]}"
+
+  ui:
+    name: UI (ui/) build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check, lint and unit tests
+        run: |
+          npm run --if-present typecheck
+          npm run --if-present lint
+          npm run --if-present test
+
+      - name: Build
+        run: npm run build
+
+      # ui/dist is not committed apart from a stub; a build that leaves the
+      # stub (or no assets) in place would ship a blank UI.
+      - name: Build output is not the stub
+        run: |
+          test -s dist/index.html
+          if grep -q 'UI not built' dist/index.html; then
+            echo "::error::ui/dist/index.html is still the stub"; exit 1
+          fi
+          if [ -z "$(find dist/_ui -type f ! -name .keep | head -n 1)" ]; then
+            echo "::error::ui/dist/_ui has no assets"; exit 1
+          fi
+
+      # Generated sources (routeTree.gen.ts and friends) must be committed.
+      - name: No uncommitted generated sources
+        run: |
+          changes=$(git status --porcelain -- . ':(exclude)dist')
+          if [ -n "$changes" ]; then
+            echo "::error::the UI build changed tracked or untracked sources; commit them:"
+            echo "$changes"
+            exit 1
+          fi
+
+  ui-e2e:
+    name: UI end-to-end (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Tolerates the scaffold: without a Playwright config there is nothing
+      # to run yet.
+      - name: Playwright configured?
+        id: scaffold
+        run: |
+          if compgen -G 'ui/playwright.config.*' >/dev/null; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "::notice::no ui/playwright.config.*; skipping end-to-end tests"
+            echo "present=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v7
+        if: steps.scaffold.outputs.present == 'true'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - uses: actions/setup-go@v7
+        if: steps.scaffold.outputs.present == 'true'
+        with:
+          go-version-file: go.mod
+
+      - name: Build the UI and the binaries the tests drive
+        if: steps.scaffold.outputs.present == 'true'
+        run: |
+          (cd ui && npm ci && npm run build)
+          mkdir -p "$RUNNER_TEMP/bin"
+          go build -o "$RUNNER_TEMP/bin/dismistd" ./cmd/dismistd
+          echo "DISMISTD_BIN=$RUNNER_TEMP/bin/dismistd" >>"$GITHUB_ENV"
+          if [ -d tools/fakeap ]; then
+            go build -o "$RUNNER_TEMP/bin/fakeap" ./tools/fakeap
+            echo "FAKEAP_BIN=$RUNNER_TEMP/bin/fakeap" >>"$GITHUB_ENV"
+          fi
+
+      - name: Install browsers
+        if: steps.scaffold.outputs.present == 'true'
+        working-directory: ui
+        run: npx playwright install --with-deps
+
+      - name: Playwright
+        if: steps.scaffold.outputs.present == 'true'
+        working-directory: ui
+        run: npx playwright test --pass-with-no-tests
+
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.scaffold.outputs.present == 'true'
+        with:
+          name: playwright-report
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7
+
+  legacy-web:
+    name: Legacy UI (web/) build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v7
         with:
@@ -22,29 +237,64 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Build embedded UI
-        working-directory: web
+      - name: Build
         run: |
           npm ci
           npm run build
 
+  chart:
+    name: Helm chart (lint, template matrix, kubeconform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: azure/setup-helm@v4
+
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
 
-      - name: Test Go packages
-        run: go test ./...
-
-      - name: Lint and render Helm chart
+      - name: Install kubeconform and yq
         run: |
-          helm lint charts/dismist --set privateSecret.name=lint
-          helm template dismist charts/dismist --set privateSecret.name=lint > /dev/null
-          helm template dismist charts/dismist --set privateSecret.name=lint \
-            --set tls.certificate.enabled=true --set 'tls.certificate.dnsNames[0]=ap.example.com' \
-            --set tls.certificate.issuerRef.name=letsencrypt --set httpRoute.enabled=true \
-            --set 'httpRoute.parentRefs[0].name=gw' --set 'httpRoute.hostnames[0]=dismist.example.com' > /dev/null
+          go install "github.com/yannh/kubeconform/cmd/kubeconform@$KUBECONFORM_VERSION"
+          go install "github.com/mikefarah/yq/v4@$YQ_VERSION"
+          echo "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
+
+      - name: Chart checks
+        run: charts/dismist/ci/test-chart.sh
+
+  promtool:
+    name: Alert rules (promtool)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: promtool check and test
+        run: |
+          dir=charts/dismist/monitoring
+          if [ ! -f "$dir/rules.yaml" ]; then
+            echo "::notice::no $dir/rules.yaml yet"
+            exit 0
+          fi
+          promtool() {
+            docker run --rm -v "$PWD/$dir:/monitoring:ro" -w /monitoring \
+              --entrypoint /bin/promtool "$PROMETHEUS_IMAGE" "$@"
+          }
+          promtool check rules rules.yaml
+          mapfile -t tests < <(cd "$dir" && find tests -name '*.test.yml' 2>/dev/null | sort)
+          if [ ${#tests[@]} -eq 0 ]; then
+            echo "::error::$dir/rules.yaml has no promtool tests in $dir/tests"
+            exit 1
+          fi
+          promtool test rules "${tests[@]}"
 
   image:
+    name: Container image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -53,6 +303,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
+      # The Dockerfile builds web/ and ui/ and refuses a ui/dist stub.
       - name: Build image
         uses: docker/build-push-action@v7
         with:
@@ -61,3 +312,35 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Load the amd64 image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: dismist:ci
+          cache-from: type=gha
+
+      - uses: azure/setup-helm@v4
+
+      # Every flag the chart can pass must exist in the binary, or the pod
+      # would exit on start with "flag provided but not defined".
+      - name: Chart flags exist in dismistd
+        run: |
+          docker run --rm dismist:ci -h >usage.txt 2>&1 || true
+          grep -q -- '-db string' usage.txt || { cat usage.txt; exit 1; }
+          helm template dismist charts/dismist --namespace dismist \
+            -f charts/dismist/ci/full-values.yaml --set hostNetwork=true \
+            --set metrics.allowHostNetwork=true --set controller.serverName=example \
+            --set controller.apConfigKey=ap-config.json \
+            | yq ea 'select(.kind == "Deployment") | .spec.template.spec.containers[0].args[]' \
+            | sed -E 's/^(-[a-z0-9-]+).*/\1/' | sort -u >flags.txt
+          missing=0
+          while read -r flag; do
+            if ! grep -qE -- "^  ${flag}( |$)" usage.txt; then
+              echo "::error::the chart passes ${flag}, which dismistd does not define"
+              missing=1
+            fi
+          done <flags.txt
+          exit "$missing"
