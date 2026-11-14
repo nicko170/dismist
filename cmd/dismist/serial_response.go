@@ -16,14 +16,11 @@ const (
 	legacyAuthSuffix = "ZuSX01QGh8PJq0Na"
 )
 
-func runAP33(args []string, output io.Writer) error {
-	if len(args) > 0 && args[0] == "prepare-trust" {
-		return runPrepareTrust(args[1:], output)
-	}
-	if len(args) != 2 || args[0] != "serial-response" {
+func runSerialResponse(args []string, output io.Writer) error {
+	if len(args) != 1 {
 		return errors.New("usage: dismist ap33 serial-response <challenge>")
 	}
-	response, err := serialResponse(args[1], rand.Reader)
+	response, err := serialResponse(args[0], rand.Reader)
 	if err != nil {
 		return fmt.Errorf("cannot generate response: %w", err)
 	}

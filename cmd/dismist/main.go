@@ -24,7 +24,7 @@ func run(args []string, output io.Writer) error {
 		return runAP33(args[1:], output)
 	}
 	if len(args) == 0 || args[0] != "init" {
-		return errors.New("usage: dismist init [--data-dir DIR] | dismist ap33 serial-response <challenge> | dismist ap33 prepare-trust --stock-dir DIR --controller-ca FILE --output DIR")
+		return errors.New("usage: dismist init [--data-dir DIR] | dismist ap33 inspect|ssh|serial-response|prepare-trust ... (run `dismist ap33` for details)")
 	}
 	flags := flag.NewFlagSet("dismist init", flag.ContinueOnError)
 	flags.SetOutput(output)

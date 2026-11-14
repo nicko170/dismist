@@ -18,9 +18,18 @@ history keys then include AP ID and big-endian UTC time so prefix scans are
 efficient. Every state change occurs in one bbolt update transaction.
 
 Legacy JSON state can be imported once into a new database, then kept as a
-backup. AP secrets remain separate mode `0600` files; the DB stores only
-their paths. API list responses omit secrets and WLAN passphrases. The bbolt
-database retains the passphrases needed to generate AP configuration.
+backup. Each AP record holds that AP's 32-byte EEPROM authentication secret;
+the controller reads secrets from the database, not from files. The API
+accepts a secret as hex or base64 on registration and edit (a blank secret on
+edit keeps the stored one), never returns it, and reports only `has_secret`.
+API list responses also omit WLAN passphrases, which the database keeps to
+generate AP configuration. Records written by older releases that still name
+a `secret_file` are migrated at startup: the file is imported into the
+record and the path cleared. A missing, unreadable or non-private file is
+logged and left for the operator to upload again, and that AP is skipped
+until it has a secret; other APs are unaffected. Because the database now
+holds every AP secret as well as the passphrases, a copy of it (or of a
+backup) grants control of the APs.
 
 Fast AP telemetry is aggregated into minute samples for future graphs. Full
 telemetry refreshes AP radio, WLAN, and associated-client state. Client session
@@ -52,21 +61,35 @@ client-session records with a `site moved` reason.
 
 ## Control plane
 
-One WSS listener accepts registered APs. It selects an AP record by its
-management source address, then checks the ID and device secret in the AP auth
-hello. Multiple APs in a site share WLAN definitions, while each has a
-separate connection, config revision, status, and telemetry stream. The DNS
-override answers the Mist hostname only for registered AP addresses;
-unrelated queries are forwarded. The portable deployment serves the
-management UI on the LAN; see [deployment](deployment.md) for listener and
-admin access setup.
+One WSS listener accepts every AP. It routes each connection by the AP ID in
+its `ep-auth` hello to that AP's record, then authenticates it with that AP's
+own secret. The connection becomes the AP's session only after it
+authenticates, so an unauthenticated client that names an AP cannot displace
+it, and only authenticated frames count as liveness. The source address is
+not part of identity: any number of APs can connect from one NAT address,
+and the API reports each AP's own LAN address (`lan_ip`, from the AP's
+telemetry) beside the address its session comes from (`remote_address`).
+
+An AP record may pin a source IP (`management_ip`); a pinned AP is accepted
+only from that address. Pins also feed the optional DNS override: in DNS
+mode the controller answers the Mist hostname `ep-terminator.mistsys.net`
+only to pinned addresses and forwards their other queries, so every AP that
+relies on it must be pinned. An AP whose `cloud.ini` names the controller's
+own hostname needs neither the DNS override nor a pin.
+
+Multiple APs in a site share WLAN definitions, while each has a separate
+connection, config revision, status, and telemetry stream. The generated
+config's `ID` is always the AP's authenticated ID. The portable deployment
+serves the management UI on the LAN; see [deployment](deployment.md) for
+listener and admin access setup.
 
 ## Acceptance
 
-1. Migrating existing state preserves each AP's site, WLAN, and credential
-   references.
+1. Migrating existing state preserves each AP's site, WLANs, and secret
+   (imported from a legacy secret file when the record names one).
 2. Creating a second site and simulated AP in tests does not change existing
-   AP records.
+   AP records, and two APs connecting from the same address are each
+   identified by their own authenticated ID.
 3. Editing a site WLAN updates the effective config of its APs; an AP override
    changes one AP only.
 4. Advanced JSON edits round-trip through bbolt and preserve unknown fields.
