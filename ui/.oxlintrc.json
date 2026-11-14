@@ -48,6 +48,7 @@
     "dist/**",
     "dist-mock/**",
     "src/routeTree.gen.ts",
+    "src/gen/**",
     "node_modules/**",
     "test-results/**",
     "playwright-report/**"
