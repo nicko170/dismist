@@ -1,0 +1,36 @@
+{
+ "template": "bundled",
+ "revision": 17,
+ "updated_at": "2026-10-30T05:06:07Z",
+ "sites": [
+  {
+   "id": "site-a",
+   "name": "Example",
+   "advanced": {
+    "SwitchPorts": null,
+    "Stats": {
+     "Interval": 5
+    }
+   }
+  }
+ ],
+ "aps": [
+  {
+   "id": "02-aa-00-00-00-05",
+   "name": "old-record",
+   "site_id": "site-a",
+   "secret": "ERERERERERERERERERERERERERERERERERERERERERE="
+  }
+ ],
+ "networks": [
+  {
+   "id": "wlan-a",
+   "site_id": "site-a",
+   "ssid": "Example",
+   "psk": "example-passphrase-07",
+   "vlan_id": 5,
+   "enabled": true
+  }
+ ],
+ "name": "legacy-revisions"
+}

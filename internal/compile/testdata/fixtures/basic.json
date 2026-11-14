@@ -1,0 +1,32 @@
+{
+ "template": "bundled",
+ "revision": 3,
+ "updated_at": "2026-11-01T01:02:03.123456789Z",
+ "sites": [
+  {
+   "id": "site-a",
+   "name": "Example"
+  }
+ ],
+ "aps": [
+  {
+   "id": "02-aa-00-00-00-01",
+   "name": "example-ap",
+   "site_id": "site-a",
+   "secret": "ERERERERERERERERERERERERERERERERERERERERERE=",
+   "config_revision": 3,
+   "config_updated_at": "2026-11-01T01:02:03.123456789Z"
+  }
+ ],
+ "networks": [
+  {
+   "id": "wlan-a",
+   "site_id": "site-a",
+   "ssid": "Example",
+   "psk": "example-passphrase-01",
+   "vlan_id": 1,
+   "enabled": true
+  }
+ ],
+ "name": "basic"
+}

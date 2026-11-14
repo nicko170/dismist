@@ -1,0 +1,492 @@
+{
+ "version": 1,
+ "report": {
+  "version": 1,
+  "ignored": [
+   "Radios[].NonAggrRegulate.Disabled",
+   "RootAuthorizedSSHKeys",
+   "SVIs[].dhcp_enabled",
+   "SiteName",
+   "Stats.SplitWifiAndBleRssiStats",
+   "Stats.UseSeparateBLEScanTopic",
+   "Stats.UseSeparateWifiScanTopic",
+   "WLANs[].AMPDU.RST",
+   "WLANs[].ForFTM"
+  ],
+  "local_files": "present",
+  "zero_rule": false,
+  "notes": [
+   "local_files_present"
+  ]
+ },
+ "canonical": {
+  "APRecovery": {
+   "Disabled": true
+  },
+  "AVS": {
+   "MarginFast": 105,
+   "MarginSlow": 135
+  },
+  "AppDef": [],
+  "BlackList": {
+   "WCMacs": []
+  },
+  "CnaHostnames": [],
+  "Country": "",
+  "Dnsmasq": {
+   "Enabled": false
+  },
+  "Hostname": "Example AP",
+  "HttpRedirector": {
+   "Enabled": false
+  },
+  "ID": "02-aa-00-00-00-01",
+  "IrqBalance": {
+   "Enabled": true,
+   "Interval": 1
+  },
+  "L2TPTunnels": [],
+  "LED": {
+   "Brightness": 255
+  },
+  "Monitor": {
+   "CCRev": "",
+   "Enabled": true,
+   "EthUplink": {
+    "Device": "eth0",
+    "Enabled": true
+   },
+   "LowTxPowerDetect": {
+    "RequestMitigation": true
+   },
+   "NonDFSIdleProbeAssist": true,
+   "PcapWLAN": {
+    "ClientFirstBkgrdEnabled": true
+   },
+   "Radiotap": true,
+   "RadiotapScan": true,
+   "SteerEnabled": true,
+   "Utilization": {
+    "ScanEnabled": true
+   }
+  },
+  "Name": "Example AP",
+  "OrgID": "",
+  "OurOUIs": [],
+  "PACE_KernelModCounters": {
+   "Enabled": true
+  },
+  "PAPIOpaque": "",
+  "PoePwrConstrained": {
+   "EnableOn304": true,
+   "EnableRadios": false
+  },
+  "ProxyArp": {
+   "Disable_ReqSpoofCheck": true,
+   "Disable_RespSpoofCheck": true,
+   "Enabled": true
+  },
+  "Radios": [
+   {
+    "Band": "2.4",
+    "CCRev": "",
+    "CCRevSP": "",
+    "Channel": 0,
+    "NonAggrRegulate": {
+     "Enabled": true
+    },
+    "PreambleLength": 1,
+    "ProbeControl": {
+     "ProbeReqSW": true,
+     "ProbeRespSW": true
+    },
+    "QOS": {
+     "Dscp2Ac": [
+      {
+       "AC": 1,
+       "DSCP": 10
+      },
+      {
+       "AC": 1,
+       "DSCP": 12
+      },
+      {
+       "AC": 1,
+       "DSCP": 14
+      },
+      {
+       "AC": 1,
+       "DSCP": 18
+      },
+      {
+       "AC": 1,
+       "DSCP": 20
+      },
+      {
+       "AC": 1,
+       "DSCP": 22
+      },
+      {
+       "AC": 1,
+       "DSCP": 8
+      },
+      {
+       "AC": 1,
+       "DSCP": 16
+      },
+      {
+       "AC": 1,
+       "DSCP": 9
+      },
+      {
+       "AC": 1,
+       "DSCP": 11
+      },
+      {
+       "AC": 1,
+       "DSCP": 13
+      },
+      {
+       "AC": 1,
+       "DSCP": 15
+      },
+      {
+       "AC": 1,
+       "DSCP": 17
+      },
+      {
+       "AC": 1,
+       "DSCP": 19
+      },
+      {
+       "AC": 1,
+       "DSCP": 21
+      },
+      {
+       "AC": 1,
+       "DSCP": 23
+      }
+     ]
+    },
+    "RRM": {
+     "Channel": 0,
+     "Width": 20
+    },
+    "Width": 20
+   },
+   {
+    "Band": "5",
+    "CCRev": "",
+    "CCRevSP": "",
+    "Channel": 0,
+    "DFSjumplist": {
+     "ChanSpecs": []
+    },
+    "NonAggrRegulate": {
+     "Enabled": true
+    },
+    "PreambleLength": 1,
+    "ProbeControl": {
+     "ProbeReqSW": true,
+     "ProbeRespSW": true
+    },
+    "QOS": {
+     "Dscp2Ac": [
+      {
+       "AC": 1,
+       "DSCP": 10
+      },
+      {
+       "AC": 1,
+       "DSCP": 12
+      },
+      {
+       "AC": 1,
+       "DSCP": 14
+      },
+      {
+       "AC": 1,
+       "DSCP": 18
+      },
+      {
+       "AC": 1,
+       "DSCP": 20
+      },
+      {
+       "AC": 1,
+       "DSCP": 22
+      },
+      {
+       "AC": 1,
+       "DSCP": 8
+      },
+      {
+       "AC": 1,
+       "DSCP": 16
+      },
+      {
+       "AC": 1,
+       "DSCP": 9
+      },
+      {
+       "AC": 1,
+       "DSCP": 11
+      },
+      {
+       "AC": 1,
+       "DSCP": 13
+      },
+      {
+       "AC": 1,
+       "DSCP": 15
+      },
+      {
+       "AC": 1,
+       "DSCP": 17
+      },
+      {
+       "AC": 1,
+       "DSCP": 19
+      },
+      {
+       "AC": 1,
+       "DSCP": 21
+      },
+      {
+       "AC": 1,
+       "DSCP": 23
+      }
+     ]
+    },
+    "RRM": {
+     "Channel": 0,
+     "Width": 40
+    },
+    "Width": 40
+   }
+  ],
+  "SSH": {
+   "AuthorizedKeys": [],
+   "Disabled": true,
+   "External": false
+  },
+  "SVIs": [
+   {
+    "DHCP": {
+     "Enabled": true,
+     "Hostname": ""
+    },
+    "DHCP_Ena": true,
+    "MTU": 0,
+    "Vlan_ID": "1"
+   }
+  ],
+  "SiteID": "site-a",
+  "Stats": {
+   "FullInterval": 60,
+   "Interval": 2,
+   "MemInterval": 600
+  },
+  "Steer": {
+   "ProbeRequest": {
+    "ClientPkts": false,
+    "ClientPktsSiteOnly": false,
+    "Enabled": true,
+    "RogueDetectOnly": false,
+    "StatsAgeOutRandom": false
+   }
+  },
+  "SwitchPorts": [
+   {
+    "Name": "eth0",
+    "PortVlanID": "1",
+    "Vlans": [
+     "1"
+    ]
+   },
+   {
+    "Name": "eth1",
+    "PortVlanID": "1",
+    "Vlans": [
+     "1"
+    ]
+   }
+  ],
+  "UUID": "00000000-0000-0000-1000-02aa00000001",
+  "VLANNames": {},
+  "WIDS": [],
+  "WLANs": [
+   {
+    "AMPDU": {},
+    "Acct_Interim_Interval": 0,
+    "Auth": {
+     "AKM": {
+      "WPA2_PSK": true,
+      "WPA3_PSK": false
+     },
+     "GroupMasterRekeyIntervalSec": 86400,
+     "GroupRekeyIntervalSec": 86400,
+     "PSK": "example-passphrase-01",
+     "Pairwise": {
+      "CCMP": true,
+      "TKIP": false,
+      "WPA1": {
+       "CCMP": false,
+       "TKIP": false
+      }
+     },
+     "SAEAntiCloggTokenThreshold": 16,
+     "Type": "psk"
+    },
+    "BandConfigs": [
+     {
+      "BSSIDIndex": 0,
+      "Band": "2.4",
+      "Steer": {
+       "DenyDot11Auth": true,
+       "DenyDot11AuthConsecNum": 5,
+       "DenyDot11AuthDualBandOnly": true,
+       "DenyDot11AuthRSSIThresh": -78,
+       "NoProbeRespAll": true
+      }
+     },
+     {
+      "BSSIDIndex": 0,
+      "Band": "5"
+     }
+    ],
+    "Bands": [
+     "2.4",
+     "5"
+    ],
+    "BcastFilter": {
+     "AllowDHCPtoWirelessBridge": false,
+     "AllowICMPv6NeighborDiscovery": true,
+     "Arp": false,
+     "DHCPBcast2UnicastResponse": true,
+     "Dhcp": true,
+     "DropDHCPUnknownResponse": true,
+     "Mcast": false,
+     "Mdns_allow": false,
+     "Ssdp_allow": false
+    },
+    "BlackList": {
+     "Cloud": {
+      "Enabled": false,
+      "MgmtTypeWLC": false
+     },
+     "Enabled": true
+    },
+    "DTIM": {
+     "Period": 2
+    },
+    "DhcpOption82": false,
+    "DisableRsnCapValidation": false,
+    "DisableV1RoamNotifications": false,
+    "DisableV2RoamNotifications": false,
+    "DisabledIEs": {},
+    "Dot11w": {
+     "Enabled": true,
+     "Required": false,
+     "SA_Query_Attempts": 5,
+     "SA_Query_Timeout": 1000
+    },
+    "Enabled": true,
+    "ForMesh": false,
+    "Hidden": false,
+    "ID": "6f2000aa-0000-4000-8000-000000000001",
+    "Isolation": false,
+    "KeyCache": {
+     "KeyEncryptKey": "",
+     "LocalAPkeyCache": false,
+     "WLCkeyCache": true
+    },
+    "MacAuth": {
+     "Enabled": false
+    },
+    "MaxStaAllowed": 0,
+    "NetIsolation": false,
+    "NoStaticIP": false,
+    "QOS": {
+     "AccessClass": 4,
+     "Enabled": true
+    },
+    "RateLimit": {
+     "ClientDown": 0,
+     "ClientUp": 0,
+     "WlanDown": 0,
+     "WlanUp": 0
+    },
+    "RateSets": [
+     {
+      "Band": "2.4",
+      "BasicRates": [
+       1,
+       2,
+       5.5,
+       11
+      ],
+      "HEMCSRateMask": "0fff0fff0fff0fff",
+      "HTMCSRateMask": "00ff00ff00ff00ff",
+      "LegacyRates": [
+       6,
+       9,
+       12,
+       18,
+       24,
+       36,
+       48,
+       54
+      ],
+      "VHTMCSRateMask": "03ff03ff03ff0fff"
+     },
+     {
+      "Band": "5",
+      "BasicRates": [
+       6,
+       12,
+       24
+      ],
+      "HEMCSRateMask": "0fff0fff0fff0fff",
+      "HTMCSRateMask": "00ff00ff00ff00ff",
+      "LegacyRates": [
+       9,
+       18,
+       36,
+       48,
+       54
+      ],
+      "VHTMCSRateMask": "03ff03ff03ff03ff"
+     }
+    ],
+    "RestrictDNS": {
+     "FromDHCP": false
+    },
+    "RoamMode": "none",
+    "SSID": "Example",
+    "Vlans": [
+     "1"
+    ],
+    "WCInactivity": {
+     "ReclaimTimeoutSec": 600,
+     "SilentDeauthTimeout": true,
+     "TimeoutSec": 3600
+    },
+    "WNM": {
+     "BSSLoad": true,
+     "BSSTransitionManagement": {
+      "Active": false,
+      "Passive": true
+     },
+     "CoLocatedReducedNeighborReport": false,
+     "NeighborReport": true,
+     "ReducedNeighborReport": true
+    },
+    "Wxlan": {
+     "AllowAllFlows": true
+    }
+   }
+  ],
+  "_errors": []
+ }
+}

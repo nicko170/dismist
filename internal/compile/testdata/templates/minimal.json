@@ -1,0 +1,27 @@
+{
+ "Country": "",
+ "Stats": {
+  "Interval": 2
+ },
+ "WLANs": [
+  {
+   "Enabled": false,
+   "Vlans": [],
+   "Auth": {
+    "Type": "psk",
+    "PSK": "",
+    "AKM": {
+     "WPA2_PSK": true
+    }
+   },
+   "BandConfigs": [
+    {
+     "Band": "2.4"
+    },
+    {
+     "Band": "5"
+    }
+   ]
+  }
+ ]
+}
