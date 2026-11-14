@@ -317,6 +317,30 @@ The Home WLAN shows WPA2/WPA3-Personal; RF shows 5 GHz 149/80 at 17 dBm and
 image tag (the untouched legacy fields reproduce the old config); with
 `compat` 2, restore `controller.db.pre-v2-*` first, then revert the tag.
 
+**Integration findings for P2.1 and P2.2 (2026-11-14, v0.3.0-written
+fixture, `TestProductionDatabaseFromV030`, `tools/migrationcompat/prodsafety.sh`).**
+Upgrading from v0.3.0, the BSSID index is *predicted*, not measured: v0.3.0
+never stored the AP's VAP list and the migration runs before the AP
+reconnects. The prediction (1 on both bands) is what 0.15 resolves for the
+`BSSIDIndex: 0` v0.3.0 sends, and the AP's VAPs `wl0.1`/`wl1.1` carry index 1,
+so P2.1 passes with `predicted`; the post-delivery check on the next
+`ep-config` confirms the BSSIDs. The migration does not bump the AP's
+`config_revision` or `Timestamp`, but the AP's next fetch receives different
+bytes that normalise to the same effective config. They differ only in leaves
+the normaliser models: values 0.15 clamps or resolves anyway
+(`Dot11w.SA_Query_Attempts` 5→3, `SA_Query_Timeout` 1000→200,
+`BandConfigs[].BSSIDIndex` 0→1), explicit zero or false values for keys v0.3.0
+left absent (`Radios[].ChainSelectMode`, `TWTDisabled`, `PreambleLength`,
+`Disabled`, `DFSjumplist`, empty `QOS`/`ProbeControl`/`NonAggrRegulate`, the
+unused AKM flags, `WME`, `OWE`, `Bcast2Ucast`, `DisabledIEs.*`), the key case
+`roamMode`→`RoamMode` (Go JSON matches keys case-insensitively), and keys
+0.15 does not read (`SiteName`, `RootAuthorizedSSHKeys`, `SVIs[].dhcp_enabled`,
+`Stats.SplitWifiAndBleRssiStats`, `Stats.UseSeparate*ScanTopic`,
+`WLANs[].ForFTM`, `DhcpOption82Data: null`, `AMPDU.RST`). In P2.2, also record
+`wl -i wl0.1 bssid`, `wl -i wl1.1 bssid` and
+`wl -i wl1.1 mfp`/`wl -i wl0.1 mfp` before and after the AP's first reconnect
+on the new release; they must not change.
+
 **P2.3 `ep-config-change` push (`config_change_notify`).** The feature is off
 by default; with it off every change reconnects the AP, which Q5 showed does
 not disturb clients. On the production AP: follow the ep-control log, switch
