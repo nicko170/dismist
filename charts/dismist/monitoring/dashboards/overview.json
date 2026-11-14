@@ -1,6 +1,19 @@
 {
  "annotations": {
-  "list": []
+  "list": [
+   {
+    "builtIn": 1,
+    "datasource": {
+     "type": "grafana",
+     "uid": "-- Grafana --"
+    },
+    "enable": true,
+    "hide": true,
+    "iconColor": "rgba(0, 211, 255, 1)",
+    "name": "Annotations & Alerts",
+    "type": "dashboard"
+   }
+  ]
  },
  "description": "Access points, clients and controller health for dismist.",
  "editable": true,
@@ -14,6 +27,14 @@
    "tooltip": "Per-AP dashboard",
    "type": "link",
    "url": "/d/dismist-ap?var-namespace=${namespace}&${__url_time_range}"
+  },
+  {
+   "icon": "dashboard",
+   "targetBlank": false,
+   "title": "Clients & RF",
+   "tooltip": "Channels, interference and client quality",
+   "type": "link",
+   "url": "/d/dismist-rf?var-namespace=${namespace}&${__url_time_range}"
   }
  ],
  "liveNow": false,
@@ -42,6 +63,7 @@
      "color": {
       "mode": "thresholds"
      },
+     "decimals": 0,
      "mappings": [],
      "thresholds": {
       "mode": "absolute",
@@ -58,7 +80,7 @@
    },
    "gridPos": {
     "h": 4,
-    "w": 4,
+    "w": 3,
     "x": 0,
     "y": 1
    },
@@ -84,7 +106,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "sum(dismist_ap_connected{namespace=\"$namespace\", site=~\"$site\"}) or vector(0)",
+     "expr": "count(max by (site, ap) (dismist_ap_connected{namespace=\"$namespace\", site=~\"$site\"}) == 1) or vector(0)",
      "format": "time_series",
      "instant": true,
      "legendFormat": "__auto",
@@ -100,12 +122,13 @@
     "type": "prometheus",
     "uid": "${datasource}"
    },
-   "description": "Access points registered in the selected sites.",
+   "description": "Access points with a control session (a secret and a config), so they can connect.",
    "fieldConfig": {
     "defaults": {
      "color": {
       "mode": "thresholds"
      },
+     "decimals": 0,
      "mappings": [],
      "thresholds": {
       "mode": "absolute",
@@ -122,8 +145,8 @@
    },
    "gridPos": {
     "h": 4,
-    "w": 4,
-    "x": 4,
+    "w": 3,
+    "x": 3,
     "y": 1
    },
    "id": 3,
@@ -148,7 +171,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "sum(dismist_site_aps{namespace=\"$namespace\", site=~\"$site\"}) or vector(0)",
+     "expr": "sum(dismist_ap_registered{namespace=\"$namespace\", site=~\"$site\"}) or vector(0)",
      "format": "time_series",
      "instant": true,
      "legendFormat": "__auto",
@@ -170,6 +193,7 @@
      "color": {
       "mode": "thresholds"
      },
+     "decimals": 0,
      "mappings": [],
      "thresholds": {
       "mode": "absolute",
@@ -190,8 +214,8 @@
    },
    "gridPos": {
     "h": 4,
-    "w": 4,
-    "x": 8,
+    "w": 3,
+    "x": 6,
     "y": 1
    },
    "id": 4,
@@ -216,7 +240,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "(sum(dismist_site_aps{namespace=\"$namespace\", site=~\"$site\"}) or vector(0)) - (sum(dismist_ap_connected{namespace=\"$namespace\", site=~\"$site\"}) or vector(0))",
+     "expr": "count((max by (site, ap) (dismist_ap_registered{namespace=\"$namespace\", site=~\"$site\"}) == 1) unless on (site, ap) (max by (site, ap) (dismist_ap_connected{namespace=\"$namespace\", site=~\"$site\"}) == 1)) or vector(0)",
      "format": "time_series",
      "instant": true,
      "legendFormat": "__auto",
@@ -238,6 +262,7 @@
      "color": {
       "mode": "thresholds"
      },
+     "decimals": 0,
      "mappings": [],
      "thresholds": {
       "mode": "absolute",
@@ -254,8 +279,8 @@
    },
    "gridPos": {
     "h": 4,
-    "w": 4,
-    "x": 12,
+    "w": 3,
+    "x": 9,
     "y": 1
    },
    "id": 5,
@@ -302,6 +327,7 @@
      "color": {
       "mode": "thresholds"
      },
+     "decimals": 0,
      "mappings": [],
      "thresholds": {
       "mode": "absolute",
@@ -322,8 +348,8 @@
    },
    "gridPos": {
     "h": 4,
-    "w": 4,
-    "x": 16,
+    "w": 3,
+    "x": 12,
     "y": 1
    },
    "id": 6,
@@ -364,7 +390,80 @@
     "type": "prometheus",
     "uid": "${datasource}"
    },
-   "description": "Access point (re)connections in the last 24 hours. Config saves and controller restarts also cause them.",
+   "description": "Days until the certificate dismist serves to access points expires. It renews 30 days before.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 0,
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#d03b3b",
+        "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 7
+       },
+       {
+        "color": "#0ca30c",
+        "value": 14
+       }
+      ]
+     },
+     "unit": "d"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 3,
+    "x": 15,
+    "y": 1
+   },
+   "id": 7,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "(min(dismist_tls_certificate_not_after_timestamp_seconds{namespace=\"$namespace\", listener=\"ap-wss\"}) - time()) / 86400",
+     "format": "time_series",
+     "instant": true,
+     "legendFormat": "__auto",
+     "range": false,
+     "refId": "A"
+    }
+   ],
+   "title": "AP certificate",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "Access point (re)connections in the last 24 hours. Reboots, config pushes in reconnect mode and controller restarts cause them.",
    "fieldConfig": {
     "defaults": {
      "color": {
@@ -395,11 +494,11 @@
    },
    "gridPos": {
     "h": 4,
-    "w": 4,
-    "x": 20,
+    "w": 3,
+    "x": 18,
     "y": 1
    },
-   "id": 7,
+   "id": 8,
    "options": {
     "colorMode": "value",
     "graphMode": "none",
@@ -433,6 +532,75 @@
    "type": "stat"
   },
   {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "Failed AP authentications plus hellos from access points dismist does not know, in the last 24 hours.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 0,
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#0ca30c",
+        "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 1
+       }
+      ]
+     },
+     "unit": "none"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 3,
+    "x": 21,
+    "y": 1
+   },
+   "id": 9,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "(sum(increase(dismist_ap_auth_failures_total{namespace=\"$namespace\", site=~\"$site\"}[24h])) or vector(0)) + (sum(increase(dismist_ap_ws_routes_total{namespace=\"$namespace\", result=\"unknown_ap\"}[24h])) or vector(0))",
+     "format": "time_series",
+     "instant": true,
+     "legendFormat": "__auto",
+     "range": false,
+     "refId": "A"
+    }
+   ],
+   "title": "Auth / unknown APs (24h)",
+   "type": "stat"
+  },
+  {
    "collapsed": false,
    "gridPos": {
     "h": 1,
@@ -440,7 +608,7 @@
     "x": 0,
     "y": 5
    },
-   "id": 8,
+   "id": 10,
    "panels": [],
    "title": "Access points",
    "type": "row"
@@ -450,7 +618,7 @@
     "type": "prometheus",
     "uid": "${datasource}"
    },
-   "description": "One row per access point. Click a name for its dashboard.",
+   "description": "One row per access point. Click a name for its dashboard. Health columns stay empty while an AP is not reporting.",
    "fieldConfig": {
     "defaults": {
      "custom": {
@@ -467,26 +635,6 @@
        "options": "Status"
       },
       "properties": [
-       {
-        "id": "mappings",
-        "value": [
-         {
-          "options": {
-           "0": {
-            "color": "#d03b3b",
-            "index": 1,
-            "text": "Offline"
-           },
-           "1": {
-            "color": "#0ca30c",
-            "index": 0,
-            "text": "Online"
-           }
-          },
-          "type": "value"
-         }
-        ]
-       },
        {
         "id": "custom.cellOptions",
         "value": {
@@ -515,6 +663,26 @@
           }
          ]
         }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "options": {
+           "0": {
+            "color": "#d03b3b",
+            "index": 1,
+            "text": "Offline"
+           },
+           "1": {
+            "color": "#0ca30c",
+            "index": 0,
+            "text": "Online"
+           }
+          },
+          "type": "value"
+         }
+        ]
        }
       ]
      },
@@ -527,6 +695,194 @@
        {
         "id": "unit",
         "value": "dtdurations"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "CPU °C"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "mode": "basic",
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "#0ca30c",
+           "value": null
+          },
+          {
+           "color": "#fab219",
+           "value": 70
+          },
+          {
+           "color": "#d03b3b",
+           "value": 80
+          }
+         ]
+        }
+       },
+       {
+        "id": "unit",
+        "value": "celsius"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "CPU busy"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "mode": "basic",
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "#0ca30c",
+           "value": null
+          },
+          {
+           "color": "#fab219",
+           "value": 0.7
+          },
+          {
+           "color": "#d03b3b",
+           "value": 0.9
+          }
+         ]
+        }
+       },
+       {
+        "id": "unit",
+        "value": "percentunit"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "RTT"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "mode": "basic",
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "#0ca30c",
+           "value": null
+          },
+          {
+           "color": "#fab219",
+           "value": 0.05
+          },
+          {
+           "color": "#d03b3b",
+           "value": 0.1
+          }
+         ]
+        }
+       },
+       {
+        "id": "unit",
+        "value": "s"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Uplink"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "mode": "basic",
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "#d03b3b",
+           "value": null
+          },
+          {
+           "color": "#fab219",
+           "value": 100000000.0
+          },
+          {
+           "color": "#0ca30c",
+           "value": 1000000000.0
+          }
+         ]
+        }
+       },
+       {
+        "id": "unit",
+        "value": "bps"
        }
       ]
      },
@@ -555,6 +911,7 @@
        {
         "id": "custom.cellOptions",
         "value": {
+         "mode": "basic",
          "type": "color-text"
         }
        },
@@ -579,6 +936,10 @@
           }
          ]
         }
+       },
+       {
+        "id": "decimals",
+        "value": 0
        }
       ]
      },
@@ -602,12 +963,12 @@
     ]
    },
    "gridPos": {
-    "h": 7,
+    "h": 8,
     "w": 24,
     "x": 0,
     "y": 6
    },
-   "id": 9,
+   "id": 11,
    "options": {
     "cellHeight": "sm",
     "footer": {
@@ -621,7 +982,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "dismist_ap_info{namespace=\"$namespace\", site=~\"$site\"}",
+     "expr": "max by (site, ap, name, model, firmware) (dismist_ap_info{namespace=\"$namespace\", site=~\"$site\"})",
      "format": "table",
      "instant": true,
      "legendFormat": "__auto",
@@ -633,7 +994,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "dismist_ap_connected{namespace=\"$namespace\", site=~\"$site\"}",
+     "expr": "max by (site, ap) (dismist_ap_connected{namespace=\"$namespace\", site=~\"$site\"})",
      "format": "table",
      "instant": true,
      "legendFormat": "__auto",
@@ -645,7 +1006,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "dismist_ap_uptime_seconds{namespace=\"$namespace\", site=~\"$site\"}",
+     "expr": "max by (site, ap) (dismist_ap_uptime_seconds{namespace=\"$namespace\", site=~\"$site\"})",
      "format": "table",
      "instant": true,
      "legendFormat": "__auto",
@@ -657,7 +1018,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "dismist_ap_associated_clients{namespace=\"$namespace\", site=~\"$site\"}",
+     "expr": "max by (site, ap) (dismist_ap_associated_clients{namespace=\"$namespace\", site=~\"$site\"})",
      "format": "table",
      "instant": true,
      "legendFormat": "__auto",
@@ -669,7 +1030,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "time() - (dismist_ap_last_seen_timestamp_seconds{namespace=\"$namespace\", site=~\"$site\"} > 0)",
+     "expr": "max by (site, ap) (dismist_ap_temperature_celsius{namespace=\"$namespace\", site=~\"$site\", sensor=\"cpu\"})",
      "format": "table",
      "instant": true,
      "legendFormat": "__auto",
@@ -681,12 +1042,60 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "dismist_ap_desired_revision{namespace=\"$namespace\", site=~\"$site\"} - on (site, ap) dismist_ap_applied_revision{namespace=\"$namespace\", site=~\"$site\"}",
+     "expr": "1 - sum by (site, ap) (rate(dismist_ap_cpu_seconds_total{namespace=\"$namespace\", site=~\"$site\", mode=\"idle\"}[$__rate_interval])) / sum by (site, ap) (rate(dismist_ap_cpu_seconds_total{namespace=\"$namespace\", site=~\"$site\"}[$__rate_interval]))",
      "format": "table",
      "instant": true,
      "legendFormat": "__auto",
      "range": false,
      "refId": "F"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "time() - max by (site, ap) (dismist_ap_last_seen_timestamp_seconds{namespace=\"$namespace\", site=~\"$site\"} > 0)",
+     "format": "table",
+     "instant": true,
+     "legendFormat": "__auto",
+     "range": false,
+     "refId": "G"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "max by (site, ap) (dismist_ap_controller_rtt_seconds{namespace=\"$namespace\", site=~\"$site\", socket=\"tcp\"})",
+     "format": "table",
+     "instant": true,
+     "legendFormat": "__auto",
+     "range": false,
+     "refId": "H"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "max by (site, ap) (dismist_ap_desired_revision{namespace=\"$namespace\", site=~\"$site\"}) - on (site, ap) max by (site, ap) (dismist_ap_applied_revision{namespace=\"$namespace\", site=~\"$site\"})",
+     "format": "table",
+     "instant": true,
+     "legendFormat": "__auto",
+     "range": false,
+     "refId": "I"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "max by (site, ap) (dismist_ap_port_speed_bits_per_second{namespace=\"$namespace\", site=~\"$site\", port=\"eth0\"})",
+     "format": "table",
+     "instant": true,
+     "legendFormat": "__auto",
+     "range": false,
+     "refId": "J"
     }
    ],
    "title": "Access points",
@@ -717,17 +1126,25 @@
        "Value #D": 3,
        "Value #E": 5,
        "Value #F": 6,
+       "Value #G": 9,
+       "Value #H": 7,
+       "Value #I": 10,
+       "Value #J": 8,
        "ap": 1,
-       "firmware": 8,
-       "model": 7,
+       "firmware": 12,
+       "model": 11,
        "name": 0
       },
       "renameByName": {
        "Value #B": "Status",
        "Value #C": "Uptime",
        "Value #D": "Clients",
-       "Value #E": "Last message",
-       "Value #F": "Config behind",
+       "Value #E": "CPU °C",
+       "Value #F": "CPU busy",
+       "Value #G": "Last message",
+       "Value #H": "RTT",
+       "Value #I": "Config behind",
+       "Value #J": "Uplink",
        "ap": "AP ID",
        "firmware": "Firmware",
        "model": "Model",
@@ -744,11 +1161,11 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 13
+    "y": 14
    },
-   "id": 10,
+   "id": 12,
    "panels": [],
-   "title": "Activity",
+   "title": "Clients",
    "type": "row"
   },
   {
@@ -765,7 +1182,8 @@
      "custom": {
       "axisSoftMin": 0,
       "drawStyle": "line",
-      "fillOpacity": 10,
+      "fillOpacity": 40,
+      "lineInterpolation": "linear",
       "lineWidth": 2,
       "showPoints": "never",
       "spanNulls": false,
@@ -781,11 +1199,12 @@
    },
    "gridPos": {
     "h": 8,
-    "w": 12,
+    "w": 8,
     "x": 0,
-    "y": 14
+    "y": 15
    },
-   "id": 11,
+   "id": 13,
+   "interval": "1m",
    "options": {
     "legend": {
      "displayMode": "list",
@@ -803,7 +1222,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "sum by (ap, name) (dismist_ap_associated_clients{namespace=\"$namespace\", site=~\"$site\"} * on (site, ap) group_left (name) dismist_ap_info)",
+     "expr": "sum by (site, ap, name) (dismist_ap_associated_clients{namespace=\"$namespace\", site=~\"$site\"} * on (site, ap) group_left (name) max by (site, ap, name) (dismist_ap_info{namespace=\"$namespace\"}))",
      "format": "time_series",
      "instant": false,
      "legendFormat": "{{name}} {{ap}}",
@@ -813,6 +1232,246 @@
    ],
    "title": "Clients per AP",
    "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "Clients on the 2.4 and 5 GHz access radios.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisSoftMin": 0,
+      "drawStyle": "line",
+      "fillOpacity": 40,
+      "lineInterpolation": "linear",
+      "lineWidth": 2,
+      "showPoints": "never",
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "normal"
+      }
+     },
+     "decimals": 0,
+     "unit": "none"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 8,
+    "y": 15
+   },
+   "id": 14,
+   "interval": "1m",
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "sum by (band) (dismist_radio_clients{namespace=\"$namespace\", site=~\"$site\", band!=\"scan\"})",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "{{band}} GHz",
+     "range": true,
+     "refId": "A"
+    }
+   ],
+   "title": "Clients by band",
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "Clients by signal strength: excellent -60 dBm or better, good to -67, fair to -75, poor below.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisSoftMin": 0,
+      "drawStyle": "line",
+      "fillOpacity": 40,
+      "lineInterpolation": "linear",
+      "lineWidth": 2,
+      "showPoints": "never",
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "normal"
+      }
+     },
+     "decimals": 0,
+     "unit": "none"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "poor"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#d03b3b",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "fair"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#fab219",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "good"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#3987e5",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "excellent"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#0ca30c",
+         "mode": "fixed"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 16,
+    "y": 15
+   },
+   "id": 15,
+   "interval": "1m",
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "sum(dismist_radio_clients_by_signal{namespace=\"$namespace\", site=~\"$site\", signal=\"poor\"})",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "poor",
+     "range": true,
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "sum(dismist_radio_clients_by_signal{namespace=\"$namespace\", site=~\"$site\", signal=\"fair\"})",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "fair",
+     "range": true,
+     "refId": "B"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "sum(dismist_radio_clients_by_signal{namespace=\"$namespace\", site=~\"$site\", signal=\"good\"})",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "good",
+     "range": true,
+     "refId": "C"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "sum(dismist_radio_clients_by_signal{namespace=\"$namespace\", site=~\"$site\", signal=\"excellent\"})",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "excellent",
+     "range": true,
+     "refId": "D"
+    }
+   ],
+   "title": "Clients by signal",
+   "type": "timeseries"
+  },
+  {
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 23
+   },
+   "id": 16,
+   "panels": [],
+   "title": "Activity",
+   "type": "row"
   },
   {
    "datasource": {
@@ -865,10 +1524,11 @@
    "gridPos": {
     "h": 8,
     "w": 12,
-    "x": 12,
-    "y": 14
+    "x": 0,
+    "y": 24
    },
-   "id": 12,
+   "id": 17,
+   "interval": "1m",
    "options": {
     "alignValue": "left",
     "legend": {
@@ -887,7 +1547,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "dismist_ap_connected{namespace=\"$namespace\", site=~\"$site\"} * on (site, ap) group_left (name) dismist_ap_info",
+     "expr": "max by (site, ap, name) (dismist_ap_connected{namespace=\"$namespace\", site=~\"$site\"} * on (site, ap) group_left (name) max by (site, ap, name) (dismist_ap_info{namespace=\"$namespace\"}))",
      "format": "time_series",
      "instant": false,
      "legendFormat": "{{name}} {{ap}}",
@@ -895,7 +1555,7 @@
      "refId": "A"
     }
    ],
-   "title": "AP status",
+   "title": "AP connectivity",
    "type": "state-timeline"
   },
   {
@@ -903,69 +1563,7 @@
     "type": "prometheus",
     "uid": "${datasource}"
    },
-   "description": "Uptime the access point reports. A drop to zero is a reboot.",
-   "fieldConfig": {
-    "defaults": {
-     "color": {
-      "mode": "palette-classic"
-     },
-     "custom": {
-      "axisSoftMin": 0,
-      "drawStyle": "line",
-      "fillOpacity": 10,
-      "lineWidth": 2,
-      "showPoints": "never",
-      "spanNulls": false,
-      "stacking": {
-       "group": "A",
-       "mode": "none"
-      }
-     },
-     "unit": "dtdurations"
-    },
-    "overrides": []
-   },
-   "gridPos": {
-    "h": 8,
-    "w": 8,
-    "x": 0,
-    "y": 22
-   },
-   "id": 13,
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
-   },
-   "targets": [
-    {
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${datasource}"
-     },
-     "expr": "dismist_ap_uptime_seconds{namespace=\"$namespace\", site=~\"$site\"} * on (site, ap) group_left (name) dismist_ap_info",
-     "format": "time_series",
-     "instant": false,
-     "legendFormat": "{{name}} {{ap}}",
-     "range": true,
-     "refId": "A"
-    }
-   ],
-   "title": "AP uptime",
-   "type": "timeseries"
-  },
-  {
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${datasource}"
-   },
-   "description": "Access point connections per interval. Each config save currently reconnects the APs it changes.",
+   "description": "Access point connections per interval.",
    "fieldConfig": {
     "defaults": {
      "color": {
@@ -975,6 +1573,7 @@
       "axisSoftMin": 0,
       "drawStyle": "bars",
       "fillOpacity": 60,
+      "lineInterpolation": "linear",
       "lineWidth": 2,
       "showPoints": "never",
       "spanNulls": false,
@@ -990,11 +1589,12 @@
    },
    "gridPos": {
     "h": 8,
-    "w": 8,
-    "x": 8,
-    "y": 22
+    "w": 12,
+    "x": 12,
+    "y": 24
    },
-   "id": 14,
+   "id": 18,
+   "interval": "1m",
    "options": {
     "legend": {
      "displayMode": "list",
@@ -1012,7 +1612,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "sum by (ap, name) (increase(dismist_ap_connections_total{namespace=\"$namespace\", site=~\"$site\"}[$__rate_interval]) * on (site, ap) group_left (name) dismist_ap_info)",
+     "expr": "sum by (site, ap, name) (increase(dismist_ap_connections_total{namespace=\"$namespace\", site=~\"$site\"}[$__rate_interval]) * on (site, ap) group_left (name) max by (site, ap, name) (dismist_ap_info{namespace=\"$namespace\"}))",
      "format": "time_series",
      "instant": false,
      "legendFormat": "{{name}} {{ap}}",
@@ -1028,16 +1628,16 @@
     "type": "prometheus",
     "uid": "${datasource}"
    },
-   "description": "Telemetry frames decoded per second. Full frames arrive about once a minute, fast ones every 2 s.",
+   "description": "eth0 traffic: received from the network above the line, sent below. The AP's transmit counter may leave out its own traffic.",
    "fieldConfig": {
     "defaults": {
      "color": {
       "mode": "palette-classic"
      },
      "custom": {
-      "axisSoftMin": 0,
       "drawStyle": "line",
       "fillOpacity": 10,
+      "lineInterpolation": "linear",
       "lineWidth": 2,
       "showPoints": "never",
       "spanNulls": false,
@@ -1046,17 +1646,49 @@
        "mode": "none"
       }
      },
-     "unit": "reqps"
+     "unit": "bps"
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rx .*"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#3987e5",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^tx .*"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#d95926",
+         "mode": "fixed"
+        }
+       }
+      ]
+     }
+    ]
    },
    "gridPos": {
     "h": 8,
-    "w": 8,
-    "x": 16,
-    "y": 22
+    "w": 12,
+    "x": 0,
+    "y": 32
    },
-   "id": 15,
+   "id": 19,
+   "interval": "1m",
    "options": {
     "legend": {
      "displayMode": "list",
@@ -1074,10 +1706,10 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "sum by (ap, name) (rate(dismist_ap_full_frames_total{namespace=\"$namespace\", site=~\"$site\"}[$__rate_interval]) * on (site, ap) group_left (name) dismist_ap_info)",
+     "expr": "sum by (site, ap, name) (rate(dismist_ap_port_receive_bytes_total{namespace=\"$namespace\", site=~\"$site\", port=\"eth0\"}[$__rate_interval]) * 8 * on (site, ap) group_left (name) max by (site, ap, name) (dismist_ap_info{namespace=\"$namespace\"}))",
      "format": "time_series",
      "instant": false,
-     "legendFormat": "full \u00b7 {{name}} {{ap}}",
+     "legendFormat": "rx {{name}} {{ap}}",
      "range": true,
      "refId": "A"
     },
@@ -1086,15 +1718,100 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "sum by (ap, name) (rate(dismist_ap_fast_frames_total{namespace=\"$namespace\", site=~\"$site\"}[$__rate_interval]) * on (site, ap) group_left (name) dismist_ap_info)",
+     "expr": "-sum by (site, ap, name) (rate(dismist_ap_port_transmit_bytes_total{namespace=\"$namespace\", site=~\"$site\", port=\"eth0\"}[$__rate_interval]) * 8 * on (site, ap) group_left (name) max by (site, ap, name) (dismist_ap_info{namespace=\"$namespace\"}))",
      "format": "time_series",
      "instant": false,
-     "legendFormat": "fast \u00b7 {{name}} {{ap}}",
+     "legendFormat": "tx {{name}} {{ap}}",
      "range": true,
      "refId": "B"
     }
    ],
-   "title": "Telemetry frames",
+   "title": "Uplink throughput",
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "How busy each access radio's channel is, by anyone. Over 0.7 for long is congested.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisSoftMin": 0,
+      "drawStyle": "line",
+      "fillOpacity": 10,
+      "lineInterpolation": "linear",
+      "lineWidth": 2,
+      "showPoints": "never",
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "max": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#0ca30c",
+        "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 0.5
+       },
+       {
+        "color": "#d03b3b",
+        "value": 0.7
+       }
+      ]
+     },
+     "unit": "percentunit"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 32
+   },
+   "id": 20,
+   "interval": "1m",
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "max by (site, ap, name, radio, band) (dismist_radio_channel_utilization_ratio{namespace=\"$namespace\", site=~\"$site\", type=\"all\", band!=\"scan\"} * on (site, ap) group_left (name) max by (site, ap, name) (dismist_ap_info{namespace=\"$namespace\"}))",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "{{name}} {{ap}} {{radio}} ({{band}} GHz)",
+     "range": true,
+     "refId": "A"
+    }
+   ],
+   "title": "Channel utilisation",
    "type": "timeseries"
   },
   {
@@ -1103,9 +1820,9 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 30
+    "y": 40
    },
-   "id": 16,
+   "id": 21,
    "panels": [],
    "title": "Controller",
    "type": "row"
@@ -1115,7 +1832,7 @@
     "type": "prometheus",
     "uid": "${datasource}"
    },
-   "description": "Data format version of the controller database.",
+   "description": "dismistd build.",
    "fieldConfig": {
     "defaults": {
      "color": {
@@ -1139,9 +1856,9 @@
     "h": 4,
     "w": 4,
     "x": 0,
-    "y": 31
+    "y": 41
    },
-   "id": 17,
+   "id": 22,
    "options": {
     "colorMode": "value",
     "graphMode": "none",
@@ -1154,7 +1871,7 @@
      "fields": "",
      "values": false
     },
-    "textMode": "value",
+    "textMode": "name",
     "wideLayout": true
    },
    "targets": [
@@ -1163,83 +1880,15 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "max(dismist_store_schema{namespace=\"$namespace\"})",
+     "expr": "max by (version) (dismist_build_info{namespace=\"$namespace\"})",
      "format": "time_series",
      "instant": true,
-     "legendFormat": "__auto",
+     "legendFormat": "{{version}}",
      "range": false,
      "refId": "A"
     }
    ],
-   "title": "Database schema",
-   "type": "stat"
-  },
-  {
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${datasource}"
-   },
-   "description": "Access points whose last config compile failed; they keep their last delivered config.",
-   "fieldConfig": {
-    "defaults": {
-     "color": {
-      "mode": "thresholds"
-     },
-     "mappings": [],
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "#0ca30c",
-        "value": null
-       },
-       {
-        "color": "#d03b3b",
-        "value": 1
-       }
-      ]
-     },
-     "unit": "none"
-    },
-    "overrides": []
-   },
-   "gridPos": {
-    "h": 4,
-    "w": 4,
-    "x": 4,
-    "y": 31
-   },
-   "id": 18,
-   "options": {
-    "colorMode": "value",
-    "graphMode": "none",
-    "justifyMode": "auto",
-    "orientation": "auto",
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "textMode": "value",
-    "wideLayout": true
-   },
-   "targets": [
-    {
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${datasource}"
-     },
-     "expr": "sum(dismist_ap_config_compile_error{namespace=\"$namespace\", site=~\"$site\"}) or vector(0)",
-     "format": "time_series",
-     "instant": true,
-     "legendFormat": "__auto",
-     "range": false,
-     "refId": "A"
-    }
-   ],
-   "title": "Config compile errors",
+   "title": "Version",
    "type": "stat"
   },
   {
@@ -1270,10 +1919,10 @@
    "gridPos": {
     "h": 4,
     "w": 4,
-    "x": 8,
-    "y": 31
+    "x": 4,
+    "y": 41
    },
-   "id": 19,
+   "id": 23,
    "options": {
     "colorMode": "value",
     "graphMode": "none",
@@ -1311,7 +1960,71 @@
     "type": "prometheus",
     "uid": "${datasource}"
    },
-   "description": "Resident memory of dismistd.",
+   "description": "Size of the controller database.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
+     },
+     "unit": "bytes"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 8,
+    "y": 41
+   },
+   "id": 24,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "max(dismist_store_size_bytes{namespace=\"$namespace\"})",
+     "format": "time_series",
+     "instant": true,
+     "legendFormat": "__auto",
+     "range": false,
+     "refId": "A"
+    }
+   ],
+   "title": "Database",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "Free space on the database volume.",
    "fieldConfig": {
     "defaults": {
      "color": {
@@ -1335,9 +2048,9 @@
     "h": 4,
     "w": 4,
     "x": 12,
-    "y": 31
+    "y": 41
    },
-   "id": 20,
+   "id": 25,
    "options": {
     "colorMode": "value",
     "graphMode": "none",
@@ -1359,7 +2072,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "max(process_resident_memory_bytes{namespace=\"$namespace\"})",
+     "expr": "max(dismist_store_free_bytes{namespace=\"$namespace\"})",
      "format": "time_series",
      "instant": true,
      "legendFormat": "__auto",
@@ -1367,7 +2080,7 @@
      "refId": "A"
     }
    ],
-   "title": "Memory (RSS)",
+   "title": "Volume free",
    "type": "stat"
   },
   {
@@ -1375,7 +2088,7 @@
     "type": "prometheus",
     "uid": "${datasource}"
    },
-   "description": "Live goroutines in dismistd.",
+   "description": "Time since the last scheduled snapshot succeeded.",
    "fieldConfig": {
     "defaults": {
      "color": {
@@ -1386,12 +2099,20 @@
       "mode": "absolute",
       "steps": [
        {
-        "color": "#3987e5",
+        "color": "#0ca30c",
         "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 129600.0
+       },
+       {
+        "color": "#d03b3b",
+        "value": 172800
        }
       ]
      },
-     "unit": "none"
+     "unit": "dtdurations"
     },
     "overrides": []
    },
@@ -1399,9 +2120,9 @@
     "h": 4,
     "w": 4,
     "x": 16,
-    "y": 31
+    "y": 41
    },
-   "id": 21,
+   "id": 26,
    "options": {
     "colorMode": "value",
     "graphMode": "none",
@@ -1423,7 +2144,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "max(go_goroutines{namespace=\"$namespace\"})",
+     "expr": "time() - max(dismist_backup_last_success_timestamp_seconds{namespace=\"$namespace\"})",
      "format": "time_series",
      "instant": true,
      "legendFormat": "__auto",
@@ -1431,7 +2152,7 @@
      "refId": "A"
     }
    ],
-   "title": "Goroutines",
+   "title": "Last backup",
    "type": "stat"
   },
   {
@@ -1439,19 +2160,39 @@
     "type": "prometheus",
     "uid": "${datasource}"
    },
-   "description": "Open file descriptors of dismistd.",
+   "description": "Legacy mode means the schema 2 migration did not verify and typed settings are paused (System, Migration).",
    "fieldConfig": {
     "defaults": {
      "color": {
       "mode": "thresholds"
      },
-     "mappings": [],
+     "mappings": [
+      {
+       "options": {
+        "0": {
+         "color": "#0ca30c",
+         "index": 0,
+         "text": "Committed or not run"
+        },
+        "1": {
+         "color": "#fab219",
+         "index": 1,
+         "text": "Legacy mode"
+        }
+       },
+       "type": "value"
+      }
+     ],
      "thresholds": {
       "mode": "absolute",
       "steps": [
        {
-        "color": "#3987e5",
+        "color": "#0ca30c",
         "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 1
        }
       ]
      },
@@ -1463,9 +2204,9 @@
     "h": 4,
     "w": 4,
     "x": 20,
-    "y": 31
+    "y": 41
    },
-   "id": 22,
+   "id": 27,
    "options": {
     "colorMode": "value",
     "graphMode": "none",
@@ -1487,7 +2228,7 @@
       "type": "prometheus",
       "uid": "${datasource}"
      },
-     "expr": "max(process_open_fds{namespace=\"$namespace\"})",
+     "expr": "max(dismist_schema_migration_state{namespace=\"$namespace\", state=\"legacy\"}) or vector(0)",
      "format": "time_series",
      "instant": true,
      "legendFormat": "__auto",
@@ -1495,7 +2236,7 @@
      "refId": "A"
     }
    ],
-   "title": "Open files",
+   "title": "Migration",
    "type": "stat"
   },
   {
@@ -1513,6 +2254,7 @@
       "axisSoftMin": 0,
       "drawStyle": "line",
       "fillOpacity": 10,
+      "lineInterpolation": "linear",
       "lineWidth": 2,
       "showPoints": "never",
       "spanNulls": false,
@@ -1528,11 +2270,12 @@
    },
    "gridPos": {
     "h": 7,
-    "w": 12,
+    "w": 8,
     "x": 0,
-    "y": 35
+    "y": 45
    },
-   "id": 23,
+   "id": 28,
+   "interval": "1m",
    "options": {
     "legend": {
      "displayMode": "list",
@@ -1576,6 +2319,7 @@
       "axisSoftMin": 0,
       "drawStyle": "line",
       "fillOpacity": 10,
+      "lineInterpolation": "linear",
       "lineWidth": 2,
       "showPoints": "never",
       "spanNulls": false,
@@ -1590,11 +2334,12 @@
    },
    "gridPos": {
     "h": 7,
-    "w": 12,
-    "x": 12,
-    "y": 35
+    "w": 8,
+    "x": 8,
+    "y": 45
    },
-   "id": 24,
+   "id": 29,
+   "interval": "1m",
    "options": {
     "legend": {
      "displayMode": "list",
@@ -1634,6 +2379,287 @@
    ],
    "title": "Controller memory",
    "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "Live goroutines in dismistd and open operator UI event streams.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisSoftMin": 0,
+      "drawStyle": "line",
+      "fillOpacity": 10,
+      "lineInterpolation": "linear",
+      "lineWidth": 2,
+      "showPoints": "never",
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      }
+     },
+     "decimals": 0,
+     "unit": "none"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 16,
+    "y": 45
+   },
+   "id": 30,
+   "interval": "1m",
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "go_goroutines{namespace=\"$namespace\"}",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "goroutines",
+     "range": true,
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "dismist_ui_streams{namespace=\"$namespace\"}",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "UI event streams",
+     "range": true,
+     "refId": "B"
+    }
+   ],
+   "title": "Goroutines and UI streams",
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "Telemetry frames decoded per second over all APs: fast every 2 s, full about once a minute.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisSoftMin": 0,
+      "drawStyle": "line",
+      "fillOpacity": 10,
+      "lineInterpolation": "linear",
+      "lineWidth": 2,
+      "showPoints": "never",
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      }
+     },
+     "unit": "reqps"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 0,
+    "y": 52
+   },
+   "id": 31,
+   "interval": "1m",
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "sum(rate(dismist_ap_fast_frames_total{namespace=\"$namespace\", site=~\"$site\"}[$__rate_interval]))",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "fast",
+     "range": true,
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "sum(rate(dismist_ap_full_frames_total{namespace=\"$namespace\", site=~\"$site\"}[$__rate_interval]))",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "full",
+     "range": true,
+     "refId": "B"
+    }
+   ],
+   "title": "Telemetry frames",
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "Telemetry sections that failed to decode, per second. A rise after a firmware change is expected; report it.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisSoftMin": 0,
+      "drawStyle": "line",
+      "fillOpacity": 10,
+      "lineInterpolation": "linear",
+      "lineWidth": 2,
+      "showPoints": "never",
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      }
+     },
+     "unit": "reqps"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 8,
+    "y": 52
+   },
+   "id": 32,
+   "interval": "1m",
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "sum by (section) (rate(dismist_ap_telemetry_decode_errors_total{namespace=\"$namespace\", site=~\"$site\"}[$__rate_interval]))",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "{{section}}",
+     "range": true,
+     "refId": "A"
+    }
+   ],
+   "title": "Decode errors",
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "description": "Operator UI and API requests per second by status code.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisSoftMin": 0,
+      "drawStyle": "line",
+      "fillOpacity": 40,
+      "lineInterpolation": "linear",
+      "lineWidth": 2,
+      "showPoints": "never",
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "normal"
+      }
+     },
+     "unit": "reqps"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 16,
+    "y": 52
+   },
+   "id": 33,
+   "interval": "1m",
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "expr": "sum by (code) (rate(dismist_http_requests_total{namespace=\"$namespace\"}[$__rate_interval]))",
+     "format": "time_series",
+     "instant": false,
+     "legendFormat": "{{code}}",
+     "range": true,
+     "refId": "A"
+    }
+   ],
+   "title": "UI requests",
+   "type": "timeseries"
   }
  ],
  "refresh": "30s",
@@ -1661,7 +2687,7 @@
      "type": "prometheus",
      "uid": "${datasource}"
     },
-    "definition": "label_values(dismist_aps, namespace)",
+    "definition": "label_values(dismist_build_info, namespace)",
     "hide": 0,
     "includeAll": false,
     "label": "Namespace",
@@ -1669,10 +2695,11 @@
     "name": "namespace",
     "options": [],
     "query": {
-     "query": "label_values(dismist_aps, namespace)",
-     "refId": "ns"
+     "query": "label_values(dismist_build_info, namespace)",
+     "refId": "namespace"
     },
     "refresh": 2,
+    "regex": "",
     "sort": 1,
     "type": "query"
    },
