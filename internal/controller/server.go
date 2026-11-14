@@ -407,7 +407,15 @@ func (s *Server) SetFeatures(features Features) {
 func (s *Server) FeatureEnabled(feature Feature) bool { return s.Features().Has(feature) }
 
 // countSourceMismatch records a hello naming this AP from the wrong source.
-func (s *Server) countSourceMismatch() { s.counters.sourceMismatches.Add(1) }
+func (s *Server) countSourceMismatch(remoteAddr string) {
+	s.counters.sourceMismatches.Add(1)
+	s.mu.Lock()
+	s.emitLocked(Event{Kind: EventAuth, Severity: SeverityWarning,
+		Title:  "AP connected from an address other than its pinned source",
+		Detail: "from " + remoteHost(remoteAddr)})
+	s.mu.Unlock()
+	s.flush()
+}
 
 // AllowedManagementIP returns the AP's optional source address pin, or "".
 func (s *Server) AllowedManagementIP() string {
@@ -571,6 +579,12 @@ func (s *Server) serveConn(ws *websocket.Conn, cipherSuite uint16, remoteAddr st
 	}
 	if end.authFailure != "" {
 		s.counters.authFailure(end.authFailure)
+		s.mu.Lock()
+		s.emitLocked(Event{Kind: EventAuth, Severity: SeverityWarning,
+			Title:  "AP authentication failed (" + end.authFailure + ")",
+			Detail: "from " + remoteHost(remoteAddr)})
+		s.mu.Unlock()
+		s.flush()
 	}
 	s.mu.Lock()
 	if s.active == conn {
