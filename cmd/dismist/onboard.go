@@ -18,12 +18,13 @@ import (
 )
 
 const onboardUsage = `usage: dismist ap33 onboard [ssh flags] [user@]host --controller URL --token-file FILE
-         --site NAME|ID --name NAME [--pin-ip] [--backup-dir DIR] [--no-reboot]
+         --name NAME [--site NAME|ID (default Home)] [--pin-ip] [--backup-dir DIR] [--no-reboot]
          [--remove-local-files] [--dry-run] [--yes] [--ca FILE]...
          [--public-roots auto|letsencrypt|none] [--timeout 5m]
    or: dismist ap33 onboard --retarget [ssh flags] [user@]host --controller URL --token-file FILE [...]`
 
 const (
+	defaultOnboardSite   = "Home"
 	onboardRebootReason  = "dismist ap33 onboard"
 	defaultOnboardWait   = 5 * time.Minute
 	defaultPollInterval  = 5 * time.Second
@@ -67,7 +68,7 @@ func runOnboard(args []string, env ap33Env) error {
 	var options onboardOptions
 	flags.StringVar(&options.controller, "controller", "", "controller URL, e.g. https://dismist.example.net")
 	flags.StringVar(&options.tokenFile, "token-file", "", "file holding an API token (admin scope)")
-	flags.StringVar(&options.site, "site", "", "site name or ID to register the AP in")
+	flags.StringVar(&options.site, "site", defaultOnboardSite, "site name or ID to register the AP in")
 	flags.StringVar(&options.name, "name", "", "AP name")
 	flags.StringVar(&options.backupDir, "backup-dir", "", "backup directory (default ~/.local/share/dismist/backups)")
 	flags.StringVar(&options.publicRoots, "public-roots", publicRootsAuto, "add Let's Encrypt's roots (ISRG X1, X2, Root YE, Root YR): auto (when the served chain is theirs), letsencrypt, none")
@@ -96,7 +97,7 @@ func runOnboard(args []string, env ap33Env) error {
 		return errors.New("--controller and --token-file are required\n" + onboardUsage)
 	}
 	if !options.retarget && (strings.TrimSpace(options.site) == "" || strings.TrimSpace(options.name) == "") {
-		return errors.New("--site and --name are required (--retarget keeps the AP's registration and needs neither)\n" + onboardUsage)
+		return errors.New("--name is required, and --site must not be empty (--retarget keeps the AP's registration and needs neither)\n" + onboardUsage)
 	}
 	if options.retarget && options.removeLocal {
 		return errors.New("--retarget only rewrites cloud.ini and the CA bundle; run onboard without --retarget to deal with local files")

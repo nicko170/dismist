@@ -685,12 +685,12 @@ func TestOnboardPreflightRefusals(t *testing.T) {
 	})
 }
 
-func TestOnboardPinIPUsesTheSSHAddress(t *testing.T) {
+func TestOnboardPinIPUsesTheSSHAddressAndSiteDefaultsToHome(t *testing.T) {
 	f := newOnboardFixture(t)
-	requireExit(t, f.onboard("--site", "Home", "--name", "Hallway", "--pin-ip", "--no-reboot"), exitDone)
+	requireExit(t, f.onboard("--name", "Hallway", "--pin-ip", "--no-reboot"), exitDone)
 	_, posts, _ := f.controller.snapshot()
-	if posts[0].ManagementIP != "127.0.0.1" {
-		t.Fatalf("pin %q", posts[0].ManagementIP)
+	if posts[0].ManagementIP != "127.0.0.1" || posts[0].SiteID != "site-home" {
+		t.Fatalf("pin %q site %q", posts[0].ManagementIP, posts[0].SiteID)
 	}
 }
 

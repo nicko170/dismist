@@ -18,7 +18,7 @@ const ap33Usage = `usage:
   dismist ap33 ssh [ssh flags] [user@]host status [--json]
   dismist ap33 ssh [ssh flags] [user@]host reboot --yes [--reason TEXT | --no-reason]
   dismist ap33 onboard [ssh flags] [user@]host --controller URL --token-file FILE
-                       --site NAME|ID --name NAME [--pin-ip] [--backup-dir DIR]
+                       --name NAME [--site NAME|ID] [--pin-ip] [--backup-dir DIR]
                        [--no-reboot] [--remove-local-files] [--dry-run] [--yes]
                        [--ca FILE]... [--public-roots auto|letsencrypt|none] [--timeout 5m]
   dismist ap33 onboard --retarget [ssh flags] [user@]host --controller URL --token-file FILE [...]

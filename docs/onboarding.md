@@ -143,7 +143,7 @@ prints the plan without backing up, reading the secret or writing anything.
 | --- | --- |
 | `--controller URL` | The controller, `https://HOST[:PORT]` (plain `http` only to a loopback address). |
 | `--token-file FILE` | The admin-scope API token. |
-| `--site NAME\|ID`, `--name NAME` | Where to register the AP and what to call it. |
+| `--site NAME\|ID`, `--name NAME` | Where to register the AP (default `Home`) and what to call it. |
 | `--pin-ip` | Pin the AP to the address SSH reached it at (required in DNS mode only). |
 | `--backup-dir DIR` | Backup root (default `~/.local/share/dismist/backups`). |
 | `--no-reboot` | Install and register but leave the reboot to you. |
