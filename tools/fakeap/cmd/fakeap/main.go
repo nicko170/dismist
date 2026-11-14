@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -55,6 +56,10 @@ func run(args []string) error {
 	ping := flags.Duration("ping", 30*time.Second, "ping interval (negative disables)")
 	events := flags.Duration("events", 0, "synthetic PACE event interval (0 disables)")
 	reject := flags.String("reject-config", "", "report every config as rejected with this error")
+	ignoreChange := flags.Bool("ignore-config-change", false, "ignore ep-config-change (an AP without push support; the controller falls back to a reconnect)")
+	clockOffset := flags.Duration("clock-offset", 0, "AP clock minus real time in stats frames (clock skew)")
+	inactive := flags.String("inactive-vlans", "", "comma-separated VLANs reported inactive on the uplink (field 79)")
+	legacyCloud := flags.Bool("legacy-cloud", false, "send the 0.8/0.14 CloudStats layout (1 LastRTT)")
 	once := flags.Bool("once", false, "authenticate, fetch the config, print it and exit")
 	reconnect := flags.Duration("reconnect", 2*time.Second, "delay before reconnecting after the session ends (0 exits instead)")
 	duration := flags.Duration("duration", 0, "stop after this long (0 runs until interrupted)")
@@ -103,6 +108,18 @@ func run(args []string) error {
 	snapshot := fakeap.DefaultSnapshot(*clients)
 	snapshot.BootCount = *bootCount
 	snapshot.Uptime = uint64(max(*uptime, 0))
+	snapshot.ClockOffset = *clockOffset
+	snapshot.LegacyCloud = *legacyCloud
+	for _, part := range strings.Split(*inactive, ",") {
+		if part = strings.TrimSpace(part); part == "" {
+			continue
+		}
+		vlan, err := strconv.ParseUint(part, 10, 16)
+		if err != nil || vlan < 1 || vlan > 4094 {
+			return fmt.Errorf("-inactive-vlans: invalid VLAN %q", part)
+		}
+		snapshot.Inactive = append(snapshot.Inactive, vlan)
+	}
 	started := time.Now()
 	for {
 		config.Extras.Uptime = *uptime + int64(time.Since(started)/time.Second)
@@ -115,9 +132,20 @@ func run(args []string) error {
 			err = ap.Run(ctx, fakeap.RunOptions{
 				Snapshot: snapshot, FastInterval: *fast, FullInterval: *full,
 				PingInterval: *ping, EventInterval: *events, RejectConfig: *reject,
-				OnConfig: func(body []byte) { log.Printf("fakeap %s fetched a %d-byte config", *id, len(body)) },
+				IgnoreConfigChange: *ignoreChange,
+				OnConfig:           func(body []byte) { log.Printf("fakeap %s fetched a %d-byte config", *id, len(body)) },
+				OnCommand: func(command fakeap.Command) {
+					log.Printf("fakeap %s received ap-cmd-rx %s from %s (%s)", *id, command.Cmd, command.Sender, command.Reason)
+				},
 			})
 			_ = ap.Close()
+		}
+		if errors.Is(err, fakeap.ErrRebooted) {
+			// A reboot: the next session reports a higher boot count and a
+			// reset uptime, like the AP.
+			config.Extras.BootCount++
+			snapshot.BootCount = config.Extras.BootCount
+			*uptime, started = 30, time.Now()
 		}
 		if ctx.Err() != nil {
 			return nil
