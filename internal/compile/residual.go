@@ -78,10 +78,14 @@ func stripForbidden(scope string, patch map[string]any, root string) (map[string
 		list = forbiddenWLAN
 	}
 	var dropped []string
-	var walk func(value any, pattern string) any
-	walk = func(value any, pattern string) any {
+	// walk returns the reduced value and whether anything of it is left.
+	var walk func(value any, pattern string) (any, bool)
+	walk = func(value any, pattern string) (any, bool) {
 		switch v := value.(type) {
 		case map[string]any:
+			if len(v) == 0 {
+				return v, true
+			}
 			out := make(map[string]any, len(v))
 			for _, key := range sortedKeys(v) {
 				childPattern := joinPattern(pattern, key)
@@ -91,19 +95,15 @@ func stripForbidden(scope string, patch map[string]any, root string) (map[string
 						continue
 					}
 				}
-				reduced := walk(v[key], childPattern)
-				if object, ok := reduced.(map[string]any); ok && len(object) == 0 {
-					if _, wasObject := v[key].(map[string]any); wasObject && len(v[key].(map[string]any)) > 0 {
-						continue
-					}
+				if reduced, keep := walk(v[key], childPattern); keep {
+					out[key] = reduced
 				}
-				out[key] = reduced
 			}
-			return out
+			return out, len(out) > 0
 		case []any:
 			key := keyOf(pattern)
 			if key == "" {
-				return v
+				return v, true
 			}
 			var out []any
 			for _, element := range v {
@@ -118,21 +118,26 @@ func stripForbidden(scope string, patch map[string]any, root string) (map[string
 						continue
 					}
 				}
-				reduced := walk(object, joinPattern(pattern, "[]")).(map[string]any)
-				if len(reduced) <= 1 {
-					if _, isRemove := reduced[RemoveKey]; !isRemove {
-						if _, hasKey := reduced[key]; hasKey {
-							continue
-						}
+				members := make(map[string]any, len(object))
+				for name, member := range object {
+					if name != key {
+						members[name] = member
 					}
 				}
-				out = append(out, reduced)
+				reduced, keep := walk(members, joinPattern(pattern, "[]"))
+				if !keep && len(members) > 0 {
+					continue
+				}
+				element := reduced.(map[string]any)
+				element[key] = object[key]
+				out = append(out, element)
 			}
-			return out
+			return out, len(out) > 0
 		}
-		return value
+		return value, true
 	}
-	result, _ := walk(patch, root).(map[string]any)
+	reduced, _ := walk(patch, root)
+	result, _ := reduced.(map[string]any)
 	if result == nil {
 		result = map[string]any{}
 	}
@@ -236,4 +241,18 @@ func DiffPaths(a, b []byte) []string {
 	}
 	walk(treeA, treeB, "")
 	return paths
+}
+
+// ExtractWLAN returns the canonical JSON of one WLAN of a config (by ID).
+func ExtractWLAN(config []byte, id string) ([]byte, error) {
+	root, err := decodeObject(config)
+	if err != nil {
+		return nil, err
+	}
+	list, _ := root["WLANs"].([]any)
+	element, at := keyedElement(list, "ID", id)
+	if at < 0 {
+		return nil, errors.New("WLAN " + id + " not in the config")
+	}
+	return encodeTree(element)
 }

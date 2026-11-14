@@ -118,7 +118,13 @@ func siteTyped(root map[string]any, site model.Site, wlans []map[string]any, net
 				if !ok {
 					return fmt.Errorf("%s: unknown value %q", bandOption(band, "taf"), advanced.TAF)
 				}
-				radio["TAFMode"] = num(mode)
+				// TAFMode is a named type the normaliser keeps verbatim:
+				// "default" (0) is written as the absent key.
+				if mode == 0 {
+					delete(radio, "TAFMode")
+				} else {
+					radio["TAFMode"] = num(mode)
+				}
 				rec.note(bandOption(band, "taf"), prefix+"TAFMode")
 			}
 			if advanced.TWT != nil {

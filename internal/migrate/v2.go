@@ -449,6 +449,24 @@ func planSite(in V2Input, template []byte, s1 *model.State, site *model.Site, fr
 		canonical, _, err := effective.Normalise(config, probeCtx)
 		return err == nil && string(canonical) == string(probeOld), err
 	}
+	// A WLAN residual is checked on its own WLAN: the site residual is
+	// not known yet.
+	wlanEqual := func(networkID string) (bool, error) {
+		config, err := compileProbe()
+		if err != nil {
+			return false, err
+		}
+		canonical, _, err := effective.Normalise(config, probeCtx)
+		if err != nil {
+			return false, err
+		}
+		got, err1 := compile.ExtractWLAN(canonical, networkID)
+		want, err2 := compile.ExtractWLAN(probeOld, networkID)
+		if err1 != nil || err2 != nil {
+			return false, errors.Join(err1, err2)
+		}
+		return string(got) == string(want), nil
+	}
 
 	// Step 4: residuals in compile order. WLANs first.
 	for index := range s1.Networks {
@@ -475,7 +493,7 @@ func planSite(in V2Input, template []byte, s1 *model.State, site *model.Site, fr
 			if err != nil {
 				return false, err
 			}
-			return probeEqual()
+			return wlanEqual(network.ID)
 		}, &network.Expert); err != nil {
 			return err
 		}
@@ -830,7 +848,9 @@ func liftSite(site *model.Site, frozen legacyv0.Site, eff map[string]any, lift *
 			profile.Power = model.PowerPolicy{Mode: model.PowerFixed, DBm: power}
 		}
 		profile.Preamble = preambleNames[intAt(radio, "PreambleLength")]
-		profile.Advanced.TAF = tafNames[intAt(radio, "TAFMode")]
+		if taf := intAt(radio, "TAFMode"); taf != 0 {
+			profile.Advanced.TAF = tafNames[taf]
+		}
 		twt := !boolAt(radio, "TWTDisabled")
 		profile.Advanced.TWT = &twt
 		if name, ok := antennaNames[intAt(radio, "ChainSelectMode", "RxChain")]; ok && intAt(radio, "ChainSelectMode", "RxChain") == intAt(radio, "ChainSelectMode", "TxChain") {
