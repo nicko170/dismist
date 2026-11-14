@@ -1,0 +1,23 @@
+{{- if include "dismist.monitoringPart" (dict "value" .Values.metrics.dashboards.enabled "root" .) }}
+{{- $db := .Values.metrics.dashboards }}
+{{- $files := .Files.Glob "monitoring/dashboards/*.json" }}
+{{- if $files }}
+# Grafana dashboards for the Grafana sidecar: it loads ConfigMaps carrying the
+# label below into the folder named by the folder annotation.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dismist.fullname" . }}-dashboards
+  namespace: {{ default .Release.Namespace $db.namespace }}
+  labels:
+    {{- include "dismist.labels" . | nindent 4 }}
+    {{ $db.label }}: {{ $db.labelValue | quote }}
+  annotations:
+    {{ $db.folderAnnotation }}: {{ $db.folder | quote }}
+    {{- with $db.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  {{- $files.AsConfig | nindent 2 }}
+{{- end }}
+{{- end }}

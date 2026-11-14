@@ -1,0 +1,116 @@
+# promtool test rules charts/dismist/monitoring/tests/dismist.test.yml
+rule_files:
+  - ../rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # A connected AP whose messages stop is quiet for the first minute plus the
+  # 2-minute hold, then fires; a disconnected AP with an old last-seen does not.
+  - interval: 1m
+    input_series:
+      - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+        values: '1x10'
+      - series: 'dismist_ap_last_seen_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+        values: '0 60 120 120 120 120 120 120 120 120 120'
+      - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+        values: '0x10'
+      - series: 'dismist_ap_last_seen_timestamp_seconds{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: DismistAPSilent
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: DismistAPSilent
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: DismistAPSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: dismist
+              site: s1
+              ap: 02-aa-00-00-00-01
+            exp_annotations:
+              summary: "AP 02-aa-00-00-00-01 (site s1) is connected but silent for 4m 0s"
+              description: "The AP's WebSocket session is open but no message has arrived for over a minute (it normally reports every few seconds). Check the AP's uplink and the dismist logs for this AP; the session should time out and the AP reconnect."
+
+  # Five connections within an hour fire Flapping after the 5-minute hold;
+  # four do not.
+  - interval: 1m
+    input_series:
+      - series: 'dismist_ap_connections_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+        values: '0+1x5 5x20'
+      - series: 'dismist_ap_connections_total{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+        values: '0+1x4 4x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: DismistAPFlapping
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: DismistAPFlapping
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: dismist
+              site: s1
+              ap: 02-aa-00-00-00-01
+            exp_annotations:
+              summary: "AP 02-aa-00-00-00-01 (site s1) reconnected more than 4 times in the last hour"
+              description: "Check whether the AP is rebooting (uptime in the dismist UI), its uplink and PoE, and the dismist logs for the disconnect reasons. Config saves that change this AP's config also reconnect it."
+
+  # A pending revision on a connected AP fires after 10 minutes; a pending
+  # revision while the AP is disconnected stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'dismist_ap_desired_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+        values: '3x20'
+      - series: 'dismist_ap_applied_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+        values: '2x20'
+      - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+        values: '1x20'
+      - series: 'dismist_ap_desired_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+        values: '3x20'
+      - series: 'dismist_ap_applied_revision{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+        values: '2x20'
+      - series: 'dismist_ap_connected{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: DismistAPConfigNotApplied
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: DismistAPConfigNotApplied
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: dismist
+              site: s1
+              ap: 02-aa-00-00-00-01
+            exp_annotations:
+              summary: "AP 02-aa-00-00-00-01 (site s1) has not applied config revision 3"
+              description: "The AP is connected but has not reported the current config revision as applied for 10 minutes. Check the AP's last config error in the dismist UI; the AP may have rejected the config."
+
+  # A compile failure fires after 5 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'dismist_ap_config_compile_error{namespace="dismist",site="s1",ap="02-aa-00-00-00-01",instance="dismist"}'
+        values: '0 0 1x10'
+      - series: 'dismist_ap_config_compile_error{namespace="dismist",site="s1",ap="02-aa-00-00-00-02",instance="dismist"}'
+        values: '0x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: DismistAPConfigCompileError
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: DismistAPConfigCompileError
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: dismist
+              site: s1
+              ap: 02-aa-00-00-00-01
+            exp_annotations:
+              summary: "dismist cannot compile the config for AP 02-aa-00-00-00-01 (site s1)"
+              description: "The AP keeps the last config it was delivered, so recent changes do not reach it. Open the AP's config page in dismist for the compile error, usually an expert patch, and fix or remove it."

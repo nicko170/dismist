@@ -1,0 +1,44 @@
+{{- if include "dismist.monitoringPart" (dict "value" .Values.metrics.prometheusRule.enabled "root" .) }}
+{{- $pr := .Values.metrics.prometheusRule }}
+{{- $disabled := default list $pr.disabledAlerts }}
+{{- $overrides := default dict $pr.severityOverrides }}
+{{- /* monitoring/rules.yaml is a plain Prometheus rules file that promtool
+       reads as is. It is never passed through tpl, so the $labels templates
+       in its annotations reach Prometheus untouched. */}}
+{{- $file := .Files.Get "monitoring/rules.yaml" | fromYaml }}
+{{- if hasKey $file "Error" }}
+{{- fail (printf "monitoring/rules.yaml: %s" $file.Error) }}
+{{- end }}
+{{- $groups := list }}
+{{- range $group := $file.groups }}
+{{- $rules := list }}
+{{- range $rule := $group.rules }}
+{{- if not (and $rule.alert (has $rule.alert $disabled)) }}
+{{- if and $rule.alert (hasKey $overrides $rule.alert) }}
+{{- $labels := default dict $rule.labels }}
+{{- $_ := set $labels "severity" (get $overrides $rule.alert) }}
+{{- $_ := set $rule "labels" $labels }}
+{{- end }}
+{{- $rules = append $rules $rule }}
+{{- end }}
+{{- end }}
+{{- if $rules }}
+{{- $groups = append $groups (set $group "rules" $rules) }}
+{{- end }}
+{{- end }}
+{{- $groups = concat $groups (default list $pr.extraGroups) }}
+{{- if $groups }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "dismist.fullname" . }}
+  labels:
+    {{- include "dismist.labels" . | nindent 4 }}
+    {{- with $pr.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    {{- toYaml $groups | nindent 4 }}
+{{- end }}
+{{- end }}

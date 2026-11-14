@@ -1,0 +1,57 @@
+# Every optional resource on: kubeconform validates all of them.
+privateSecret:
+  name: dismist-private
+tls:
+  certificate:
+    enabled: true
+    dnsNames: [ap.dismist.example.com]
+    issuerRef: {kind: ClusterIssuer, name: letsencrypt}
+apService:
+  exposeDNS: true
+  loadBalancerSourceRanges: [192.0.2.0/24]
+controller:
+  uiHost: dismist.example.com
+  trustedProxies: [198.51.100.0/24]
+httpRoute:
+  enabled: true
+  parentRefs: [{name: public, namespace: gateway, sectionName: https-dismist}]
+  hostnames: [dismist.example.com]
+monitoring:
+  enabled: true
+metrics:
+  includeNames: true
+  clients: per-client
+  clientLimit: 50
+  auth:
+    existingSecret: dismist-metrics
+  scrapeAnnotations: true
+  service:
+    annotations: {example.com/note: metrics}
+  serviceMonitor:
+    labels: {release: kube-prom}
+    sampleLimit: 20000
+    relabelings:
+      - action: replace
+        targetLabel: cluster
+        replacement: example
+    metricRelabelings:
+      - action: drop
+        sourceLabels: [__name__]
+        regex: go_gc_.*
+  prometheusRule:
+    labels: {release: kube-prom}
+    disabledAlerts: [DismistAPFlapping]
+    severityOverrides: {DismistAPSilent: info}
+    extraGroups:
+      - name: dismist.extra
+        rules:
+          - alert: DismistExample
+            expr: vector(0) > 1
+            labels: {severity: info}
+  dashboards:
+    namespace: monitoring
+    folder: Wi-Fi
+    annotations: {example.com/note: dashboards}
+  networkPolicy:
+    enabled: true
+apFeatures: [example-feature]

@@ -1,0 +1,61 @@
+# Prometheus alerting rules for dismist, shipped by the chart as a
+# PrometheusRule (metrics.prometheusRule). This is a plain rules file: promtool
+# checks and tests it as is (tests/dismist.test.yml), and the chart never
+# passes it through tpl, so the {{ $labels }} templates reach Prometheus.
+#
+# Conventions: one group per area; `max by (namespace, site, ap)` so
+# Alertmanager inhibition on [namespace, alertname, target] works and volatile
+# target labels drop out; only warning and info severities until alert
+# routing is decided; summaries name the AP and site, descriptions say what to
+# check. Severities can be overridden and alerts dropped per install
+# (metrics.prometheusRule.severityOverrides, disabledAlerts).
+#
+# Phase 0 ships the alerts the current exporter can back. Disconnection,
+# reboot, radio, uplink and certificate alerts follow with their metrics.
+groups:
+  - name: dismist.aps
+    rules:
+      - alert: DismistAPSilent
+        expr: |
+          (time() - max by (namespace, site, ap) (dismist_ap_last_seen_timestamp_seconds)) > 60
+          and on (namespace, site, ap)
+          max by (namespace, site, ap) (dismist_ap_connected) == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) is connected but silent for {{ $value | humanizeDuration }}"
+          description: "The AP's WebSocket session is open but no message has arrived for over a minute (it normally reports every few seconds). Check the AP's uplink and the dismist logs for this AP; the session should time out and the AP reconnect."
+      - alert: DismistAPFlapping
+        expr: |
+          max by (namespace, site, ap) (increase(dismist_ap_connections_total[1h])) > 4
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) reconnected more than 4 times in the last hour"
+          description: "Check whether the AP is rebooting (uptime in the dismist UI), its uplink and PoE, and the dismist logs for the disconnect reasons. Config saves that change this AP's config also reconnect it."
+      - alert: DismistAPConfigNotApplied
+        expr: |
+          (
+            max by (namespace, site, ap) (dismist_ap_desired_revision)
+            > on (namespace, site, ap)
+            max by (namespace, site, ap) (dismist_ap_applied_revision)
+          )
+          and on (namespace, site, ap)
+          max by (namespace, site, ap) (dismist_ap_connected) == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) has not applied config revision {{ $value }}"
+          description: "The AP is connected but has not reported the current config revision as applied for 10 minutes. Check the AP's last config error in the dismist UI; the AP may have rejected the config."
+      - alert: DismistAPConfigCompileError
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_config_compile_error) == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "dismist cannot compile the config for AP {{ $labels.ap }} (site {{ $labels.site }})"
+          description: "The AP keeps the last config it was delivered, so recent changes do not reach it. Open the AP's config page in dismist for the compile error, usually an expert patch, and fix or remove it."

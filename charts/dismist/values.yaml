@@ -16,10 +16,12 @@ fullnameOverride: ""
 
 # Secret holding the controller's private files. Required. Expected keys:
 #   admin.token   64-character UI administrator token (dismist init writes one)
-#   <name>.bin    one raw 32-byte EEPROM secret per AP; register the AP with
-#                 secret file /private/<name>.bin
 #   tls.crt/key   the AP WSS certificate and key, unless tls.secretName or
 #                 tls.certificate supplies them
+# AP EEPROM secrets live in the database: paste or upload each AP's secret
+# when you register it in the UI or API. (A <name>.bin key is only needed for
+# an old AP record that still points at /private/<name>.bin; dismistd imports
+# that file into the database once at startup.)
 # An init container copies the keys to a memory volume at /private, owned by
 # the daemon user with mode 0600, because dismistd rejects readable secrets.
 # Restart the pod after changing the Secret.
@@ -64,9 +66,11 @@ controller:
   # Key in privateSecret holding a custom AP config template. Empty uses the
   # bundled AP33 template.
   apConfigKey: ""
-  # Prometheus metrics listen address inside the pod (loopback only; empty
-  # disables).
-  metricsListen: 127.0.0.1:9090
+  # Deprecated: use metrics.*. Overrides the loopback metrics listen address
+  # (default 127.0.0.1:<metrics.port>) while metrics are not exposed; an
+  # empty string disables metrics. Ignored once metrics.service,
+  # metrics.serviceMonitor or monitoring.enabled exposes them.
+  metricsListen: null
   extraArgs: []
 
 # Container listen ports. The AP Service maps 443 (and 53 if exposed) onto
@@ -93,9 +97,11 @@ service:
 
 # The AP-facing endpoint: WSS on TCP 443, plus AP DNS on UDP/TCP 53 if
 # exposeDNS is set (only for APs still resolving ep-terminator.mistsys.net
-# through dismist). Dismist identifies APs by source IP, so keep
-# externalTrafficPolicy Local (or another path without source NAT) and
-# register each AP with the address it arrives from.
+# through dismist). Dismist identifies each AP by the ID it authenticates
+# with, so any number of APs can share one NAT address. externalTrafficPolicy
+# Local keeps each AP's real source address, which dismist shows as the AP's
+# public address, checks against an AP record's optional source pin
+# (management IP), and uses to answer AP DNS only for registered APs.
 apService:
   enabled: true
   type: LoadBalancer
@@ -161,6 +167,112 @@ resources:
     memory: 64Mi
   limits:
     memory: 512Mi
+
+# Prometheus metrics, alerts and Grafana dashboards.
+#
+# One switch ships the scrape Service, ServiceMonitor, PrometheusRule and
+# dashboard ConfigMap (the last two once the chart carries rules and
+# dashboards). Each part below also has its own `enabled`: null follows this
+# switch, true or false overrides it. The ServiceMonitor and PrometheusRule
+# need the Prometheus Operator CRDs (monitoring.coreos.com).
+monitoring:
+  enabled: false
+
+metrics:
+  # Serve /metrics. While nothing exposes it, dismistd listens on the pod's
+  # loopback only (127.0.0.1:<port>). Exposing it (service, serviceMonitor or
+  # scrapeAnnotations) makes dismistd listen on :<port>, all addresses.
+  enabled: true
+  port: 9090
+  # Add site, AP and WLAN names as a `name` label on *_info series
+  # (-metrics-names). Off: series carry IDs only.
+  includeNames: false
+  # Client series: off, aggregate or per-client (per-client exports client
+  # MACs) (-metrics-clients), and the per-client cap (-metrics-client-limit).
+  clients: aggregate
+  clientLimit: 100
+  # Require a bearer token on every scrape: the name of a Secret in the
+  # release namespace and the key holding the token (at least 16 characters,
+  # for example `openssl rand -hex 32`). dismistd reads it at startup and the
+  # ServiceMonitor sends it. Empty: no token.
+  auth:
+    existingSecret: ""
+    key: token
+  # With hostNetwork, exposing metrics would publish them on the node's
+  # addresses; the chart refuses unless this is true.
+  allowHostNetwork: false
+  # Add prometheus.io/scrape, port and path pod annotations for a Prometheus
+  # without the Operator. Exposes the listener like the Service does.
+  scrapeAnnotations: false
+  # ClusterIP Service <fullname>-metrics. null follows monitoring.enabled;
+  # the ServiceMonitor turns it on too.
+  service:
+    enabled: null
+    port: 9090
+    annotations: {}
+  serviceMonitor:
+    enabled: null
+    # Extra labels, if your Prometheus selects ServiceMonitors by label (for
+    # example release: <kube-prometheus-stack release>).
+    labels: {}
+    interval: 30s
+    scrapeTimeout: 10s
+    # Fail the scrape past this many samples (0: no limit).
+    sampleLimit: 0
+    # Set instance=<fullname> on every series, so AP series stay one series
+    # across pod restarts (the chart always runs one replica).
+    stableInstance: true
+    relabelings: []
+    metricRelabelings: []
+  prometheusRule:
+    enabled: null
+    labels: {}
+    # Alert names to leave out, for example [DismistAPFlapping].
+    disabledAlerts: []
+    # Alert name to severity, for example {DismistAPSilent: info}.
+    severityOverrides: {}
+    # Extra rule groups appended as is.
+    extraGroups: []
+  dashboards:
+    enabled: null
+    # Namespace for the dashboard ConfigMap; empty: the release namespace.
+    # The Grafana sidecar must watch it.
+    namespace: ""
+    label: grafana_dashboard
+    labelValue: "1"
+    folderAnnotation: grafana_folder
+    folder: Dismist
+    annotations: {}
+  # NetworkPolicy for the dismist pod: the UI, WSS and DNS ports stay open to
+  # everyone (the Gateway and the AP load balancer need them), and the
+  # metrics port only to `from`. Off by default.
+  networkPolicy:
+    enabled: false
+    from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: prometheus
+
+backup:
+  # Size limit of the /tmp emptyDir where a backup download is staged
+  # (GET /api/system/backup copies the database there, then streams it).
+  # Keep it above the database size.
+  tmpSizeLimit: 1Gi
+
+# Protocol features switched on for every AP (-ap-features). Empty: none.
+apFeatures: []
+
+probes:
+  # The startup probe checks /healthz every 5 s; this many failures (60 = 5
+  # minutes) cover a slow first start, such as a database migration.
+  startupFailureThreshold: 60
+  # The readiness probe path. /readyz answers 200 once the database works,
+  # the AP WSS listener is bound and any migration has finished, so the AP
+  # Service only sends APs to a pod that can serve them.
+  readinessPath: /readyz
 
 nodeSelector: {}
 tolerations: []

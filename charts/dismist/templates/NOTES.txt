@@ -5,4 +5,19 @@ Sign in with the admin.token from Secret {{ .Values.privateSecret.name }}.
 
 AP endpoint:{{ if .Values.hostNetwork }} the node's IP, port {{ .Values.listen.wss }}.{{ else if .Values.apService.enabled }} kubectl -n {{ .Release.Namespace }} get svc {{ include "dismist.fullname" . }}-ap{{ end }}
 Point each AP's cloud.ini url at wss://<that hostname>/ws, make sure its CA bundle trusts the
-certificate, and register the AP with the source address dismist sees for it.
+certificate, and register the AP by its ID with its EEPROM secret. APs are identified by the ID
+they authenticate with, so several APs may share one NAT address; dismist logs the ID of any
+unregistered AP that tries to connect.
+{{- if include "dismist.metricsExposed" . }}
+
+Metrics: {{ if include "dismist.metricsServiceEnabled" . }}Service {{ include "dismist.fullname" . }}-metrics, port {{ .Values.metrics.service.port }}{{ else }}pod port {{ .Values.metrics.port }}{{ end }}, path /metrics{{ if include "dismist.metricsToken" . }} (bearer token from Secret {{ .Values.metrics.auth.existingSecret }}){{ else }}, readable without a token by anything that can reach it{{ end }}.
+{{- if include "dismist.serviceMonitorEnabled" . }}
+ServiceMonitor {{ include "dismist.fullname" . }} scrapes it every {{ .Values.metrics.serviceMonitor.interval }}.
+{{- end }}
+{{- if not (kindIs "invalid" .Values.controller.metricsListen) }}
+controller.metricsListen is ignored while metrics are exposed.
+{{- end }}
+{{- else if .Values.metrics.enabled }}
+
+Metrics: pod loopback only (kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ include "dismist.fullname" . }} {{ .Values.metrics.port }}, then http://127.0.0.1:{{ .Values.metrics.port }}/metrics). Set monitoring.enabled=true (Prometheus Operator) or metrics.service.enabled=true for Prometheus to scrape them.
+{{- end }}

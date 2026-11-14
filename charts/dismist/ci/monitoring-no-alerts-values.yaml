@@ -1,0 +1,15 @@
+# A production-shaped install: monitoring on, names on the *_info series,
+# a sample limit as a backstop, and alerts off until alert routing is decided.
+# The Prometheus selects every ServiceMonitor, so no extra labels.
+privateSecret:
+  name: dismist-private
+monitoring:
+  enabled: true
+metrics:
+  includeNames: true
+  serviceMonitor:
+    sampleLimit: 20000
+  prometheusRule:
+    enabled: false
+  dashboards:
+    folder: Wi-Fi
