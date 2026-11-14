@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input, Textarea } from '@/components/ui/input'
 import { Mono } from '@/components/app/identifiers'
 import { normaliseMac } from '@/lib/mac'
-import { describedBy, FieldShell, ListInput, NumberInput, useOptionState } from './kit/fields'
+import { describedBy, FieldShell, Labeled, ListInput, NumberInput, useOptionState } from './kit/fields'
 import { NativeSelect, Switch } from './kit/primitives'
 import { parseSSHKeys, sshFingerprint } from './kit/validators'
 
@@ -126,13 +126,14 @@ export function SyslogField() {
           const err = (leaf: string) => errorAt(formState.errors, `${base}.${leaf}`)
           return (
             <div key={row.id} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-2 lg:grid-cols-[6rem_minmax(0,2fr)_6rem_6rem_6rem_minmax(0,1fr)_auto] lg:items-start">
-              <label className="grid gap-1 text-sm">
-                <span className="text-muted-foreground">Protocol</span>
-                <NativeSelect {...register(`${base}.protocol`)} disabled={!state.editable}>
-                  <option value="udp">UDP</option>
-                  <option value="tcp">TCP</option>
-                </NativeSelect>
-              </label>
+              <Labeled label="Protocol">
+                {(selectId) => (
+                  <NativeSelect id={selectId} {...register(`${base}.protocol`)} disabled={!state.editable}>
+                    <option value="udp">UDP</option>
+                    <option value="tcp">TCP</option>
+                  </NativeSelect>
+                )}
+              </Labeled>
               <label className="grid gap-1 text-sm">
                 <span className="text-muted-foreground">Host</span>
                 <Input {...register(`${base}.host`)} disabled={!state.editable} autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={err('host') ? true : undefined} />
@@ -141,10 +142,7 @@ export function SyslogField() {
               <SmallNumber name={`${base}.port`} label="Port" min={1} max={65535} disabled={!state.editable} error={err('port')} />
               <SmallNumber name={`${base}.facility`} label="Facility" min={0} max={23} disabled={!state.editable} error={err('facility')} />
               <SmallNumber name={`${base}.severity`} label="Severity" min={0} max={7} disabled={!state.editable} error={err('severity')} />
-              <label className="grid gap-1 text-sm">
-                <span className="text-muted-foreground">Tag</span>
-                <Input {...register(`${base}.tag`)} disabled={!state.editable} autoCapitalize="none" />
-              </label>
+              <Labeled label="Tag">{(tagId) => <Input id={tagId} {...register(`${base}.tag`)} disabled={!state.editable} autoCapitalize="none" />}</Labeled>
               <Button variant="ghost" size="icon-sm" className="lg:mt-6" aria-label={`Remove syslog target ${index + 1}`} disabled={!state.editable} onClick={() => remove(index)}>
                 <Trash2 />
               </Button>
@@ -231,10 +229,9 @@ export function MACListField() {
           <p className="text-sm text-muted-foreground">No blocked clients.</p>
         )}
         <div className="flex flex-wrap items-end gap-2">
-          <label className="grid min-w-0 flex-1 gap-1 text-sm">
-            <span className="font-medium">Add MAC addresses</span>
-            <Input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="02:aa:bb:cc:dd:ee" disabled={!state.editable} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
-          </label>
+          <Labeled label="Add MAC addresses" className="min-w-0 flex-1" labelClassName="font-medium">
+            {(inputId) => <Input id={inputId} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="02:aa:bb:cc:dd:ee" disabled={!state.editable} autoCapitalize="none" autoCorrect="off" spellCheck={false} />}
+          </Labeled>
           <Button variant="outline" disabled={!state.editable || !paste.trim()} onClick={add}>
             <Plus /> Block
           </Button>

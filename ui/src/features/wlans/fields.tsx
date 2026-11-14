@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ExperimentalBadge } from '@/features/settings/kit/badges'
 import { useConfigFormContext } from '@/features/settings/kit/context'
-import { describedBy, FieldShell, NumberInput, PasswordInput, useOptionState } from '@/features/settings/kit/fields'
+import { describedBy, FieldShell, Labeled, NumberInput, PasswordInput, useOptionState } from '@/features/settings/kit/fields'
 import { visibleEnum } from '@/features/settings/kit/options'
 import { NativeSelect, Segmented } from '@/features/settings/kit/primitives'
 import { cn } from '@/lib/utils'
@@ -360,13 +360,14 @@ export function DynamicVlanField() {
             <Input {...register('radius.dynamic_vlan.vlan_ids')} placeholder="30, 40" inputMode="numeric" disabled={!state.editable} aria-invalid={error ? true : undefined} />
             {error ? <span role="alert" className="text-destructive">{error}</span> : null}
           </label>
-          <label className="grid gap-1 text-sm">
-            <span className="text-muted-foreground">Attribute</span>
-            <NativeSelect value={typeField.value} onChange={(e) => typeField.onChange(e.target.value)} disabled={!state.editable}>
-              <option value="standard">Standard (Tunnel-Private-Group-ID)</option>
-              <option value="airespace-interface-name">Airespace interface name</option>
-            </NativeSelect>
-          </label>
+          <Labeled label="Attribute">
+            {(selectId) => (
+              <NativeSelect id={selectId} value={typeField.value} onChange={(e) => typeField.onChange(e.target.value)} disabled={!state.editable}>
+                <option value="standard">Standard (Tunnel-Private-Group-ID)</option>
+                <option value="airespace-interface-name">Airespace interface name</option>
+              </NativeSelect>
+            )}
+          </Labeled>
         </div>
       ) : null}
     </FieldShell>
@@ -398,10 +399,7 @@ export function MPSKKeys() {
                 <Input {...register(`${base}.mac`)} placeholder="Any device" disabled={!state.editable} autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={err('mac') ? true : undefined} />
                 {err('mac') ? <span role="alert" className="text-destructive">{err('mac')}</span> : null}
               </label>
-              <label className="grid gap-1 text-sm">
-                <span className="text-muted-foreground">Expires</span>
-                <Input type="date" {...register(`${base}.expires`)} disabled={!state.editable} />
-              </label>
+              <Labeled label="Expires">{(dateId) => <Input id={dateId} type="date" {...register(`${base}.expires`)} disabled={!state.editable} />}</Labeled>
               <Button variant="ghost" size="icon-sm" className="xl:mt-6" aria-label={`Remove key ${index + 1}`} onClick={() => remove(index)} disabled={!state.editable}>
                 <Trash2 />
               </Button>

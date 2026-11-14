@@ -322,7 +322,7 @@ export function insertablePaths(scope: ExpertScope): string[] {
       }
     }
   }
-  return [...out].sort()
+  return [...out].toSorted()
 }
 
 /** Adds a firmware path to a patch with a placeholder value the server will reject until it is replaced. */

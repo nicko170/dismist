@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { useController, useFormContext, useWatch, type FieldValues } from 'react-hook-form'
 import { Eye, EyeOff, KeyRound, Minus, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import type { OptionMeta } from '@/gen/options.gen'
@@ -195,7 +195,10 @@ export function OptionField(props: OptionFieldProps) {
   const state = useOptionState(props.k, { disabled: props.disabled })
   const { experimentalAllowed } = useConfigFormContext()
   const { control } = useFormContext()
-  const { field, fieldState } = useController({ name: state.name, control })
+  const {
+    field: { ref: fieldRef, value, onChange, onBlur, name },
+    fieldState,
+  } = useController({ name: state.name, control })
   const id = useId()
   if (state.hidden) return null
   const { meta, editable, badges, lockReason } = state
@@ -221,25 +224,25 @@ export function OptionField(props: OptionFieldProps) {
       return shell(
         <Switch
           {...common}
-          checked={Boolean(field.value)}
-          onCheckedChange={(checked) => field.onChange(checked)}
-          onBlur={field.onBlur}
-          ref={field.ref}
+          checked={Boolean(value)}
+          onCheckedChange={(checked) => onChange(checked)}
+          onBlur={onBlur}
+          ref={fieldRef}
         />,
         { inline: true },
       )
     case 'select': {
       const choices: { value: string; label: string; disabled?: boolean }[] =
-        props.choices ?? visibleEnum(meta, experimentalAllowed, field.value).map((v) => ({ value: v.value, label: v.experimental ? `${v.label} (experimental)` : v.label }))
+        props.choices ?? visibleEnum(meta, experimentalAllowed, value).map((v) => ({ value: v.value, label: v.experimental ? `${v.label} (experimental)` : v.label }))
       const numeric = meta.type === 'int'
       return shell(
         <NativeSelect
           {...common}
-          name={field.name}
-          ref={field.ref}
-          value={field.value == null ? '' : String(field.value)}
-          onBlur={field.onBlur}
-          onChange={(e) => field.onChange(numeric ? Number(e.target.value) : e.target.value)}
+          name={name}
+          ref={fieldRef}
+          value={value == null ? '' : String(value)}
+          onBlur={onBlur}
+          onChange={(e) => onChange(numeric ? Number(e.target.value) : e.target.value)}
         >
           {choices.map((c) => (
             <option key={c.value} value={c.value} disabled={c.disabled}>
@@ -250,13 +253,13 @@ export function OptionField(props: OptionFieldProps) {
       )
     }
     case 'segmented': {
-      const choices = props.choices ?? visibleEnum(meta, experimentalAllowed, field.value).map((v) => ({ value: v.value, label: v.label }))
+      const choices = props.choices ?? visibleEnum(meta, experimentalAllowed, value).map((v) => ({ value: v.value, label: v.label }))
       return shell(
         <Segmented
           aria-labelledby={`${id}-label`}
           aria-describedby={common['aria-describedby']}
-          value={field.value == null ? '' : String(field.value)}
-          onValueChange={(v) => field.onChange(meta.type === 'int' ? Number(v) : v)}
+          value={value == null ? '' : String(value)}
+          onValueChange={(v) => onChange(meta.type === 'int' ? Number(v) : v)}
           disabled={!editable}
           options={choices}
         />,
@@ -269,9 +272,9 @@ export function OptionField(props: OptionFieldProps) {
         <ChipGroup
           labelledBy={`${id}-label`}
           describedBy={common['aria-describedby']}
-          value={(field.value as (string | number)[] | undefined) ?? []}
+          value={(value as (string | number)[] | undefined) ?? []}
           numeric={meta.type === '[]int'}
-          onChange={field.onChange}
+          onChange={onChange}
           choices={choices}
           disabled={!editable}
         />,
@@ -282,11 +285,11 @@ export function OptionField(props: OptionFieldProps) {
       return shell(
         <NumberInput
           {...common}
-          name={field.name}
-          inputRef={field.ref}
-          value={field.value as number | string | null}
-          onChange={field.onChange}
-          onBlur={field.onBlur}
+          name={name}
+          inputRef={fieldRef}
+          value={value as number | string | null}
+          onChange={onChange}
+          onBlur={onBlur}
           min={meta.min}
           max={meta.max}
           unit={meta.unit}
@@ -297,8 +300,8 @@ export function OptionField(props: OptionFieldProps) {
       return shell(
         <SliderInput
           id={id}
-          value={field.value as number | null}
-          onChange={field.onChange}
+          value={value as number | null}
+          onChange={onChange}
           min={meta.min ?? 0}
           max={meta.max ?? 100}
           disabled={!editable}
@@ -312,11 +315,11 @@ export function OptionField(props: OptionFieldProps) {
       return shell(
         <PasswordInput
           {...common}
-          name={field.name}
-          inputRef={field.ref}
-          value={(field.value as string | undefined) ?? ''}
-          onChange={field.onChange}
-          onBlur={field.onBlur}
+          name={name}
+          inputRef={fieldRef}
+          value={(value as string | undefined) ?? ''}
+          onChange={onChange}
+          onBlur={onBlur}
           saved={props.saved}
         />,
       )
@@ -324,8 +327,8 @@ export function OptionField(props: OptionFieldProps) {
       return shell(
         <ListInput
           id={id}
-          value={(field.value as string[] | undefined) ?? []}
-          onChange={field.onChange}
+          value={(value as string[] | undefined) ?? []}
+          onChange={onChange}
           max={meta.max}
           disabled={!editable}
           describedBy={common['aria-describedby']}
@@ -339,16 +342,16 @@ export function OptionField(props: OptionFieldProps) {
     case 'ip':
     default: {
       const maxBytes = meta.maxBytes
-      const length = typeof field.value === 'string' ? utf8Length(field.value) : 0
+      const length = typeof value === 'string' ? utf8Length(value) : 0
       return shell(
         <div className="grid gap-1">
           <Input
             {...common}
-            name={field.name}
-            ref={field.ref}
-            value={(field.value as string | undefined) ?? ''}
-            onChange={(e) => field.onChange(e.target.value)}
-            onBlur={field.onBlur}
+            name={name}
+            ref={fieldRef}
+            value={(value as string | undefined) ?? ''}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
             placeholder={props.placeholder}
             inputMode={kind === 'ip' ? 'decimal' : undefined}
             autoCapitalize="none"
@@ -401,7 +404,7 @@ export function ChipGroup({
             disabled={disabled || (choice.disabled && !on)}
             onClick={() => {
               const next = on ? value.filter((v) => String(v) !== choice.value) : [...value, numeric ? Number(choice.value) : choice.value]
-              onChange(numeric ? (next as number[]).slice().sort((a, b) => Number(a) - Number(b)) : next)
+              onChange(numeric ? (next as number[]).toSorted((a, b) => Number(a) - Number(b)) : next)
             }}
             className={cn(
               'inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-full border px-3.5 text-sm font-medium tabular-nums transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 fine:md:min-h-8',
@@ -415,6 +418,20 @@ export function ChipGroup({
       })}
     </div>
   )
+}
+
+function numberText(value: number | string | null | undefined, negativeOnly: boolean): string {
+  if (value == null || value === '') return ''
+  return negativeOnly && typeof value === 'number' ? String(-value) : String(value)
+}
+
+/** Text to a number (negated for negative-only ranges), the raw text when not a whole number, or null when empty. */
+export function parseNumber(text: string, negativeOnly: boolean): number | string | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  if (!/^-?\d+$/.test(trimmed)) return trimmed
+  const n = Number(trimmed)
+  return negativeOnly ? -n : n
 }
 
 /**
@@ -453,25 +470,19 @@ export function NumberInput({
 }) {
   const negativeOnly = max != null && max < 0
   const signed = !negativeOnly && min != null && min < 0
-  const toText = (v: typeof value) => (v == null || v === '' ? '' : negativeOnly && typeof v === 'number' ? String(-v) : String(v))
-  const [text, setText] = useState(() => toText(value))
-  useEffect(() => {
-    const parsed = parse(text)
-    if (parsed !== value) setText(toText(value))
-    // Only react to outside changes (reset, restore).
-  }, [value])
-
-  function parse(t: string): number | string | null {
-    const trimmed = t.trim()
-    if (!trimmed) return null
-    if (!/^-?\d+$/.test(trimmed)) return trimmed
-    const n = Number(trimmed)
-    return negativeOnly ? -n : n
+  const [text, setText] = useState(() => numberText(value, negativeOnly))
+  // Adopt outside changes (reset, restore) during render, not in an effect.
+  const [seen, setSeen] = useState(value)
+  if (seen !== value) {
+    setSeen(value)
+    if (parseNumber(text, negativeOnly) !== value) setText(numberText(value, negativeOnly))
   }
 
   const update = (t: string) => {
     setText(t)
-    onChange(parse(t))
+    const parsed = parseNumber(t, negativeOnly)
+    setSeen(parsed)
+    onChange(parsed)
   }
 
   return (
@@ -604,12 +615,8 @@ export function PasswordInput({
   'aria-describedby'?: string
 }) {
   const [shown, setShown] = useState(false)
-  const [changing, setChanging] = useState(!saved || Boolean(value))
-  useEffect(() => {
-    if (saved && !value) setChanging(false)
-    if (!saved) setChanging(true)
-  }, [saved, value])
-  if (!changing) {
+  const [changing, setChanging] = useState(false)
+  if (saved && !changing && !value) {
     return (
       <div className="flex flex-wrap items-center gap-3">
         <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -763,5 +770,46 @@ export function BoundSwitch({ name, optionKey, label, help }: { name: string; op
         aria-invalid={fieldState.error ? true : undefined}
       />
     </FieldShell>
+  )
+}
+
+/** A visible label tied to its control by id (`children` receives the id). */
+export function Labeled({ label, children, className, labelClassName = 'text-muted-foreground' }: { label: ReactNode; children: (id: string) => ReactNode; className?: string; labelClassName?: string }) {
+  const id = useId()
+  return (
+    <div className={cn('grid gap-1 text-sm', className)}>
+      <label htmlFor={id} className={labelClassName}>
+        {label}
+      </label>
+      {children(id)}
+    </div>
+  )
+}
+
+/** A label and a switch on one 44 px row. */
+export function SwitchRow({
+  label,
+  checked,
+  onCheckedChange,
+  disabled,
+  className,
+  reverse,
+}: {
+  label: ReactNode
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  disabled?: boolean
+  className?: string
+  /** Switch first, then the label. */
+  reverse?: boolean
+}) {
+  const id = useId()
+  const control = <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+  return (
+    <div className={cn('flex min-h-11 items-center gap-3 text-sm', reverse ? '' : 'justify-between font-medium', className)}>
+      {reverse ? control : null}
+      <label htmlFor={id}>{label}</label>
+      {reverse ? null : control}
+    </div>
   )
 }

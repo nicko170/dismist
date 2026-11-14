@@ -90,8 +90,7 @@ function WlanEditorForm({
     () => (view ? toForm(view) : source ? duplicateForm(source) : presetForm(preset, experimental)),
     [view, source, preset, experimental],
   )
-  const ctx = { create, current: view, others: networks.filter((n) => n.id !== view?.id) }
-  const schema = useMemo(() => wlanSchema(ctx), [create, view, networks])
+  const schema = useMemo(() => wlanSchema({ create, current: view, others: networks.filter((n) => n.id !== view?.id) }), [create, view, networks])
   const context = useSiteFormContext(siteId, {
     expert: view?.expert ?? null,
     expertLink: view ? { to: `/sites/${encodeURIComponent(siteId)}/wlans/${encodeURIComponent(view.id)}/expert` } : null,

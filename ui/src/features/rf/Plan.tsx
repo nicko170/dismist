@@ -51,7 +51,7 @@ function Actual({ row }: { row: PlanRow }) {
 
 export function PlanTable({ siteId, rows }: { siteId: string; rows: PlanRow[] }) {
   if (!rows.length) return <EmptyState title="No APs in this site yet. Their radios appear here once they are added." />
-  const sorted = [...rows].sort((a, b) => a.ap_name.localeCompare(b.ap_name) || a.band.localeCompare(b.band))
+  const sorted = rows.toSorted((a, b) => a.ap_name.localeCompare(b.ap_name) || a.band.localeCompare(b.band))
   return (
     <>
       <ul className="grid gap-3 md:hidden" aria-label="Channel plan">

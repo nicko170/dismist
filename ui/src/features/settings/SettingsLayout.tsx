@@ -26,7 +26,8 @@ export function SettingsLayout({ siteId, children }: { siteId: string; children:
   const active = SETTINGS_PAGES.find((p) => pathname.endsWith(`/settings/${p.slug}`))?.slug
   const strip = useRef<HTMLElement>(null)
   useEffect(() => {
-    strip.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    if (!active) return
+    strip.current?.querySelector<HTMLElement>(`[data-slug="${active}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }, [active])
   return (
     <div className="grid gap-5">
@@ -38,6 +39,7 @@ export function SettingsLayout({ siteId, children }: { siteId: string; children:
               <Link
                 to={`/sites/${encodeURIComponent(siteId)}/settings/${page.slug}` as never}
                 aria-current={active === page.slug ? 'page' : undefined}
+                data-slug={page.slug}
                 className={cn(
                   '-mb-px inline-flex min-h-11 items-center border-b-2 border-transparent px-3 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground fine:md:min-h-9',
                   active === page.slug && 'border-brand text-foreground',

@@ -79,7 +79,7 @@ export function remapChannels(band: Band, channels: number[], width: number, val
     const chip = chips.find((c) => c.channels.includes(channel) || c.value === channel)
     if (chip) out.add(chip.value)
   }
-  return [...out].sort((a, b) => a - b)
+  return [...out].toSorted((a, b) => a - b)
 }
 
 /** Whether a static channel is valid for the band, width and DFS setting (§3.6 Radios). */

@@ -125,22 +125,24 @@ function timezones(): string[] {
 
 export function GeneralSettings({ siteId, site }: { siteId: string; site: SiteConfigView }) {
   const sites = useQuery(sitesQuery)
-  const values = useMemo<GeneralForm>(() => ({ name: site.name, country: site.country, timezone: site.timezone }), [site])
-  const others = (sites.data ?? []).filter((s) => s.id !== siteId).map((s) => s.name.toLowerCase())
-  const schema = useMemo(
-    () =>
-      z.object({
-        name: z
-          .string()
-          .trim()
-          .min(1, { error: 'Enter a name.' })
-          .max(64, { error: 'At most 64 characters.' })
-          .refine((v) => !others.includes(v.toLowerCase()), { error: 'Another site already has this name.' }),
-        country: z.string().min(1, { error: 'Choose a country.' }),
-        timezone: z.string().min(1, { error: 'Choose a timezone.' }),
-      }),
-    [others.join('\u0000')],
-  )
+  const values: GeneralForm = { name: site.name, country: site.country, timezone: site.timezone }
+  const othersKey = (sites.data ?? [])
+    .filter((s) => s.id !== siteId)
+    .map((s) => s.name.toLowerCase())
+    .join('\u0000')
+  const schema = useMemo(() => {
+    const others = othersKey ? othersKey.split('\u0000') : []
+    return z.object({
+      name: z
+        .string()
+        .trim()
+        .min(1, { error: 'Enter a name.' })
+        .max(64, { error: 'At most 64 characters.' })
+        .refine((v) => !others.includes(v.toLowerCase()), { error: 'Another site already has this name.' }),
+      country: z.string().min(1, { error: 'Choose a country.' }),
+      timezone: z.string().min(1, { error: 'Choose a timezone.' }),
+    })
+  }, [othersKey])
   const zones = useMemo(() => {
     const list = timezones()
     return list.includes(site.timezone) || !site.timezone ? list : [site.timezone, ...list]
@@ -171,7 +173,7 @@ export function GeneralSettings({ siteId, site }: { siteId: string; site: SiteCo
       <Section id="general" title="General">
         <OptionField k="site.name" />
         <OptionField k="site.country" control="select" choices={countries} help={`${getOption('site.country').help} ccrev: ${site.ccrev ?? 'none'}.`} />
-        <OptionField k="site.timezone" control="select" choices={zones.map((z) => ({ value: z, label: z.replaceAll('_', ' ') }))} />
+        <OptionField k="site.timezone" control="select" choices={zones.map((zone) => ({ value: zone, label: zone.replaceAll('_', ' ') }))} />
       </Section>
     </SiteSectionForm>
   )
@@ -186,7 +188,7 @@ export function AccessSettings({ siteId, site }: { siteId: string; site: SiteCon
     ssh: { enabled: s.ssh.enabled, keys: s.ssh.keys.map((k) => ({ ...k })), readonly_keys: s.ssh.readonly_keys.map((k) => ({ ...k })) },
     syslog: s.syslog.map((t) => ({ ...t })),
   })
-  const values = useMemo(() => toValues(site), [site])
+  const values = toValues(site)
   const schema = z
     .object({
       ssh: z.object({ enabled: z.boolean(), keys: z.array(z.any()).max(32, { error: 'At most 32 keys.' }), readonly_keys: z.array(z.any()).max(32, { error: 'At most 32 keys.' }) }),
@@ -255,7 +257,7 @@ export function NetworkSettings({ siteId, site }: { siteId: string; site: SiteCo
   const toValues = (s: SiteConfigView): NetworkForm => ({
     management: { ntp: [...s.management.ntp], dns: [...s.management.dns], vlan: { tagged: s.management.vlan_id > 1, id: s.management.vlan_id > 1 ? s.management.vlan_id : null } },
   })
-  const values = useMemo(() => toValues(site), [site])
+  const values = toValues(site)
   const recovery = Boolean(site.ap_defaults.config_recovery?.enabled)
   const schema = z.object({
     management: z
@@ -362,7 +364,7 @@ export function APDefaultsSettings({ siteId, site }: { siteId: string; site: Sit
       ble_enabled: !s.ap_defaults.ble_disabled,
     },
   })
-  const values = useMemo(() => toValues(site), [site])
+  const values = toValues(site)
   const schema = z.object({
     ap_defaults: z
       .object({
@@ -445,7 +447,7 @@ export function ProtectionSettings({ siteId, site }: { siteId: string; site: Sit
       dhcp_fingerprinting: s.protection.dhcp_fingerprinting,
     },
   })
-  const values = useMemo(() => toValues(site), [site])
+  const values = toValues(site)
   const schema = z.object({
     protection: z
       .object({
@@ -572,7 +574,7 @@ export function AdvancedSettings({ siteId, site }: { siteId: string; site: SiteC
 }
 
 function ExperimentalToggle({ siteId, site }: { siteId: string; site: SiteConfigView }) {
-  const values = useMemo(() => ({ experimental: site.experimental }), [site.experimental])
+  const values = { experimental: site.experimental }
   const inUse = site.experimental_in_use ?? []
   return (
     <SiteSectionForm

@@ -34,21 +34,18 @@ export function Section({
   className?: string
   actions?: ReactNode
 }) {
-  const [open, setOpen] = useState(defaultOpen)
+  const [open, setOpen] = useState(() => defaultOpen || (typeof window !== 'undefined' && window.location.hash === `#${id}`))
   useEffect(() => {
     const openFromHash = () => {
-      if (window.location.hash === `#${id}`) {
-        setOpen(true)
-        requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }))
-      }
+      if (window.location.hash !== `#${id}`) return
+      setOpen(true)
+      requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }))
     }
-    openFromHash()
+    if (window.location.hash === `#${id}`) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }))
     window.addEventListener('hashchange', openFromHash)
     return () => window.removeEventListener('hashchange', openFromHash)
   }, [id])
-  useEffect(() => {
-    if (forceOpen) setOpen(true)
-  }, [forceOpen])
+  const isOpen = open || forceOpen
 
   const headingId = `${id}-heading`
   if (!collapsible) {
@@ -69,7 +66,7 @@ export function Section({
     )
   }
   return (
-    <Collapsible.Root asChild open={open} onOpenChange={setOpen}>
+    <Collapsible.Root asChild open={isOpen} onOpenChange={setOpen}>
       <section id={id} aria-labelledby={headingId} className={cn('scroll-mt-20 rounded-xl border bg-card', className)}>
         <h2 id={headingId} className="text-base font-semibold">
           <Collapsible.Trigger className="flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/30 md:px-5">
@@ -80,7 +77,7 @@ export function Section({
               </span>
               {summary ? <span className="truncate text-sm font-normal text-muted-foreground">{summary}</span> : null}
             </span>
-            <ChevronDown aria-hidden className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-150', open && 'rotate-180')} />
+            <ChevronDown aria-hidden className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-150', isOpen && 'rotate-180')} />
           </Collapsible.Trigger>
         </h2>
         <Collapsible.Content className="grid gap-5 border-t px-4 pt-4 pb-5 md:px-5">

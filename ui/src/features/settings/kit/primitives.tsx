@@ -178,12 +178,12 @@ export function ConfirmDialog({
   onConfirm: () => void
   confirmText?: string
 }) {
-  const [typed, setTyped] = React.useState('')
+  const [typed, setTyped] = React.useState({ open, value: '' })
+  // A fresh dialog starts empty: the typed text belongs to one opening.
+  const current = typed.open === open ? typed.value : ''
+  const setValue = (value: string) => setTyped({ open, value })
   const inputId = React.useId()
-  React.useEffect(() => {
-    if (!open) setTyped('')
-  }, [open])
-  const blocked = Boolean(confirmText) && typed.trim() !== confirmText
+  const blocked = Boolean(confirmText) && current.trim() !== confirmText
   return (
     <AD.Root open={open} onOpenChange={onOpenChange}>
       <AD.Portal>
@@ -204,8 +204,8 @@ export function ConfirmDialog({
               <input
                 id={inputId}
                 className={inputClass}
-                value={typed}
-                onChange={(e) => setTyped(e.target.value)}
+                value={current}
+                onChange={(e) => setValue(e.target.value)}
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}

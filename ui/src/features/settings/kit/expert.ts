@@ -100,7 +100,7 @@ export function keyCompletions(scope: ExpertScope): string[] {
     }
   }
   for (const extra of scope === 'wlan' ? ['Band', 'RateSets', 'BandConfigs'] : ['Band', 'Radios', 'SwitchPorts', 'SVIs', 'Name', 'Vlan_ID', '$remove']) words.add(extra)
-  return [...words].sort()
+  return [...words].toSorted()
 }
 
 export type ParseResult = { ok: true; value: Record<string, unknown> } | { ok: false; message: string }

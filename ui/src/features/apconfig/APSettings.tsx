@@ -24,7 +24,7 @@ import { sitesQuery } from '@/features/shell/queries'
 import { usePageTitle } from '@/features/shell/title'
 import { ExperimentalBadge, InheritedValue } from '@/features/settings/kit/badges'
 import { ConfigForm } from '@/features/settings/kit/ConfigForm'
-import { describedBy, FieldShell, NumberInput, OptionField, SliderInput, useOptionState } from '@/features/settings/kit/fields'
+import { describedBy, FieldShell, NumberInput, OptionField, SliderInput, SwitchRow, useOptionState } from '@/features/settings/kit/fields'
 import { UnsavedChangesGuard } from '@/features/settings/kit/guard'
 import { NativeSelect, Segmented, Switch } from '@/features/settings/kit/primitives'
 import { Section } from '@/features/settings/kit/Section'
@@ -154,7 +154,7 @@ function GeneralSection({ siteId, ap, site }: { siteId: string; ap: APSettingsVi
   const system = useQuery(systemMigrationQuery)
   const dnsMode = Boolean(system.data?.dns_mode || ap.dns_mode)
   const toValues = (a: APSettingsView): GeneralForm => ({ name: a.name, site_id: a.site_id, management_ip: a.pinned_ip ?? '', secret: '' })
-  const values = useMemo(() => toValues(ap), [ap])
+  const values = toValues(ap)
   const schema = z.object({
     name: z.string().trim().min(1, { error: 'Enter a name.' }).max(64, { error: 'At most 64 characters.' }),
     site_id: z.string().min(1, { error: 'Choose a site.' }),
@@ -259,9 +259,12 @@ function SecretField({ hasSecret }: { hasSecret: boolean }) {
   const { field, fieldState } = useController({ control, name: 'secret' })
   const [open, setOpen] = useState(false)
   const id = useId()
-  useEffect(() => {
+  // Collapse the paste box again once the form is reset (after a save).
+  const [seen, setSeen] = useState(field.value)
+  if (seen !== field.value) {
+    setSeen(field.value)
     if (!field.value) setOpen(false)
-  }, [field.value])
+  }
   return (
     <FieldShell id={id} label={state.meta.label} help={state.meta.help} error={fieldState.error?.message} dirty={Boolean(field.value)} labelAs={open ? 'label' : 'span'}>
       <p className="text-sm">{hasSecret ? 'A secret is stored. It is never shown.' : 'No secret yet: the AP cannot connect until one is uploaded.'}</p>
@@ -311,7 +314,7 @@ type LEDForm = { led: { override: boolean; value: number | string | null } }
 
 function LEDSection({ siteId, ap, site }: { siteId: string; ap: APSettingsView; site: SiteConfigView }) {
   const toValues = (a: APSettingsView): LEDForm => ({ led: { override: a.overrides.led_brightness != null, value: a.overrides.led_brightness ?? site.ap_defaults.led_brightness } })
-  const values = useMemo(() => toValues(ap), [ap, site.ap_defaults.led_brightness])
+  const values = toValues(ap)
   const schema = z.object({
     led: z.object({ override: z.boolean(), value: z.unknown() }).superRefine((v, ctx) => {
       if (v.override && !(Number.isInteger(v.value) && (v.value as number) >= 0 && (v.value as number) <= 255)) ctx.addIssue({ code: 'custom', path: ['value'], message: 'Enter 0 to 255.' })
@@ -353,10 +356,7 @@ function OverrideRow({ name, label, inherited, optionKey, children }: { name: st
   return (
     <FieldShell id={id} label={label} labelAs="span" badges={state.badges} help={state.lockReason ?? undefined}>
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex min-h-11 items-center gap-2 text-sm">
-          <Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} disabled={!state.editable} aria-label={`Override ${label.toLowerCase()} for this AP`} />
-          Override
-        </label>
+        <SwitchRow reverse label={`Override for this AP`} checked={Boolean(field.value)} onCheckedChange={field.onChange} disabled={!state.editable} />
         <InheritedValue>{inherited}</InheritedValue>
       </div>
       {field.value ? children : null}
@@ -430,7 +430,7 @@ type SSHForm = { ssh: 'inherit' | 'on' | 'off' }
 
 function SSHSection({ siteId, ap, site }: { siteId: string; ap: APSettingsView; site: SiteConfigView }) {
   const toValues = (a: APSettingsView): SSHForm => ({ ssh: a.overrides.ssh_enabled == null ? 'inherit' : a.overrides.ssh_enabled ? 'on' : 'off' })
-  const values = useMemo(() => toValues(ap), [ap])
+  const values = toValues(ap)
   const keysCount = site.ssh.keys.length
   const schema = z.object({ ssh: z.enum(['inherit', 'on', 'off']) }).superRefine((v, ctx) => {
     if (v.ssh === 'on' && !keysCount) ctx.addIssue({ code: 'custom', path: ['ssh'], message: 'Add a root SSH key in the site’s Access settings first.' })
@@ -493,7 +493,7 @@ function bandOverrideForm(ap: APSettingsView, band: Band): BandOverrideForm {
 function RadiosSection({ siteId, ap }: { siteId: string; ap: APSettingsView }) {
   const rf = useQuery(rfQuery(siteId))
   const toValues = (a: APSettingsView): RadiosForm => ({ rf: { '2.4': bandOverrideForm(a, '2.4'), '5': bandOverrideForm(a, '5') } })
-  const values = useMemo(() => toValues(ap), [ap])
+  const values = toValues(ap)
   const profile = rf.data
   const schema = useMemo(
     () =>
@@ -592,10 +592,7 @@ function BandOverrideCard({ band, ap, profile }: { band: Band; ap: APSettingsVie
           Now: {live ? `ch ${live.channel}/${live.width} · max ${live.max_power_dbm ?? '–'} dBm · ${live.clients} clients` : 'no telemetry'}
         </span>
       </div>
-      <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
-        Use site profile
-        <Switch checked={v.use_site} disabled={!editable} onCheckedChange={(checked) => set('use_site', checked)} />
-      </label>
+      <SwitchRow label="Use site profile" checked={v.use_site} disabled={!editable} onCheckedChange={(checked) => set('use_site', checked)} />
       {v.use_site ? (
         <p className="text-sm text-muted-foreground">
           {plan ? `Auto: channel ${plan.channel}/${plan.width} at ${plan.power_dbm} dBm (${(plan as { source?: string }).source ?? 'plan'}).` : `Site profile: ${siteWidth} MHz, ${sitePower}.`}
@@ -709,7 +706,7 @@ type DiagnosticsForm = { features: Record<string, boolean> }
 function DiagnosticsSection({ siteId, ap }: { siteId: string; ap: APSettingsView }) {
   const names = useMemo(() => [...new Set([...PROTOCOL_FEATURES.map((f) => f.name as string), ...Object.keys(ap.protocol_features ?? {})])], [ap.protocol_features])
   const toValues = (a: APSettingsView): DiagnosticsForm => ({ features: Object.fromEntries(names.map((n) => [n, Boolean(a.protocol_features?.[n])])) })
-  const values = useMemo(() => toValues(ap), [ap, names])
+  const values = toValues(ap)
   const on = Object.values(values.features).filter(Boolean).length
   return (
     <APSectionForm
@@ -866,7 +863,7 @@ function ManagementSection({ siteId, ap, site }: { siteId: string; ap: APSetting
       },
     }
   }
-  const values = useMemo(() => toValues(ap), [ap])
+  const values = toValues(ap)
   if (!allowed && !current) return null
   const schema = z.object({
     management: z.any().superRefine((m: ManagementForm['management'], ctx) => {
@@ -947,10 +944,7 @@ function ManagementFields({ disabled }: { disabled: boolean }) {
   const set = (name: string, value: unknown) => setValue(`management.${name}` as never, value as never, { shouldDirty: true, shouldValidate: true })
   return (
     <div className={cn('grid gap-4', disabled && 'pointer-events-none opacity-60')} aria-disabled={disabled || undefined}>
-      <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
-        Override the management network for this AP
-        <Switch checked={m.override} disabled={disabled} onCheckedChange={(c) => set('override', c)} />
-      </label>
+      <SwitchRow label="Override the management network for this AP" checked={m.override} disabled={disabled} onCheckedChange={(c) => set('override', c)} />
       {m.override ? (
         <>
           <Segmented
@@ -997,10 +991,7 @@ function ManagementFields({ disabled }: { disabled: boolean }) {
             />
             {m.vlan.tagged ? <SmallNumber name="management.vlan.id" label="VLAN ID" min={2} max={4094} disabled={disabled} error={err('vlan.id')?.message} /> : null}
           </div>
-          <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
-            Use the site’s NTP servers
-            <Switch checked={m.ntp_inherit} disabled={disabled} onCheckedChange={(c) => set('ntp_inherit', c)} />
-          </label>
+          <SwitchRow label="Use the site’s NTP servers" checked={m.ntp_inherit} disabled={disabled} onCheckedChange={(c) => set('ntp_inherit', c)} />
           {!m.ntp_inherit ? <ServerListField optionKey="ap.management" name="management.ntp" label="NTP servers" help="At most 6." placeholder="pool.ntp.org" /> : null}
         </>
       ) : null}
@@ -1017,7 +1008,7 @@ function PortsSection({ siteId, ap, site }: { siteId: string; ap: APSettingsView
     eth1: eth1ToForm(a.overrides.eth1 as never, true),
     wired_client_stats: a.overrides.wired_client_stats == null ? 'inherit' : a.overrides.wired_client_stats ? 'on' : 'off',
   })
-  const values = useMemo(() => toValues(ap), [ap])
+  const values = toValues(ap)
   if (!site.experimental && values.eth1.mode === 'inherit' && values.wired_client_stats === 'inherit') return null
   const schema = z.object({ eth1: z.any(), wired_client_stats: z.enum(['inherit', 'on', 'off']) }).superRefine((v, ctx) => {
     const e = eth1Error(v.eth1 as Eth1Form)

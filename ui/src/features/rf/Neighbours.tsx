@@ -32,7 +32,7 @@ export function histogram(neighbours: Neighbour[], ownChannels: Map<number, stri
     bin.own = aps
     bins.set(channel, bin)
   }
-  return [...bins.values()].sort((a, b) => a.channel - b.channel)
+  return [...bins.values()].toSorted((a, b) => a.channel - b.channel)
 }
 
 export function NeighboursPage({ siteId, band }: { siteId: string; band?: Band }) {
@@ -48,7 +48,7 @@ export function NeighboursPage({ siteId, band }: { siteId: string; band?: Band }
     }
     return map
   }, [rf.data, band])
-  const list = (scans.data?.neighbours ?? []).filter((n) => !n.own && (!band || n.band === band)).sort((a, b) => b.rssi - a.rssi)
+  const list = (scans.data?.neighbours ?? []).filter((n) => !n.own && (!band || n.band === band)).toSorted((a, b) => b.rssi - a.rssi)
   const bins = histogram(list, own)
   const max = Math.max(1, ...bins.map((b) => b.count))
 

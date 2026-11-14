@@ -29,7 +29,7 @@ function bandForm(view: BandProfileView, band: Band): BandForm {
   return {
     enabled: view.enabled,
     width: view.width,
-    channels: [...view.channels].sort((a, b) => a - b),
+    channels: view.channels.toSorted((a, b) => a - b),
     dfs: view.dfs,
     dfs_fallback: view.dfs_fallback ?? 0,
     power:

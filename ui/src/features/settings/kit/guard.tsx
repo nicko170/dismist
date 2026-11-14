@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { useBlocker } from '@tanstack/react-router'
 import { deepEqual } from './patch'
 import { ConfirmDialog } from './primitives'
@@ -51,13 +51,12 @@ function useAnyDirty() {
 }
 
 export function UnsavedChangesGuard() {
-  const anyDirty = useAnyDirty()
-  const ref = useRef(anyDirty)
-  ref.current = anyDirty
+  // Subscribed so the beforeunload handler is armed while anything is dirty.
+  useAnyDirty()
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) =>
-      ref.current && (current.pathname !== next.pathname || !deepEqual(current.search, next.search)),
-    enableBeforeUnload: () => ref.current,
+      anyFormDirty() && (current.pathname !== next.pathname || !deepEqual(current.search, next.search)),
+    enableBeforeUnload: () => anyFormDirty(),
     withResolver: true,
   })
   return (

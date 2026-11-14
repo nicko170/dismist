@@ -158,7 +158,7 @@ export function toForm(view: WLANView): WlanForm {
     enabled: view.enabled,
     security: view.security,
     psk: '',
-    bands: [...view.bands].sort() as Band[],
+    bands: view.bands.toSorted() as Band[],
     vlan: { tagged: view.vlan_id > 1, id: view.vlan_id > 1 ? view.vlan_id : null },
     hidden: view.hidden,
     isolation: view.isolation ?? 'none',
