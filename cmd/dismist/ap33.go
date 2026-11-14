@@ -17,7 +17,8 @@ const ap33Usage = `usage:
   dismist ap33 ssh [ssh flags] [user@]host status [--json]
   dismist ap33 ssh [ssh flags] [user@]host reboot --yes [--reason TEXT | --no-reason]
   dismist ap33 serial-response <challenge>
-  dismist ap33 prepare-trust --stock-dir DIR --controller-ca FILE --output DIR
+  dismist ap33 prepare-trust --stock-dir DIR --controller-ca FILE [--controller-ca FILE...]
+                             [--url wss://HOST/ws] --output DIR
 
 ssh flags: -i KEY, -p PORT, -l USER, -o Key=Value (repeatable), -F ssh_config,
 --known-hosts FILE. The user defaults to root; host keys are trusted on first
