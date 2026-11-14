@@ -18,10 +18,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/aptemplate"
 	"github.com/nicko170/dismist/internal/dnsserver"
 	"github.com/nicko170/dismist/internal/httpapi"
 	"github.com/nicko170/dismist/internal/metrics"
+	"github.com/nicko170/dismist/internal/migrate"
 	"github.com/nicko170/dismist/internal/model"
 	"github.com/nicko170/dismist/internal/protocol"
 	"github.com/nicko170/dismist/internal/proxytrust"
@@ -52,7 +54,19 @@ func main() {
 	udpProbeSetupFile := flag.String("udp-probe-setup-file", "", "private Mist UDP setup JSON supplying the probe AAD")
 	udpProbeSendTest := flag.Bool("udp-probe-send-test", false, "send a padded UDP test message during the local protocol probe")
 	udpProbeRekeyDelay := flag.Duration("udp-probe-rekey-delay", 0, "delay AP UDP test until upstream rekey can be relayed")
+	apURL := flag.String("ap-url", "", "public WSS URL APs are configured with, e.g. wss://ap.example.com/ws (for onboarding and the System page; empty: APs keep the stock ep-terminator name and reach dismist through its DNS)")
+	apCAFile := flag.String("ap-ca-file", "", "PEM bundle of CA certificates APs need to trust the WSS endpoint besides the served chain (default: ca.crt next to -tls-cert, if present)")
+	backups := registerBackupFlags(flag.CommandLine)
 	flag.Parse()
+	startedAt := time.Now().UTC()
+	if *apURL != "" {
+		if err := httpapi.CheckAPURL(*apURL); err != nil {
+			log.Fatalf("-ap-url: %v", err)
+		}
+	}
+	if err := backups.resolve(*dbPath); err != nil {
+		log.Fatal(err)
+	}
 	customAPConfig := false
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "ap-config" {
@@ -119,14 +133,68 @@ func main() {
 	if err != nil || len(certificate.Certificate) == 0 {
 		log.Fatalf("load AP WSS certificate (-tls-cert %q, -tls-key %q): %v", *certPath, *keyPath, err)
 	}
+	apCAs, err := loadAPCAs(*apCAFile, *certPath)
+	if err != nil {
+		log.Fatalf("-ap-ca-file: %v", err)
+	}
 	store, err := model.OpenBolt(*dbPath, *statePath)
 	if err != nil {
+		// A database that needs a newer binary exits 78 with the restore
+		// instructions (design §4.1 rule 1); nothing was written to it.
+		model.ExitIfCompat(err)
 		log.Fatalf("open controller database %q (-db): %v", *dbPath, err)
 	}
 	defer store.Close()
+
+	// Healthz first (design §4.7): the UI listener opens now with only
+	// /healthz (200) and /readyz (503 until migrated and the WSS listener is
+	// bound), so the startup probe passes while the database migrates. The
+	// API, the UI and the AP WSS listener open once the migration has
+	// committed or fallen back to legacy mode.
+	ready := &readiness{probe: store.Probe}
+	startup := &startupHandler{readiness: ready}
+	uiListener, err := net.Listen("tcp", *uiListen)
+	if err != nil {
+		log.Fatal(err)
+	}
+	uiServer := &http.Server{
+		Handler:           proxytrust.Middleware(proxyPrefixes, startup),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() {
+		err := uiServer.Serve(uiListener)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("UI API listener stopped: %v", err)
+		}
+	}()
+	log.Printf("UI listener on %s (health only until startup completes)", uiListener.Addr())
+
 	if err := importSecretFiles(store); err != nil {
 		log.Fatalf("import AP secret files into the database: %v", err)
 	}
+	migrated, err := migrate.Run(store, migrate.Steps(), migrate.Options{Context: migrate.Context{Template: base, Logf: log.Printf}})
+	if err != nil {
+		log.Fatalf("database migration: %v", err)
+	}
+	switch migrated.State.State {
+	case migrate.StateLegacy:
+		log.Printf("database migration fell back to legacy mode: %s", migrated.State.Reason)
+	case migrate.StateCommitted:
+		log.Printf("database migration committed: %v", migrated.Ran)
+	}
+	// The phase-0 baseline H0 (design §4.5, §8.3): recorded once per AP from
+	// the raw buckets through the frozen compiler with the runtime template.
+	// It only writes meta.h0; no AP config changes.
+	if recorded, err := migrate.RecordH0(store, migrate.H0Options{Template: base}); len(recorded) > 0 || err != nil {
+		if len(recorded) > 0 {
+			log.Printf("recorded the H0 baseline for %v", recorded)
+		}
+		if err != nil {
+			log.Printf("H0 baseline not recorded for some APs: %v", err)
+		}
+	}
+	ready.migrated.Store(true)
+
 	state := store.Snapshot()
 	if state.UpdatedAt.IsZero() {
 		state.UpdatedAt = time.Now().UTC()
@@ -179,25 +247,24 @@ func main() {
 			log.Printf("AP WSS listener stopped: %v", err)
 		}
 	}()
+	ready.wssBound.Store(true)
 	log.Printf("AP WSS listening on %s", listener.Addr())
-	uiListener, err := net.Listen("tcp", *uiListen)
-	if err != nil {
-		log.Fatal(err)
-	}
-	uiHandler, err := operatorHandler(*adminTokenFile, httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock))
+
+	backupScheduler := newBackupScheduler(store, *backups, backupWarning(store))
+	builtVersion, builtCommit := buildVersion()
+	operatorAPI := httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock).UseSystem(httpapi.SystemInfo{
+		Version: builtVersion, Commit: builtCommit, StartedAt: startedAt, Ready: ready.Ready,
+		APURL: *apURL, WSSListen: listener.Addr().String(), Chain: certificate.Certificate, ExtraCAs: apCAs,
+		TrustedProxies: splitList(*trustedProxies), DBPath: *dbPath,
+		Metrics:   systemMetricsView(*metricsListen),
+		Backups:   backupScheduler,
+		Migration: func() api.MigrationView { return migrationView(store) },
+	})
+	uiHandler, err := operatorHandler(*adminTokenFile, operatorAPI, store.Tokens())
 	if err != nil {
 		log.Fatalf("initialize administrator access: %v", err)
 	}
-	uiServer := &http.Server{
-		Handler:           proxytrust.Middleware(proxyPrefixes, uiHandler),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	go func() {
-		err := uiServer.Serve(uiListener)
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("UI API listener stopped: %v", err)
-		}
-	}()
+	startup.SetApp(uiHandler)
 	log.Printf("UI API listening on %s", uiListener.Addr())
 	var metricsServer *http.Server
 	if *metricsListen != "" {
@@ -215,6 +282,15 @@ func main() {
 			}
 		}()
 		log.Printf("Prometheus metrics listening on %s", metricsListener.Addr())
+	}
+	backupCtx, stopBackups := context.WithCancel(context.Background())
+	backupsDone := make(chan struct{})
+	go func() {
+		defer close(backupsDone)
+		backupScheduler.Run(backupCtx)
+	}()
+	if backups.interval > 0 {
+		log.Printf("Scheduled backups every %s into %s (keep %d)", backups.interval, backups.dir, backups.keep)
 	}
 	log.Printf("Administrator token file: %s", *adminTokenFile)
 	registryCtx, stopRegistry := context.WithCancel(context.Background())
@@ -268,6 +344,8 @@ func main() {
 		log.Printf("AP WSS certificate %s changed; exiting with status %d to restart with it", *certPath, exitCertificateChanged)
 		restart = true
 	}
+	stopBackups()
+	<-backupsDone
 	stopRegistry()
 	<-registryDone
 	close(recordStop)
