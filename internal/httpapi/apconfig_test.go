@@ -135,3 +135,42 @@ func TestConfigViewErrorsAndScopes(t *testing.T) {
 		t.Fatalf("unassigned AP config: %d", response.Code)
 	}
 }
+
+func TestLocalFilesAreRecordedAndReachTheNormaliser(t *testing.T) {
+	f := newChangeFixture(t)
+	const apID = "02-aa-00-00-00-01"
+	if view := getConfigView(t, f.handler, "/api/aps/"+apID+"/config?view=normalised", http.StatusOK); view.Report.LocalFiles != effective.LocalFilesUnknown {
+		t.Fatalf("never checked: %q", view.Report.LocalFiles)
+	}
+	f.do(t, http.MethodPut, "/api/aps/"+apID, `{"local_files":[]}`, http.StatusOK)
+	if view := getConfigView(t, f.handler, "/api/aps/"+apID+"/config?view=normalised", http.StatusOK); view.Report.LocalFiles != effective.LocalFilesNone || !view.Report.ZeroRule {
+		t.Fatalf("checked, none: %+v", view.Report)
+	}
+	digest := strings.Repeat("ab", 32)
+	f.do(t, http.MethodPut, "/api/aps/"+apID, `{"local_files":[{"name":"local_overrides","sha256":"`+digest+`"}]}`, http.StatusOK)
+	view := getConfigView(t, f.handler, "/api/aps/"+apID+"/config?view=normalised", http.StatusOK)
+	if view.Report.LocalFiles != effective.LocalFilesPresent || view.Report.ZeroRule {
+		t.Fatalf("present: %+v", view.Report)
+	}
+	for _, ap := range f.store.Snapshot().APs {
+		if ap.ID == apID && (len(ap.LocalFiles) != 1 || ap.LocalFiles[0].SHA256 != digest || ap.LocalFiles[0].SeenAt.IsZero()) {
+			t.Fatalf("stored local files %+v", ap.LocalFiles)
+		}
+	}
+	for _, bad := range []string{
+		`{"local_files":[{"name":"../etc/passwd","sha256":"` + digest + `"}]}`,
+		`{"local_files":[{"name":"local_overrides","sha256":"xyz"}]}`,
+	} {
+		response := request(t, f.handler, http.MethodPut, "/api/aps/"+apID, bad)
+		if response.Code != http.StatusBadRequest || len(decodeErrorBody(t, bad, response).Fields) != 1 {
+			t.Fatalf("%s: %d %s", bad, response.Code, response.Body.String())
+		}
+	}
+	secret := strings.Repeat("0a", 32)
+	f.do(t, http.MethodPost, "/api/aps", `{"id":"02-aa-00-00-00-05","site_id":"a","secret":"`+secret+`","local_files":[]}`, http.StatusCreated)
+	for _, ap := range f.store.Snapshot().APs {
+		if ap.ID == "02-aa-00-00-00-05" && (ap.LocalFiles == nil || len(ap.LocalFiles) != 0) {
+			t.Fatalf("registered local files %#v", ap.LocalFiles)
+		}
+	}
+}

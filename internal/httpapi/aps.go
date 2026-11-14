@@ -6,7 +6,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/compile"
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
@@ -89,14 +91,29 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 		Model        *string `json:"model"`
 		ManagementIP *string `json:"management_ip"`
 		Secret       *string `json:"secret"`
+		// LocalFiles replaces the AP's local_* file list; [] records that
+		// none were found.
+		LocalFiles *[]api.LocalFileView `json:"local_files"`
 	}
 	if err := decodeJSON(request, 64*1024, &input, "AP update"); err != nil {
 		writeError(writer, err)
 		return
 	}
-	if input.Name == nil && input.Model == nil && input.ManagementIP == nil && input.Secret == nil {
-		writeAPIError(writer, invalid("AP fields required: name, management_ip or secret"))
+	if input.Name == nil && input.Model == nil && input.ManagementIP == nil && input.Secret == nil && input.LocalFiles == nil {
+		writeAPIError(writer, invalid("AP fields required: name, management_ip, secret or local_files"))
 		return
+	}
+	var localFiles []model.LocalFile
+	if input.LocalFiles != nil {
+		files := *input.LocalFiles
+		if files == nil {
+			files = []api.LocalFileView{}
+		}
+		var bad *apiError
+		if localFiles, bad = parseLocalFiles(files, time.Now().UTC()); bad != nil {
+			writeAPIError(writer, bad)
+			return
+		}
 	}
 	var ip net.IP
 	if input.ManagementIP != nil && strings.TrimSpace(*input.ManagementIP) != "" {
@@ -150,8 +167,12 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 			updated.Secret = newSecret
 			updated.SecretFile = ""
 		}
+		if input.LocalFiles != nil {
+			updated.LocalFiles = localFiles
+		}
 		previous := state.APs[index]
-		if updated.Name == previous.Name && updated.Model == previous.Model && updated.ManagementIP == previous.ManagementIP && bytes.Equal(updated.Secret, previous.Secret) {
+		if updated.Name == previous.Name && updated.Model == previous.Model && updated.ManagementIP == previous.ManagementIP &&
+			bytes.Equal(updated.Secret, previous.Secret) && sameLocalFiles(updated.LocalFiles, previous.LocalFiles) {
 			return errNoChange
 		}
 		if updated.SiteID != siteID {
@@ -310,4 +331,18 @@ func (s *Server) legacyClients(writer http.ResponseWriter) {
 		recent = []controller.ClientActivity{}
 	}
 	respond(writer, http.StatusOK, map[string]any{"clients": associated, "recent_activity": recent})
+}
+
+// sameLocalFiles compares two local_files lists, keeping nil (never
+// checked) apart from empty (none found).
+func sameLocalFiles(a, b []model.LocalFile) bool {
+	if (a == nil) != (b == nil) || len(a) != len(b) {
+		return false
+	}
+	for index := range a {
+		if a[index].Name != b[index].Name || a[index].SHA256 != b[index].SHA256 {
+			return false
+		}
+	}
+	return true
 }

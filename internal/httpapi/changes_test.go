@@ -105,6 +105,7 @@ func TestDismistOnlyEditsChangeNoConfigRevision(t *testing.T) {
 		{http.MethodPut, "/api/aps/02-aa-00-00-00-01", `{"management_ip":""}`},
 		{http.MethodPut, "/api/aps/02-aa-00-00-00-01", `{"secret":"` + secret + `"}`},
 		{http.MethodPut, "/api/aps/02-aa-00-00-00-01", `{"model":"AP33"}`},
+		{http.MethodPut, "/api/aps/02-aa-00-00-00-01", `{"local_files":[]}`},
 		{http.MethodPost, "/api/sites", `{"name":"Garage"}`},
 		{http.MethodPut, "/api/sites/b/networks/lab", `{"psk":"example-passphrase-02"}`},
 	}
