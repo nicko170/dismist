@@ -2,9 +2,11 @@ package httpapi
 
 import (
 	"io/fs"
+	"mime"
 	"net/http"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -70,7 +72,62 @@ func (s *Server) serveNextAsset(writer http.ResponseWriter, request *http.Reques
 	} else {
 		writer.Header().Set("Cache-Control", "no-cache")
 	}
-	http.ServeFileFS(writer, request, s.next, name)
+	http.ServeFileFS(writer, request, s.next, s.precompressed(writer, request, name))
+}
+
+// precompressedEncodings are the sibling files the v1 build writes next to
+// its assets (name.br, name.gz), in order of preference.
+var precompressedEncodings = []struct{ token, suffix string }{{"br", ".br"}, {"gzip", ".gz"}}
+
+// precompressed returns the file to serve for name: its .br or .gz sibling
+// when the build has one and the client accepts that encoding (with
+// Content-Encoding and the original Content-Type set), else name itself.
+// Vary: Accept-Encoding is set whenever a sibling exists, so a cache never
+// hands the compressed bytes to a client that did not ask for them.
+func (s *Server) precompressed(writer http.ResponseWriter, request *http.Request, name string) string {
+	accepted := acceptedEncodings(request.Header.Get("Accept-Encoding"))
+	for _, encoding := range precompressedEncodings {
+		info, err := fs.Stat(s.next, name+encoding.suffix)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		writer.Header().Add("Vary", "Accept-Encoding")
+		if !accepted[encoding.token] {
+			continue
+		}
+		contentType := mime.TypeByExtension(path.Ext(name))
+		if contentType == "" {
+			return name
+		}
+		writer.Header().Set("Content-Type", contentType)
+		writer.Header().Set("Content-Encoding", encoding.token)
+		return name + encoding.suffix
+	}
+	return name
+}
+
+// acceptedEncodings parses Accept-Encoding into the codings with a non-zero
+// quality.
+func acceptedEncodings(header string) map[string]bool {
+	result := map[string]bool{}
+	for _, part := range strings.Split(header, ",") {
+		token, params, _ := strings.Cut(strings.TrimSpace(part), ";")
+		token = strings.ToLower(strings.TrimSpace(token))
+		if token == "" {
+			continue
+		}
+		accepted := true
+		for _, param := range strings.Split(params, ";") {
+			key, value, ok := strings.Cut(strings.TrimSpace(param), "=")
+			if ok && strings.EqualFold(strings.TrimSpace(key), "q") {
+				if quality, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil && quality == 0 {
+					accepted = false
+				}
+			}
+		}
+		result[token] = accepted
+	}
+	return result
 }
 
 func (s *Server) serveNextIndex(writer http.ResponseWriter, request *http.Request) {
