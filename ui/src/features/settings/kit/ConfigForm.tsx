@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { FormProvider, type FieldValues } from 'react-hook-form'
-import { useQuery } from '@tanstack/react-query'
+import { skipToken, useQuery } from '@tanstack/react-query'
 import { CircleAlert, FileDiff, History, Info, Loader2, TriangleAlert } from 'lucide-react'
 import { keys } from '@/api/keys'
 import type { DiffEntry, Impact, MutationResponse, PushEvent, Warning } from '@/gen/api.gen'
@@ -305,11 +305,8 @@ const pushLabel: Record<PushEvent['state'], { label: string; tone: 'good' | 'inf
 
 /** Per-AP apply progress after a save, driven by SSE `push` events (§3.0). */
 export function PushProgress<T>({ siteId, response }: { siteId: string; response: MutationResponse<T> }) {
-  const { data: pushes } = useQuery<Record<string, PushEvent>>({
-    queryKey: keys.sitePush(siteId),
-    queryFn: () => ({}),
-    staleTime: Infinity,
-  })
+  // Filled only by the site stream's `push` events; never fetched.
+  const { data: pushes } = useQuery<Record<string, PushEvent>>({ queryKey: keys.sitePush(siteId), queryFn: skipToken })
   const aps = response.impact?.aps ?? []
   if (!aps.length) return null
   return (
