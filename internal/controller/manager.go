@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -36,11 +37,55 @@ type Manager struct {
 	mu          sync.RWMutex
 	byID        map[string]*Server
 	unknownSeen map[string]time.Time
+	pending     *pendingMap
+	routes      [len(routeResults)]atomic.Uint64
 }
 
 func NewManager() *Manager {
-	return &Manager{byID: make(map[string]*Server), unknownSeen: make(map[string]time.Time)}
+	return &Manager{
+		byID: make(map[string]*Server), unknownSeen: make(map[string]time.Time),
+		pending: newPendingMap(),
+	}
 }
+
+// Route results (dismist_ap_ws_routes_total{result}).
+const (
+	RouteRouted        = "routed"
+	RouteUnknownAP     = "unknown_ap"
+	RouteBadFrame      = "bad_frame"
+	RouteTimeoutClosed = "timeout_or_closed"
+	RouteTooManyFrames = "too_many_frames"
+)
+
+var routeResults = [...]string{RouteRouted, RouteUnknownAP, RouteBadFrame, RouteTimeoutClosed, RouteTooManyFrames}
+
+func (m *Manager) countRoute(result string) {
+	for index, known := range routeResults {
+		if known == result {
+			m.routes[index].Add(1)
+			return
+		}
+	}
+}
+
+// RouteCounters returns how many AP connections ended routing with each
+// result (design §6.3 dismist_ap_ws_routes_total).
+func (m *Manager) RouteCounters() map[string]uint64 {
+	result := make(map[string]uint64, len(routeResults))
+	for index, name := range routeResults {
+		result[name] = m.routes[index].Load()
+	}
+	return result
+}
+
+// Pending returns the APs that tried to connect and were not served
+// (design §5.4), most recently seen first. The list is bounded (64
+// entries) and entries expire 24 hours after they were last seen.
+func (m *Manager) Pending() []PendingAP { return m.pending.list() }
+
+// PendingRevision changes whenever the pending list changes, so a stream
+// can poll it cheaply and send a pending event only on change.
+func (m *Manager) PendingRevision() uint64 { return m.pending.currentRevision() }
 
 // Register installs an AP's control session. address is the optional source
 // pin and must match the server's own; empty accepts the AP from anywhere.
@@ -59,8 +104,9 @@ func (m *Manager) Register(id, address string, server *Server) error {
 	previous := m.byID[id]
 	m.byID[id] = server
 	m.mu.Unlock()
+	m.pending.forget(id)
 	if previous != nil && previous != server {
-		previous.Disconnect()
+		previous.DisconnectBecause("registration changed")
 	}
 	return nil
 }
@@ -71,7 +117,7 @@ func (m *Manager) Remove(id string) {
 	delete(m.byID, id)
 	m.mu.Unlock()
 	if previous != nil {
-		previous.Disconnect()
+		previous.DisconnectBecause("registration withdrawn")
 	}
 }
 
@@ -105,66 +151,105 @@ func (m *Manager) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if err != nil {
 		return
 	}
-	server, hello, err := m.route(conn, request.RemoteAddr)
+	routed, err := m.route(conn, request.RemoteAddr)
 	if err != nil {
 		closeWithPolicyViolation(conn, "AP not registered")
 		_ = conn.Close()
 		return
 	}
-	server.serveConn(conn, request.TLS.CipherSuite, request.RemoteAddr, hello)
+	end := routed.server.serveConn(conn, request.TLS.CipherSuite, request.RemoteAddr, routed.raw)
+	switch {
+	case end.authenticated:
+		m.pending.forget(routed.hello.ID)
+	case end.authFailure != "":
+		m.recordPending(routed.hello, routed.body, request.RemoteAddr, PendingAuthFailed)
+	}
+}
+
+// routedConn is a connection the Manager routed to an AP's session.
+type routedConn struct {
+	server *Server
+	// raw is the ep-auth hello frame for the session to authenticate.
+	raw []byte
+	// hello and body are that hello decoded and its JSON body.
+	hello Hello
+	body  []byte
 }
 
 // route answers clock requests sent before authentication and reads the AP's
 // ep-auth hello. It returns the session for the AP the hello names, and the
 // raw hello frame for that session to authenticate.
-func (m *Manager) route(conn *websocket.Conn, remoteAddr string) (*Server, []byte, error) {
+func (m *Manager) route(conn *websocket.Conn, remoteAddr string) (routedConn, error) {
 	conn.SetReadLimit(64 << 10)
 	_ = conn.SetReadDeadline(time.Now().Add(routeTimeout))
 	defer func() { _ = conn.SetReadDeadline(time.Time{}) }()
 	for frames := 0; frames < routeFrames; frames++ {
 		messageType, raw, err := conn.ReadMessage()
 		if err != nil {
-			return nil, nil, err
+			m.countRoute(RouteTimeoutClosed)
+			return routedConn{}, err
 		}
 		if messageType != websocket.BinaryMessage {
-			return nil, nil, ErrAuthentication
+			m.countRoute(RouteBadFrame)
+			return routedConn{}, ErrAuthentication
 		}
 		message, err := protocol.Decode(raw)
 		if err != nil || message.Version != 1 || message.ServiceClass != 2 {
-			return nil, nil, ErrAuthentication
+			m.countRoute(RouteBadFrame)
+			return routedConn{}, ErrAuthentication
 		}
 		switch message.Subject {
 		case "get-time":
 			if err := writeReply(conn, message, clockBody()); err != nil {
-				return nil, nil, err
+				m.countRoute(RouteTimeoutClosed)
+				return routedConn{}, err
 			}
 		case "ep-auth":
 			var hello Hello
 			if err := json.Unmarshal(message.Body, &hello); err != nil || hello.ID == "" {
-				return nil, nil, ErrAuthentication
+				m.countRoute(RouteBadFrame)
+				return routedConn{}, ErrAuthentication
 			}
 			m.mu.RLock()
 			server := m.byID[hello.ID]
 			m.mu.RUnlock()
 			if server == nil || !server.acceptsSource(remoteAddr) {
+				m.countRoute(RouteUnknownAP)
+				reason := PendingUnregistered
+				if server != nil {
+					server.countSourceMismatch()
+					reason = PendingSourceMismatch
+				}
 				m.logUnknown(hello, remoteAddr, server != nil)
-				return nil, nil, ErrUnknownAP
+				m.recordPending(hello, message.Body, remoteAddr, reason)
+				return routedConn{}, ErrUnknownAP
 			}
-			return server, raw, nil
+			m.countRoute(RouteRouted)
+			return routedConn{server: server, raw: raw, hello: hello, body: message.Body}, nil
 		default:
-			return nil, nil, ErrAuthentication
+			m.countRoute(RouteBadFrame)
+			return routedConn{}, ErrAuthentication
 		}
 	}
-	return nil, nil, ErrAuthentication
+	m.countRoute(RouteTooManyFrames)
+	return routedConn{}, ErrAuthentication
+}
+
+// recordPending adds a refused hello to the pending list. The hello is
+// unauthenticated: its ID and strings are bounded and cleaned first.
+func (m *Manager) recordPending(hello Hello, body []byte, remoteAddr, reason string) {
+	hello.ID = cleanHelloString(hello.ID, maxHelloID)
+	if hello.ID == "" {
+		return
+	}
+	extras, _ := decodeHelloExtras(body)
+	m.pending.record(hello, extras, remoteAddr, reason)
 }
 
 // logUnknown records an unregistered AP's ID so an operator can register it,
 // at most once per ID and interval. The ID is unauthenticated at this point.
 func (m *Manager) logUnknown(hello Hello, remoteAddr string, pinned bool) {
-	key := hello.ID
-	if len(key) > 64 {
-		key = key[:64]
-	}
+	key := cleanHelloString(hello.ID, maxHelloID)
 	now := time.Now()
 	m.mu.Lock()
 	if last, seen := m.unknownSeen[key]; seen && now.Sub(last) < unknownLogInterval {
@@ -180,7 +265,8 @@ func (m *Manager) logUnknown(hello Hello, remoteAddr string, pinned bool) {
 		log.Printf("AP %q connected from %s, which isn't its registered source address", key, remoteAddr)
 		return
 	}
-	log.Printf("unregistered AP %q (model %q, firmware %q) connected from %s", key, hello.Model, hello.Firmware, remoteAddr)
+	log.Printf("unregistered AP %q (model %q, firmware %q) connected from %s", key,
+		cleanHelloString(hello.Model, maxHelloString), cleanHelloString(hello.Firmware, maxHelloString), remoteAddr)
 }
 
 func apUpgrader() *websocket.Upgrader {
