@@ -22,8 +22,9 @@ import (
 )
 
 // Version identifies the rule set. Hashes are compared only when their
-// versions match.
-const Version = 1
+// versions match. Version 2 (phase 2): rule 4 drops the BSSID index of a
+// disabled WLAN that follows every enabled one.
+const Version = 2
 
 // Local-file states (design §4.3 LocalFiles, §4.5 rule 2a).
 const (

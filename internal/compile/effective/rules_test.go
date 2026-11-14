@@ -168,14 +168,14 @@ func TestCanonicalisingTheTemplateKeepsTheHash(t *testing.T) {
 	if before != after {
 		t.Fatal("canonicalising the template changed the effective hash")
 	}
-	if !strings.HasPrefix(before, "e1:") || len(before) != len("e1:")+64 {
+	if !strings.HasPrefix(before, effective.HashPrefix()) || len(before) != len(effective.HashPrefix())+64 {
 		t.Fatalf("hash format %q", before)
 	}
 	other, _, _, _ := effective.HashConfig(bytes.Repeat([]byte{8}, 32), raw, effective.Context{})
 	if other == before {
 		t.Fatal("hash is not keyed")
 	}
-	if !effective.SameVersion(before, other) || effective.SameVersion(before, "e2:00") || effective.SameVersion("x", "x") {
+	if !effective.SameVersion(before, other) || effective.SameVersion(before, "e1:00") || effective.SameVersion("x", "x") {
 		t.Fatal("SameVersion")
 	}
 	if _, err := effective.Hash(nil, []byte(`{}`)); err == nil {

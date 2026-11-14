@@ -144,8 +144,15 @@ func CopyName(dbPath string, toSchema uint64, at time.Time) string {
 // database (tx.WriteTo into a temporary file, fsync, rename).
 func WritePreMigrationCopy(store *model.BoltStore, toSchema uint64, at time.Time) (string, error) {
 	path := filepath.Join(filepath.Dir(store.Path()), CopyName(store.Path(), toSchema, at))
-	if _, err := os.Stat(path); err == nil {
-		return "", fmt.Errorf("pre-migration copy %s already exists", path)
+	// A re-migration in the same second keeps the earlier copy.
+	for n := 2; ; n++ {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if n > 99 {
+			return "", fmt.Errorf("pre-migration copy %s already exists", path)
+		}
+		path = filepath.Join(filepath.Dir(store.Path()), fmt.Sprintf("%s-%d", CopyName(store.Path(), toSchema, at), n))
 	}
 	if _, err := store.WriteBackup(path); err != nil {
 		return "", err
