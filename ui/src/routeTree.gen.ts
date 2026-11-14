@@ -11,10 +11,16 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as SystemRouteRouteImport } from './routes/system/route'
 import { Route as ApsApIdRouteImport } from './routes/aps.$apId'
 import { Route as ClientsMacRouteImport } from './routes/clients.$mac'
 import { Route as SitesIndexRouteImport } from './routes/sites/index'
 import { Route as SitesSiteIdRouteRouteImport } from './routes/sites/$siteId/route'
+import { Route as SystemIndexRouteImport } from './routes/system/index'
+import { Route as SystemBackupsRouteImport } from './routes/system/backups'
+import { Route as SystemMigrationRouteImport } from './routes/system/migration'
+import { Route as SystemSessionsRouteImport } from './routes/system/sessions'
+import { Route as SystemTokensRouteImport } from './routes/system/tokens'
 import { Route as SitesSiteIdApsRouteRouteImport } from './routes/sites/$siteId/aps/route'
 import { Route as SitesSiteIdClientsRouteRouteImport } from './routes/sites/$siteId/clients/route'
 import { Route as SitesSiteIdApsIndexRouteImport } from './routes/sites/$siteId/aps/index'
@@ -39,6 +45,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SystemRouteRoute = SystemRouteRouteImport.update({
+  id: '/system',
+  path: '/system',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApsApIdRoute = ApsApIdRouteImport.update({
   id: '/aps/$apId',
   path: '/aps/$apId',
@@ -58,6 +69,31 @@ const SitesSiteIdRouteRoute = SitesSiteIdRouteRouteImport.update({
   id: '/sites/$siteId',
   path: '/sites/$siteId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const SystemIndexRoute = SystemIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SystemRouteRoute,
+} as any)
+const SystemBackupsRoute = SystemBackupsRouteImport.update({
+  id: '/backups',
+  path: '/backups',
+  getParentRoute: () => SystemRouteRoute,
+} as any)
+const SystemMigrationRoute = SystemMigrationRouteImport.update({
+  id: '/migration',
+  path: '/migration',
+  getParentRoute: () => SystemRouteRoute,
+} as any)
+const SystemSessionsRoute = SystemSessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
+  getParentRoute: () => SystemRouteRoute,
+} as any)
+const SystemTokensRoute = SystemTokensRouteImport.update({
+  id: '/tokens',
+  path: '/tokens',
+  getParentRoute: () => SystemRouteRoute,
 } as any)
 const SitesSiteIdApsRouteRoute = SitesSiteIdApsRouteRouteImport.update({
   id: '/aps',
@@ -132,11 +168,17 @@ const SitesSiteIdApsApIdUplinkRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/system': typeof SystemRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
   '/aps/$apId': typeof ApsApIdRoute
   '/clients/$mac': typeof ClientsMacRoute
+  '/system/backups': typeof SystemBackupsRoute
+  '/system/migration': typeof SystemMigrationRoute
+  '/system/sessions': typeof SystemSessionsRoute
+  '/system/tokens': typeof SystemTokensRoute
   '/sites/': typeof SitesIndexRoute
+  '/system/': typeof SystemIndexRoute
   '/sites/$siteId/aps': typeof SitesSiteIdApsRouteRouteWithChildren
   '/sites/$siteId/clients': typeof SitesSiteIdClientsRouteRouteWithChildren
   '/sites/$siteId/aps/$apId': typeof SitesSiteIdApsApIdRouteRouteWithChildren
@@ -157,7 +199,12 @@ export interface FileRoutesByTo {
   '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
   '/aps/$apId': typeof ApsApIdRoute
   '/clients/$mac': typeof ClientsMacRoute
+  '/system/backups': typeof SystemBackupsRoute
+  '/system/migration': typeof SystemMigrationRoute
+  '/system/sessions': typeof SystemSessionsRoute
+  '/system/tokens': typeof SystemTokensRoute
   '/sites': typeof SitesIndexRoute
+  '/system': typeof SystemIndexRoute
   '/sites/$siteId/clients/$mac': typeof SitesSiteIdClientsMacRoute
   '/sites/$siteId/aps': typeof SitesSiteIdApsIndexRoute
   '/sites/$siteId/clients': typeof SitesSiteIdClientsIndexRoute
@@ -172,11 +219,17 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/system': typeof SystemRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
   '/aps/$apId': typeof ApsApIdRoute
   '/clients/$mac': typeof ClientsMacRoute
+  '/system/backups': typeof SystemBackupsRoute
+  '/system/migration': typeof SystemMigrationRoute
+  '/system/sessions': typeof SystemSessionsRoute
+  '/system/tokens': typeof SystemTokensRoute
   '/sites/': typeof SitesIndexRoute
+  '/system/': typeof SystemIndexRoute
   '/sites/$siteId/aps': typeof SitesSiteIdApsRouteRouteWithChildren
   '/sites/$siteId/clients': typeof SitesSiteIdClientsRouteRouteWithChildren
   '/sites/$siteId/aps/$apId': typeof SitesSiteIdApsApIdRouteRouteWithChildren
@@ -195,11 +248,17 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/system'
     | '/login'
     | '/sites/$siteId'
     | '/aps/$apId'
     | '/clients/$mac'
+    | '/system/backups'
+    | '/system/migration'
+    | '/system/sessions'
+    | '/system/tokens'
     | '/sites/'
+    | '/system/'
     | '/sites/$siteId/aps'
     | '/sites/$siteId/clients'
     | '/sites/$siteId/aps/$apId'
@@ -220,7 +279,12 @@ export interface FileRouteTypes {
     | '/sites/$siteId'
     | '/aps/$apId'
     | '/clients/$mac'
+    | '/system/backups'
+    | '/system/migration'
+    | '/system/sessions'
+    | '/system/tokens'
     | '/sites'
+    | '/system'
     | '/sites/$siteId/clients/$mac'
     | '/sites/$siteId/aps'
     | '/sites/$siteId/clients'
@@ -234,11 +298,17 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/system'
     | '/login'
     | '/sites/$siteId'
     | '/aps/$apId'
     | '/clients/$mac'
+    | '/system/backups'
+    | '/system/migration'
+    | '/system/sessions'
+    | '/system/tokens'
     | '/sites/'
+    | '/system/'
     | '/sites/$siteId/aps'
     | '/sites/$siteId/clients'
     | '/sites/$siteId/aps/$apId'
@@ -256,6 +326,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SystemRouteRoute: typeof SystemRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
   SitesSiteIdRouteRoute: typeof SitesSiteIdRouteRouteWithChildren
   ApsApIdRoute: typeof ApsApIdRoute
@@ -277,6 +348,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/system': {
+      id: '/system'
+      path: '/system'
+      fullPath: '/system'
+      preLoaderRoute: typeof SystemRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/aps/$apId': {
@@ -306,6 +384,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/sites/$siteId'
       preLoaderRoute: typeof SitesSiteIdRouteRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/system/': {
+      id: '/system/'
+      path: '/'
+      fullPath: '/system/'
+      preLoaderRoute: typeof SystemIndexRouteImport
+      parentRoute: typeof SystemRouteRoute
+    }
+    '/system/backups': {
+      id: '/system/backups'
+      path: '/backups'
+      fullPath: '/system/backups'
+      preLoaderRoute: typeof SystemBackupsRouteImport
+      parentRoute: typeof SystemRouteRoute
+    }
+    '/system/migration': {
+      id: '/system/migration'
+      path: '/migration'
+      fullPath: '/system/migration'
+      preLoaderRoute: typeof SystemMigrationRouteImport
+      parentRoute: typeof SystemRouteRoute
+    }
+    '/system/sessions': {
+      id: '/system/sessions'
+      path: '/sessions'
+      fullPath: '/system/sessions'
+      preLoaderRoute: typeof SystemSessionsRouteImport
+      parentRoute: typeof SystemRouteRoute
+    }
+    '/system/tokens': {
+      id: '/system/tokens'
+      path: '/tokens'
+      fullPath: '/system/tokens'
+      preLoaderRoute: typeof SystemTokensRouteImport
+      parentRoute: typeof SystemRouteRoute
     }
     '/sites/$siteId/aps': {
       id: '/sites/$siteId/aps'
@@ -401,6 +514,26 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface SystemRouteRouteChildren {
+  SystemBackupsRoute: typeof SystemBackupsRoute
+  SystemMigrationRoute: typeof SystemMigrationRoute
+  SystemSessionsRoute: typeof SystemSessionsRoute
+  SystemTokensRoute: typeof SystemTokensRoute
+  SystemIndexRoute: typeof SystemIndexRoute
+}
+
+const SystemRouteRouteChildren: SystemRouteRouteChildren = {
+  SystemBackupsRoute: SystemBackupsRoute,
+  SystemMigrationRoute: SystemMigrationRoute,
+  SystemSessionsRoute: SystemSessionsRoute,
+  SystemTokensRoute: SystemTokensRoute,
+  SystemIndexRoute: SystemIndexRoute,
+}
+
+const SystemRouteRouteWithChildren = SystemRouteRoute._addFileChildren(
+  SystemRouteRouteChildren,
+)
+
 interface SitesSiteIdApsApIdRouteRouteChildren {
   SitesSiteIdApsApIdClientsRoute: typeof SitesSiteIdApsApIdClientsRoute
   SitesSiteIdApsApIdEventsRoute: typeof SitesSiteIdApsApIdEventsRoute
@@ -471,6 +604,7 @@ const SitesSiteIdRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SystemRouteRoute: SystemRouteRouteWithChildren,
   LoginRoute: LoginRoute,
   SitesSiteIdRouteRoute: SitesSiteIdRouteRouteWithChildren,
   ApsApIdRoute: ApsApIdRoute,
