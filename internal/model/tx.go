@@ -172,3 +172,35 @@ type memBuckets struct {
 	apConfig map[string][]byte
 	history  []ChangeRecord
 }
+
+// VAPs returns the last-known field-32 VAP list of every AP from ap_status
+// (the migration's BSSID-index input). The JSON store has none.
+func (t *Tx) VAPs() (map[string][]VAPRecord, error) {
+	result := map[string][]VAPRecord{}
+	if t.bolt == nil {
+		return result, nil
+	}
+	bucket := t.bolt.Bucket([]byte(BucketAPStatus))
+	if bucket == nil {
+		return result, nil
+	}
+	return result, bucket.ForEach(func(key, raw []byte) error {
+		var record APStatusRecord
+		if json.Unmarshal(raw, &record) == nil && record.VAPs != nil {
+			result[string(key)] = record.VAPs
+		}
+		return nil
+	})
+}
+
+// PutMetaRaw stores raw bytes under a meta key (JSON reports, digests).
+func (t *Tx) PutMetaRaw(key string, value []byte) error {
+	if t.bolt == nil {
+		return nil
+	}
+	meta, err := metaBucket(t.bolt)
+	if err != nil {
+		return err
+	}
+	return meta.Put([]byte(key), value)
+}

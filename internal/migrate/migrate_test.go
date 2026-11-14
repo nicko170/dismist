@@ -51,7 +51,7 @@ func plenty(string) (model.DiskSpace, error) {
 
 func TestNoStepsDoesNothing(t *testing.T) {
 	store := newStore(t)
-	result, err := Run(store, Steps(), Options{Context: Context{Now: now}, DiskUsage: plenty})
+	result, err := Run(store, nil, Options{Context: Context{Now: now}, DiskUsage: plenty})
 	if err != nil || result.State.State != StateNotRun || len(result.Ran) != 0 {
 		t.Fatalf("result %+v %v", result, err)
 	}
