@@ -1,5 +1,5 @@
 {{- if not .Values.privateSecret.name }}
-{{- fail "privateSecret.name is required: a Secret with admin.token and each AP's <name>.bin" }}
+{{- fail "privateSecret.name is required: a Secret with admin.token (AP secrets live in the database)" }}
 {{- end }}
 {{- include "dismist.validateMetrics" . }}
 {{- $tlsSecret := include "dismist.tlsSecretName" . }}
