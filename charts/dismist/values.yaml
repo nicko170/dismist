@@ -262,9 +262,6 @@ backup:
   # Keep it above the database size.
   tmpSizeLimit: 1Gi
 
-# Protocol features switched on for every AP (-ap-features). Empty: none.
-apFeatures: []
-
 probes:
   # The startup probe checks /healthz every 5 s; this many failures (60 = 5
   # minutes) cover a slow first start, such as a database migration.

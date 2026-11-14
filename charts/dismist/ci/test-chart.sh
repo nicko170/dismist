@@ -117,7 +117,6 @@ expect_no_arg -metrics-token-file
 expect_no_arg -metrics-names
 expect_no_arg -metrics-clients
 expect_no_arg -metrics-client-limit
-expect_no_arg -ap-features
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].ports[] | select(.name == "metrics") | .name' ""
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].readinessProbe.httpGet.path' /readyz
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].startupProbe.httpGet.path' /healthz
@@ -246,7 +245,6 @@ expect_count 1 Certificate
 expect_count 1 HTTPRoute
 expect_arg -metrics-clients=per-client
 expect_arg -metrics-client-limit=50
-expect_arg -ap-features=example-feature
 expect_eq 'select(.kind == "PrometheusRule") | [.spec.groups[].rules[] | select(.alert == "DismistAPFlapping")] | length' 0
 expect_eq 'select(.kind == "PrometheusRule") | .spec.groups[].rules[] | select(.alert == "DismistAPSilent") | .labels.severity' info
 expect_eq 'select(.kind == "PrometheusRule") | .spec.groups[-1].name' dismist.extra

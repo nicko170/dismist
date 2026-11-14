@@ -54,4 +54,3 @@ metrics:
     annotations: {example.com/note: dashboards}
   networkPolicy:
     enabled: true
-apFeatures: [example-feature]

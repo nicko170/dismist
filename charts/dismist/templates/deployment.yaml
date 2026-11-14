@@ -137,9 +137,6 @@ spec:
             {{- with .Values.controller.serverName }}
             - -server-name={{ . }}
             {{- end }}
-            {{- with .Values.apFeatures }}
-            - -ap-features={{ join "," . }}
-            {{- end }}
             {{- with .Values.controller.extraArgs }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
