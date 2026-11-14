@@ -376,9 +376,22 @@ func main() {
 		defer close(recordDone)
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
+		appliedSeen := map[string]uint64{}
 		record := func() {
 			current := store.Snapshot()
 			for id, control := range manager.Servers() {
+				// An AP that applied a revision outside a push (its first
+				// fetch after registration or a reconnect) settles that
+				// revision's history result too.
+				if status := control.Status(); status.Connected && status.AppliedRevision != 0 && status.LastError == "" &&
+					appliedSeen[id] != status.AppliedRevision {
+					appliedSeen[id] = status.AppliedRevision
+					at := status.Applied.At
+					if at.IsZero() {
+						at = time.Now().UTC()
+					}
+					operatorAPI.RecordResult(id, status.AppliedRevision, api.APState{State: "applied", At: &at})
+				}
 				for _, ap := range current.APs {
 					if ap.ID != id {
 						continue

@@ -133,12 +133,39 @@ func (h historyLog) Get(revision uint64) (httpapi.ChangeEntry, error) {
 	return changeEntry(record), nil
 }
 
-func (h historyLog) SetResult(revision uint64, apID string, result api.APState) error {
-	applied := model.ApplyResult{State: result.State, Error: result.Error, At: time.Now().UTC()}
+// SetResult records an AP's outcome for one of its config revisions (the
+// controller reports the AP's ConfigRevision, not the state revision the
+// history is keyed by): the entry whose effective revision for the AP
+// matches gets the result, and an applied revision supersedes the AP's
+// older entries still pending.
+func (h historyLog) SetResult(configRevision uint64, apID string, result api.APState) error {
+	outcome := model.ApplyResult{State: result.State, Error: result.Error, At: time.Now().UTC()}
 	if result.At != nil {
-		applied.At = result.At.UTC()
+		outcome.At = result.At.UTC()
 	}
-	return h.store.ConfigHistory().SetResult(revision, apID, applied)
+	records, _, err := h.store.ConfigHistory().List(model.HistoryQuery{APID: apID, Limit: 200})
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		ref, ok := record.Effective[apID]
+		if !ok {
+			continue
+		}
+		if current, ok := record.Results[apID]; ok && current.State != "" && current.State != "pending" {
+			continue
+		}
+		switch {
+		case ref.Revision == configRevision:
+			err = h.store.ConfigHistory().SetResult(record.Revision, apID, outcome)
+		case ref.Revision < configRevision && result.State == "applied":
+			err = h.store.ConfigHistory().SetResult(record.Revision, apID, model.ApplyResult{State: "superseded", At: outcome.At})
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // changeEntry is the API's form of a history record. Object names come

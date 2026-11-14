@@ -57,10 +57,20 @@ func experimentalKeys(registry *options.Registry, changed map[string]any) []stri
 		if value == nil {
 			continue
 		}
+		// Writing an experimental option at its default, or off (false,
+		// empty, zero), never needs the site's switch: it asks the AP for
+		// nothing it does not do already. Forms send whole sections, so
+		// these arrive with every save.
+		if isZeroJSON(value) {
+			continue
+		}
 		experimental := false
 		if registry != nil {
-			if option, ok := registry.Get(key); ok && option.Experimental(value) {
-				experimental = true
+			if option, ok := registry.Get(key); ok {
+				if option.Default != nil && sameJSON(value, option.Default) {
+					continue
+				}
+				experimental = option.Experimental(value)
 			}
 		}
 		for prefix, values := range experimentalFallback {

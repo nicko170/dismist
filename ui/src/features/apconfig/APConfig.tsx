@@ -244,6 +244,7 @@ export function ResultChip({ state }: { state: string }) {
     pending: { label: 'Pending', tone: 'info' },
     timeout: { label: 'Timed out', tone: 'crit' },
     unchanged: { label: 'No change', tone: 'idle' },
+    superseded: { label: 'Superseded', tone: 'idle' },
   }
   const m = map[state] ?? { label: state, tone: 'idle' as const }
   return <Chip tone={m.tone}>{m.label}</Chip>

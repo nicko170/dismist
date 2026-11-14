@@ -62,8 +62,13 @@ function bandInput(form: BandForm): RFProfileInput['band_24'] {
     dfs: form.dfs,
     dfs_fallback: form.dfs_fallback,
     power: form.power.mode === 'fixed' ? { mode: 'fixed', dbm: n(form.power.dbm) } : { mode: 'auto', min: n(form.power.min), max: n(form.power.max) },
-    preamble: form.preamble,
-    advanced: { ...form.advanced, min_probe_rssi: form.advanced.min_probe_rssi === '' || form.advanced.min_probe_rssi == null ? null : n(form.advanced.min_probe_rssi) },
+    // '' (not set, the template's value) is left out of the merge patch.
+    ...(form.preamble ? { preamble: form.preamble } : {}),
+    advanced: Object.fromEntries(
+      Object.entries({ ...form.advanced, min_probe_rssi: form.advanced.min_probe_rssi === '' || form.advanced.min_probe_rssi == null ? null : n(form.advanced.min_probe_rssi) }).filter(
+        ([, value]) => (value as unknown) !== '',
+      ),
+    ),
   }
 }
 
@@ -89,11 +94,12 @@ function bandSchema(band: Band, valid: BandProfileView['valid_channels']) {
       dfs: z.boolean(),
       dfs_fallback: z.number(),
       power: z.object({ mode: z.enum(['auto', 'fixed']), dbm: z.unknown(), min: z.unknown(), max: z.unknown() }),
-      preamble: z.enum(['auto', 'short', 'long']),
+      // '' is "not set": the template's value stays (a migrated site).
+      preamble: z.enum(['', 'auto', 'short', 'long']),
       advanced: z.object({
-        taf: z.enum(['default', 'off', 'on']),
+        taf: z.enum(['', 'default', 'off', 'on']),
         twt: z.boolean(),
-        antenna: z.enum(['default', '4x4', '3x3', '2x2', '1x1']),
+        antenna: z.enum(['', 'default', '4x4', '3x3', '2x2', '1x1']),
         min_probe_rssi: z.unknown(),
         mu_mimo: z.boolean().nullable(),
         txbf: z.boolean().nullable(),
