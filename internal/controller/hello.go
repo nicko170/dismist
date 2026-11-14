@@ -128,13 +128,18 @@ func intField(set func(*HelloExtras, int64)) func(json.RawMessage, *HelloExtras)
 // named in the returned errors, and the others still land. Field names
 // match like encoding/json does (exact first, then case-insensitively).
 // A body that is not a JSON object yields no extras and the error "hello".
-func decodeHelloExtras(body []byte) (HelloExtras, HelloDecodeErrors) {
-	var extras HelloExtras
+func decodeHelloExtras(body []byte) (extras HelloExtras, failed HelloDecodeErrors) {
+	// The pass runs on the AP's session goroutine after authentication;
+	// nothing in it may end the session (design D19).
+	defer func() {
+		if recover() != nil {
+			extras, failed = HelloExtras{}, HelloDecodeErrors{"hello"}
+		}
+	}()
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
 		return extras, HelloDecodeErrors{"hello"}
 	}
-	var failed HelloDecodeErrors
 	for _, field := range helloFields {
 		raw, found := lookupField(fields, field.name)
 		if !found || isJSONNull(raw) {

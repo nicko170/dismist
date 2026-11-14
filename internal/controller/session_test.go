@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -283,5 +284,25 @@ func TestNewServerConfigSourceValidation(t *testing.T) {
 	}
 	if err := CheckUDPProbe("not-an-address", nil, false, 0); err == nil {
 		t.Fatal("invalid UDP probe accepted")
+	}
+}
+
+func TestProtocolViolationCause(t *testing.T) {
+	fixture := newSessionFixture(t, Options{Config: []byte(`{"Timestamp":1}`)})
+	ap := fixture.connect(t, fakeap.DefaultExtras())
+	// ep-config must use service class 2.
+	if _, err := ap.Send(1, "ep-config", []byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	<-ap.Done()
+	status := waitStatus(t, fixture.server, func(s Status) bool { return !s.Connected })
+	if status.LastDisconnectCause != "protocol error after ep-config: AP authentication failed" {
+		t.Fatalf("cause %q", status.LastDisconnectCause)
+	}
+	if got := describeEnd(sessionEnd{subject: "ep-config"}, errors.New("write tcp: broken pipe")); got != "session error after ep-config: write tcp: broken pipe" {
+		t.Fatalf("write failure cause %q", got)
+	}
+	if got := truncateText("abécd", 3); got != "ab" {
+		t.Fatalf("truncateText split a rune: %q", got)
 	}
 }

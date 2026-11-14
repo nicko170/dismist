@@ -451,10 +451,16 @@ func (s *Server) serveConn(conn *websocket.Conn, cipherSuite uint16, remoteAddr 
 // disconnect event and Status.LastDisconnectCause.
 func describeEnd(end sessionEnd, err error) string {
 	if err != nil {
-		if end.subject != "" {
-			return fmt.Sprintf("protocol error after %s: %s", truncateText(end.subject, 40), truncateText(err.Error(), 120))
+		// ErrAuthentication marks a frame the protocol does not allow; any
+		// other error is a failed write or an internal failure.
+		label := "session error"
+		if errors.Is(err, ErrAuthentication) {
+			label = "protocol error"
 		}
-		return "protocol error: " + truncateText(err.Error(), 120)
+		if end.subject != "" {
+			return fmt.Sprintf("%s after %s: %s", label, truncateText(end.subject, 40), truncateText(err.Error(), 120))
+		}
+		return label + ": " + truncateText(err.Error(), 120)
 	}
 	readErr := end.readErr
 	if readErr == nil {
@@ -540,11 +546,15 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 			return ErrAuthentication
 		}
 		message, err := protocol.Decode(raw)
-		if err != nil || message.Version != 1 || message.ServiceClass > 2 {
+		if err != nil {
+			end.subject = ""
+			return ErrAuthentication
+		}
+		end.subject = message.Subject
+		if message.Version != 1 || message.ServiceClass > 2 {
 			return ErrAuthentication
 		}
 		s.counters.frame(message.Subject)
-		end.subject = message.Subject
 		if state == authed {
 			s.mu.Lock()
 			s.status.LastSeen = time.Now()
