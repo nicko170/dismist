@@ -1,11 +1,52 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f9fb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141b22" />
+    <meta name="description" content="Dismist: a self-hosted controller for Mist access points." />
+    <meta name="apple-mobile-web-app-title" content="Dismist" />
+    <link rel="icon" href="/_ui/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/_ui/apple-touch-icon.png" />
+    <link rel="manifest" href="/_ui/manifest.webmanifest" />
     <title>Dismist</title>
+    <script>
+      // Set the theme before first paint (design §7.2): dismist.theme is
+      // "light", "dark" or "system" (the default).
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('dismist.theme')
+          var dark =
+            stored === 'dark' ||
+            ((stored === null || stored === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (e) {}
+      })()
+    </script>
+    <script type="module" crossorigin src="/_ui/index-IrsFlQrs.js"></script>
+    <link rel="modulepreload" crossorigin href="/_ui/jsx-runtime-DyZJNswf.js">
+    <link rel="modulepreload" crossorigin href="/_ui/utils-D0T3A-kS.js">
+    <link rel="modulepreload" crossorigin href="/_ui/button-De9l3dIu.js">
+    <link rel="modulepreload" crossorigin href="/_ui/dist-Dmp-TSVJ.js">
+    <link rel="modulepreload" crossorigin href="/_ui/keys-BdzCYIaA.js">
+    <link rel="modulepreload" crossorigin href="/_ui/redirect-DznHyzVA.js">
+    <link rel="modulepreload" crossorigin href="/_ui/matchContext-JqeqvK_c.js">
+    <link rel="modulepreload" crossorigin href="/_ui/link-Bb_30ksw.js">
+    <link rel="modulepreload" crossorigin href="/_ui/useSelector-CzqEdZYg.js">
+    <link rel="modulepreload" crossorigin href="/_ui/useParams-DEYODrYT.js">
+    <link rel="modulepreload" crossorigin href="/_ui/useNavigate-D8LdnhXb.js">
+    <link rel="modulepreload" crossorigin href="/_ui/lazyRouteComponent-CuCj-GLz.js">
+    <link rel="modulepreload" crossorigin href="/_ui/es2015-DDqEuGUj.js">
+    <link rel="modulepreload" crossorigin href="/_ui/client-DDtfqEzt.js">
+    <link rel="modulepreload" crossorigin href="/_ui/useQuery-Cj7hmotI.js">
+    <link rel="modulepreload" crossorigin href="/_ui/queries-CPXVodbt.js">
+    <link rel="stylesheet" crossorigin href="/_ui/index-DXT34JwY.css">
   </head>
   <body>
-    <p>UI not built; run <code>npm run build</code> in ui/</p>
+    <div id="root"></div>
   </body>
 </html>
