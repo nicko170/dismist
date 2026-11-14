@@ -353,7 +353,10 @@ func (g *Gate) login(writer http.ResponseWriter, request *http.Request) {
 			log.Printf("prune expired sessions: %v", err)
 		}
 		record := model.SessionRecord{Created: now.UTC(), Expires: now.Add(sessionTTL).UTC(), LastUsed: now.UTC(),
-			UserAgent: truncate(request.UserAgent(), 200), Remote: proxytrust.ClientAddr(request).String()}
+			UserAgent: truncate(request.UserAgent(), 200)}
+		if remote := proxytrust.ClientAddr(request); remote.IsValid() {
+			record.Remote = remote.String()
+		}
 		if err := g.store.Put(model.SessionKey(id), record); err != nil {
 			log.Printf("store session: %v", err)
 			writeError(writer, http.StatusInternalServerError, api.ErrorCodeInternal, "cannot create session", nil)

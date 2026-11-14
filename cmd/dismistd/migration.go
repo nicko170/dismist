@@ -25,8 +25,10 @@ type migrationRunner struct {
 	accept   []string
 	steps    func() []migrate.Step
 	finalise func(store *model.BoltStore, dryRun bool) error
-	mu       sync.Mutex
-	logf     func(string, ...any)
+	// maxSchema overrides model.SupportedSchema (tests).
+	maxSchema uint64
+	mu        sync.Mutex
+	logf      func(string, ...any)
 }
 
 // errFinaliseUnavailable is returned until the schema-2 finalise step
@@ -69,7 +71,7 @@ func migrationStatusOf(store *model.BoltStore) api.MigrationStatus {
 }
 
 func (r *migrationRunner) options() migrate.Options {
-	return migrate.Options{Context: migrate.Context{Template: r.template, AcceptLocalFiles: r.accept, Logf: r.logf}}
+	return migrate.Options{Context: migrate.Context{Template: r.template, AcceptLocalFiles: r.accept, Logf: r.logf}, MaxSchema: r.maxSchema}
 }
 
 // Retry runs the migration (the caller holds the API mutation lock).

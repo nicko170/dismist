@@ -437,6 +437,15 @@ func (s *Server) createNetwork(writer http.ResponseWriter, request *http.Request
 		writeAPIError(writer, bad)
 		return
 	}
+	if typedOn {
+		// Expert-tier defaults have no form control but are stored for new
+		// WLANs (design §3.9 "Defaults that have no control", §4.6).
+		for _, key := range []string{"ucast_disassoc_on_bss_down", "reclaim_timeout_sec"} {
+			if value, ok := full[key]; ok {
+				edit.typed[key] = value
+			}
+		}
+	}
 	id, err := randomID()
 	if err != nil {
 		writeAPIError(writer, internalError("cannot create network"))
