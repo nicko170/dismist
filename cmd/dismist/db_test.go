@@ -81,6 +81,25 @@ func TestDBMigrateDryRun(t *testing.T) {
 	}
 }
 
+// The CLI entry point routes `dismist db …` (design §4.7 rollout step 2 runs
+// it on a production backup before the upgrade).
+func TestRunDispatchesDB(t *testing.T) {
+	backup := writeBackup(t)
+	var out bytes.Buffer
+	if err := run([]string{"db", "migrate", "--dry-run", backup}, &out); err != nil {
+		t.Fatalf("%v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "dry run: PASS") {
+		t.Fatalf("report:\n%s", out.String())
+	}
+	if err := run([]string{"db"}, &out); err == nil || !strings.Contains(err.Error(), "dismist db migrate") {
+		t.Fatalf("bare db: %v", err)
+	}
+	if err := run(nil, &out); err == nil || !strings.Contains(err.Error(), "dismist db") {
+		t.Fatalf("usage does not mention db: %v", err)
+	}
+}
+
 func TestDBRehearseCopy(t *testing.T) {
 	backup := writeBackup(t)
 	out := filepath.Join(t.TempDir(), "rehearsal.db")

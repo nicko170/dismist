@@ -124,9 +124,12 @@ func runV2(state *model.State, tx *model.Tx, ctx *Context) error {
 		return &RefusedError{Reason: err.Error()}
 	}
 	applyTyped(state, result.State)
-	// Seed ap_config.desired with each AP's v2 compile; ConfigRevision,
-	// ConfigUpdatedAt and so Timestamp are unchanged, and nothing is
-	// pushed.
+	// Seed ap_config.desired with each AP's v2 compile (change detection
+	// compares with it); ConfigRevision, ConfigUpdatedAt and so Timestamp
+	// are unchanged, and nothing is pushed. The legacy compile is pinned:
+	// the AP is served exactly the bytes the previous release served it
+	// until a change touches it (equivalence is proven above, but a WLAN
+	// whose raw bytes differ could still restart its BSS).
 	apConfig := tx.APConfig()
 	for _, ap := range state.APs {
 		config, ok := result.Desired[ap.ID]
@@ -137,6 +140,7 @@ func runV2(state *model.State, tx *model.Tx, ctx *Context) error {
 			Revision:  compile.ConfigRevision(*state, ap),
 			Timestamp: compile.ConfigTimestamp(compile.ConfigTime(*state, ap)),
 			Bytes:     config,
+			Pinned:    result.Legacy[ap.ID],
 		}
 		if err := apConfig.PutDesired(ap.ID, desired); err != nil {
 			return err

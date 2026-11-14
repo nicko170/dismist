@@ -213,6 +213,11 @@ func TestProductionDatabaseFromV030(t *testing.T) {
 	if before, after := normalise("v0.3.0", served), normalise("migrated", config); !bytes.Equal(before, after) {
 		t.Fatalf("the AP's normalised effective config changed:\nbefore %s\nafter  %s", before, after)
 	}
+	// Byte-identical, not only equivalent: the migration pins the legacy
+	// compile, so ep-control sees the same WLAN objects and restarts no BSS.
+	if !bytes.Equal(bytes.TrimSpace(served), bytes.TrimSpace(config)) {
+		t.Fatalf("the AP is served different bytes after the upgrade:\nv0.3.0   %s\nmigrated %s", bytes.TrimSpace(served), bytes.TrimSpace(config))
+	}
 	var servedConfig, migratedConfig struct {
 		Timestamp float64
 	}

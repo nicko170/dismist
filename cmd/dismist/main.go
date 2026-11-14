@@ -23,8 +23,11 @@ func run(args []string, output io.Writer) error {
 	if len(args) > 0 && args[0] == "ap33" {
 		return runAP33(args[1:], output)
 	}
+	if len(args) > 0 && args[0] == "db" {
+		return runDB(args[1:], output)
+	}
 	if len(args) == 0 || args[0] != "init" {
-		return errors.New("usage: dismist init [--data-dir DIR] | dismist ap33 inspect|ssh|onboard|restore|serial-response|prepare-trust|check-trust ... (run `dismist ap33` for details)")
+		return errors.New("usage: dismist init [--data-dir DIR] | dismist ap33 inspect|ssh|onboard|restore|serial-response|prepare-trust|check-trust ... (run `dismist ap33` for details) | dismist db migrate --dry-run|rehearse-copy ... (run `dismist db` for details)")
 	}
 	flags := flag.NewFlagSet("dismist init", flag.ContinueOnError)
 	flags.SetOutput(output)

@@ -382,14 +382,28 @@ type Served struct {
 	// assigned, as in v0) or SkipNoSecret (an attention item, not a
 	// registry failure).
 	Skip string
+	// Pinned is true when Config is the desired config's pinned bytes (the
+	// schema-2 migration's legacy compile, served unchanged until the
+	// first change that touches the AP).
+	Pinned bool
+}
+
+// pinnedLookup is the optional part of the lookup Prepare is given that
+// reads stored desired configs (*model.APConfigStore implements it).
+type pinnedLookup interface {
+	Desired(apID string) (model.DesiredConfig, bool, error)
 }
 
 // Prepare decides, for every AP in state and each on its own, what config
 // to serve (design §4.4 "One AP never stops another"). Pass the delivered
 // store so a compile failure falls back to the delivered bytes; nil
-// disables the fallback. The result is sorted by AP ID.
+// disables the fallback. When the store also reads desired configs, an AP
+// whose desired config is pinned at its current revision is served the
+// pinned bytes (design §4.7: the upgrade serves the AP exactly what the
+// previous release did). The result is sorted by AP ID.
 func Prepare(template []byte, state model.State, delivered DeliveredLookup) []Served {
 	result := make([]Served, 0, len(state.APs))
+	pins, _ := delivered.(pinnedLookup)
 	for _, ap := range state.APs {
 		one := Served{APID: ap.ID, SiteID: ap.SiteID, Source: SourceNone}
 		switch {
@@ -401,6 +415,13 @@ func Prepare(template []byte, state model.State, delivered DeliveredLookup) []Se
 		if one.Skip != "" {
 			result = append(result, one)
 			continue
+		}
+		if pins != nil {
+			if desired, found, err := pins.Desired(ap.ID); err == nil && found && len(desired.Pinned) != 0 && desired.Revision == ConfigRevision(state, ap) {
+				one.Config, one.Revision, one.Source, one.Pinned = append([]byte(nil), desired.Pinned...), desired.Revision, SourceCompiled, true
+				result = append(result, one)
+				continue
+			}
 		}
 		input, err := InputFor(template, state, ap.ID)
 		var output Output

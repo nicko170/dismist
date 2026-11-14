@@ -150,6 +150,24 @@ func oldEffective(t *testing.T, store *model.BoltStore) map[string][]byte {
 	return result
 }
 
+// legacyCompile is the config the legacy compiler builds for one AP.
+func legacyCompile(t *testing.T, store *model.BoltStore, apID string) []byte {
+	t.Helper()
+	var frozen legacyv0.State
+	if err := store.View(func(tx *bolt.Tx) error {
+		var err error
+		frozen, err = legacyv0.ReadState(tx)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := legacyv0.CompileAP(legacyv0.BundledTemplate(), frozen, apID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
 // legacyBytes returns the raw legacy members of every record.
 func legacyBytes(t *testing.T, store *model.BoltStore) map[string]string {
 	t.Helper()
@@ -320,6 +338,15 @@ func TestLiveProductionMigration(t *testing.T) {
 			if err != nil || !found || desired.Revision != 40 || desired.Timestamp != compile.ConfigTimestamp(liveTime) {
 				t.Fatalf("desired %+v %v %v", desired, found, err)
 			}
+			// The legacy compile is pinned and served unchanged at this
+			// revision: the upgrade sends the AP the previous release's bytes.
+			if want := legacyCompile(t, store, liveAP); !bytes.Equal(desired.Pinned, want) {
+				t.Fatalf("pinned bytes are not the legacy compile:\n%s\n%s", desired.Pinned, want)
+			}
+			served := compile.Prepare(legacyv0.BundledTemplate(), store.Snapshot(), store.APConfig())
+			if len(served) != 1 || !served[0].Pinned || !bytes.Equal(served[0].Config, desired.Pinned) || served[0].Revision != 40 {
+				t.Fatalf("served %+v", served)
+			}
 			// History and report.
 			record, found, err := store.ConfigHistory().Get(state.Revision)
 			if err != nil || !found || record.Kind != model.ChangeMigration || !strings.Contains(record.Summary, "Migrated to schema 2") {
@@ -382,5 +409,54 @@ func TestLiveMigrationWithoutMonitorCCRev(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("shadow report %+v", output.Shadowed)
+	}
+}
+
+// A 5 GHz radio on a DFS channel without a DFS fallback in the running
+// config lifts as unmanaged RF, with a reason, instead of refusing the
+// whole migration on the firmware rule; with a fallback of the typed
+// shape it lifts as managed with that fallback.
+func TestLiveMigrationDFSChannel(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		jumplist any
+		managed  bool
+		fallback int
+	}{
+		{"no fallback", nil, false, 0},
+		{"typed fallback", map[string]any{"ChanSpecs": []any{map[string]any{"Channel": 36, "Width": 80}}}, true, 36},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc := scenario{full: true, monitor: true, extra: func(state *model.State) {
+				radios := liveRadios(true)
+				for _, radio := range radios {
+					if radio["Band"] == "5" {
+						radio["Channel"], radio["RRM"].(map[string]any)["Channel"] = 100, 100
+						if tc.jumplist != nil {
+							radio["DFSjumplist"] = tc.jumplist
+						}
+					}
+				}
+				raw, _ := json.Marshal(map[string]any{"Radios": radios, "Monitor": map[string]any{"CCRev": "AU/890"}})
+				state.Sites[0].Advanced = raw
+			}}
+			store := liveStore(t, sc)
+			before := oldEffective(t, store)
+			result := runMigration(t, store, sc)
+			if result.State.State != StateCommitted {
+				t.Fatalf("refused: %s\n%s", result.State.Reason, result.State.Report)
+			}
+			if got := compiledEffective(t, store, liveAP); !bytes.Equal(got, before[liveAP]) {
+				t.Fatalf("effective config changed: %v", compile.DiffPaths(before[liveAP], got))
+			}
+			site := store.Snapshot().Sites[0]
+			if site.RF.Managed != tc.managed || (tc.managed && site.RF.Band5.DFSFallback != tc.fallback) {
+				t.Fatalf("RF lift managed %v fallback %d", site.RF.Managed, site.RF.Band5.DFSFallback)
+			}
+			report, _, _ := ReadReport(store)
+			if !tc.managed && (len(report.Sites) != 1 || !strings.Contains(report.Sites[0].RFReason, "DFS")) {
+				t.Fatalf("report %+v", report.Sites)
+			}
+		})
 	}
 }

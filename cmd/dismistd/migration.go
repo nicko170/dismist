@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -31,9 +32,19 @@ type migrationRunner struct {
 	logf      func(string, ...any)
 }
 
-// errFinaliseUnavailable is returned until the schema-2 finalise step
-// exists.
+// errFinaliseUnavailable is returned by a runner built without a finalise
+// step (tests).
 var errFinaliseUnavailable = errors.New("this build has no finalise step")
+
+// newMigrationRunner is the daemon's runner: the registered steps and
+// migrate.Finalise (design §4.1 rule 5), which on a dry run finalises a
+// private copy.
+func newMigrationRunner(store *model.BoltStore, template []byte, tempDir string, accept []string) *migrationRunner {
+	return &migrationRunner{store: store, template: template, tempDir: tempDir, accept: accept, steps: migrate.Steps, logf: log.Printf,
+		finalise: func(target *model.BoltStore, _ bool) error {
+			return migrate.Finalise(target, time.Now().UTC(), model.Actor{Kind: model.ActorSystem, Name: "operator"})
+		}}
+}
 
 func (r *migrationRunner) Status() api.MigrationStatus {
 	return migrationStatusOf(r.store)

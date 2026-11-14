@@ -325,21 +325,30 @@ reconnects. The prediction (1 on both bands) is what 0.15 resolves for the
 `BSSIDIndex: 0` v0.3.0 sends, and the AP's VAPs `wl0.1`/`wl1.1` carry index 1,
 so P2.1 passes with `predicted`; the post-delivery check on the next
 `ep-config` confirms the BSSIDs. The migration does not bump the AP's
-`config_revision` or `Timestamp`, but the AP's next fetch receives different
-bytes that normalise to the same effective config. They differ only in leaves
-the normaliser models: values 0.15 clamps or resolves anyway
-(`Dot11w.SA_Query_Attempts` 5→3, `SA_Query_Timeout` 1000→200,
-`BandConfigs[].BSSIDIndex` 0→1), explicit zero or false values for keys v0.3.0
-left absent (`Radios[].ChainSelectMode`, `TWTDisabled`, `PreambleLength`,
-`Disabled`, `DFSjumplist`, empty `QOS`/`ProbeControl`/`NonAggrRegulate`, the
-unused AKM flags, `WME`, `OWE`, `Bcast2Ucast`, `DisabledIEs.*`), the key case
-`roamMode`→`RoamMode` (Go JSON matches keys case-insensitively), and keys
-0.15 does not read (`SiteName`, `RootAuthorizedSSHKeys`, `SVIs[].dhcp_enabled`,
+`config_revision` or `Timestamp`, and it pins the legacy compile in
+`ap_config.desired.pinned`: until the first change that touches the AP, the
+AP is served exactly the bytes v0.3.0 served it (`TestProductionDatabaseFromV030`
+asserts byte equality with `served-v0.3.0.json`), so ep-control sees the same
+WLAN objects and no BSS restarts at the upgrade. The schema-2 compile is
+stored next to it for change detection; it normalises to the same effective
+config and differs only in leaves the normaliser models: values 0.15 clamps
+or resolves anyway (`Dot11w.SA_Query_Attempts` 5→3, `SA_Query_Timeout`
+1000→200, `BandConfigs[].BSSIDIndex` 0→1), explicit zero or false values for
+keys v0.3.0 left absent (`Radios[].ChainSelectMode`, `TWTDisabled`,
+`PreambleLength`, `Disabled`, `DFSjumplist`, empty `QOS`/`ProbeControl`/
+`NonAggrRegulate`, the unused AKM flags, `WME`, `OWE`, `Bcast2Ucast`,
+`DisabledIEs.*`), the key case `roamMode`→`RoamMode`, and keys 0.15 does not
+read (`SiteName`, `RootAuthorizedSSHKeys`, `SVIs[].dhcp_enabled`,
 `Stats.SplitWifiAndBleRssiStats`, `Stats.UseSeparate*ScanTopic`,
-`WLANs[].ForFTM`, `DhcpOption82Data: null`, `AMPDU.RST`). In P2.2, also record
-`wl -i wl0.1 bssid`, `wl -i wl1.1 bssid` and
-`wl -i wl1.1 mfp`/`wl -i wl0.1 mfp` before and after the AP's first reconnect
-on the new release; they must not change.
+`WLANs[].ForFTM`, `DhcpOption82Data: null`, `AMPDU.RST`). The AP first
+receives those bytes with the first config change that touches it, which is
+a deliberate edit with its own impact line. In P2.2, record
+`wl -i wl0.1 bssid`, `wl -i wl1.1 bssid` and `wl -i wl1.1 mfp`/`wl -i wl0.1 mfp`
+before and after the AP's first reconnect on the new release (they must not
+change: the bytes are identical), and again after the first typed change (for
+example LED brightness 255 → 254): the BSSIDs and `mfp` must still not change,
+and record whether the client count dipped (a WLAN restart caused by the
+raw-byte differences above).
 
 **P2.3 `ep-config-change` push (`config_change_notify`).** The feature is off
 by default; with it off every change reconnects the AP, which Q5 showed does
@@ -412,7 +421,7 @@ on a separate test WLAN where it can:
 
 | Check | Pass |
 | --- | --- |
-| Guest preset with rate limit and schedule | The WLAN appears and disappears on schedule (`wl -i <dev> bss`); a client's throughput is capped near the configured rate (units are unverified: record measured against configured). |
+| Guest preset with rate limit and schedule | Needs `config_change_notify` on the AP (schedules apply only to APs that take notify pushes; otherwise the WLAN stays on air). The WLAN appears and disappears within a minute of each window edge (`wl -i <dev> bss`), each edge is a history entry "Schedule: WLAN … off air / back on air" with a new revision, and a controller restart inside or outside a window does not change the served config; a client's throughput is capped near the configured rate (units are unverified: record measured against configured). |
 | WPA2/WPA3-Enterprise with RADIUS | A client authenticates against the RADIUS server; `wl wpa_auth` shows the expected AKMs; accounting records arrive when configured. |
 | Per-device passphrases (Multi-PSK) | Two clients with different passphrases join the same SSID and land on their configured VLANs. |
 | NotModified reply (Q6) | After a controller restart the AP does not re-apply an unchanged config (no "applying config" in the log) and stays in sync. |

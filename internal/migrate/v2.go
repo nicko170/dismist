@@ -143,6 +143,11 @@ type V2Result struct {
 	Report V2Report
 	// Desired holds each verified AP's v2 compile (seeds ap_config).
 	Desired map[string][]byte
+	// Legacy holds each verified AP's legacy compile: the exact bytes the
+	// previous release serves it at this revision and Timestamp. They are
+	// pinned in ap_config.desired so the upgrade serves the AP the same
+	// bytes until the first change that touches it (design §4.7).
+	Legacy map[string][]byte
 }
 
 type apContext struct {
@@ -164,7 +169,7 @@ func refuse(report *V2Report, code, reason string, paths ...string) *RefusedErro
 // the report explaining it.
 func PlanV2(in V2Input) (V2Result, error) {
 	report := V2Report{At: in.Now.UTC(), Sites: []SiteLift{}, Networks: []NetworkLift{}, APs: []APLift{}}
-	result := V2Result{Desired: map[string][]byte{}}
+	result := V2Result{Desired: map[string][]byte{}, Legacy: map[string][]byte{}}
 	template := legacyv0.Template(in.Template)
 	accepted := map[string]bool{}
 	for _, id := range in.AcceptLocalFiles {
@@ -303,6 +308,7 @@ func PlanV2(in V2Input) (V2Result, error) {
 				fmt.Sprintf("AP %s: the typed config is not equivalent to what the AP runs", lift.ID), lift.Mismatch...)
 		}
 		result.Desired[lift.ID] = output.Config
+		result.Legacy[lift.ID] = c.raw0
 	}
 
 	// H0, recomputed with this normaliser.
@@ -871,6 +877,16 @@ func liftSite(site *model.Site, frozen legacyv0.Site, eff map[string]any, lift *
 		if band == "5" && domain != nil {
 			if dfs, _ := domain.Valid(band, width, channel); dfs {
 				profile.DFS = true
+				// The typed RF profile always sends a DFS fallback with a
+				// DFS channel. It lifts only when the running config has
+				// exactly that shape; otherwise the radio stays as it is,
+				// unmanaged (design §4.7), instead of refusing the whole
+				// migration on the firmware rule.
+				if fallback, ok := dfsFallbackOf(radio, width, domain); ok {
+					profile.DFSFallback = fallback
+				} else if managed {
+					managed, reason = false, fmt.Sprintf("5 GHz channel %d is a DFS channel and the running config has no DFS fallback channel the typed RF profile can express", channel)
+				}
 			}
 		}
 	}
@@ -887,6 +903,25 @@ func liftSite(site *model.Site, frozen legacyv0.Site, eff map[string]any, lift *
 		site.RF = fresh
 	}
 	lift.RFManaged, lift.RFReason = managed, reason
+}
+
+// dfsFallbackOf returns the radio's DFS fallback when its DFSjumplist is
+// what the typed compile writes: one non-DFS channel valid at the radio's
+// width, {Channel, Width} and nothing else.
+func dfsFallbackOf(radio map[string]any, width int, domain *regdomain.Domain) (int, bool) {
+	specs, _ := valueAt(radio, "DFSjumplist", "ChanSpecs").([]any)
+	if len(specs) != 1 {
+		return 0, false
+	}
+	spec, _ := specs[0].(map[string]any)
+	if len(spec) != 2 || intAt(spec, "Width") != width {
+		return 0, false
+	}
+	channel := intAt(spec, "Channel")
+	if dfs, valid := domain.Valid("5", width, channel); channel == 0 || dfs || !valid {
+		return 0, false
+	}
+	return channel, true
 }
 
 // defaultRF is the RF profile of a new site (design §3.10), unmanaged.
