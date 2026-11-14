@@ -83,7 +83,8 @@ func (s *Server) changeEntry(writer http.ResponseWriter, p params) (ChangeEntry,
 		return ChangeEntry{}, false
 	}
 	entry, err := s.config.History.Get(revision)
-	if errors.Is(err, model.ErrNotFound) || (err == nil && entry.SiteID != p["site"]) {
+	// A global entry (the schema migration) belongs to every site's list.
+	if errors.Is(err, model.ErrNotFound) || (err == nil && entry.SiteID != "" && entry.SiteID != p["site"]) {
 		writeAPIError(writer, notFound("revision"))
 		return ChangeEntry{}, false
 	}
