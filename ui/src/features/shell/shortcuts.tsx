@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { siteNav, type NavId } from './nav'
 import { useNavSite } from './site'
 
@@ -36,7 +35,9 @@ export function shortcutFor(key: string, armed: boolean): { action: 'arm' | 'hel
   return { action: null }
 }
 
-const rows: { keys: string[]; label: string }[] = [
+const ShortcutHelp = lazy(() => import('./ShortcutHelp'))
+
+export const shortcutRows: { keys: string[]; label: string }[] = [
   { keys: ['/'], label: 'Search this list' },
   ...Object.entries(GO_KEYS).map(([key, id]) => ({ keys: ['g', key], label: `Go to ${siteNav.find((item) => item.id === id)?.label ?? id}` })),
   { keys: ['?'], label: 'Show these shortcuts' },
@@ -80,25 +81,10 @@ export function KeyboardShortcuts() {
     return () => window.removeEventListener('keydown', onKey)
   }, [router])
 
+  if (!help) return null
   return (
-    <Dialog open={help} onOpenChange={setHelp}>
-      <DialogContent title="Keyboard shortcuts" description="Available when no text field has focus.">
-        <dl className="grid gap-2">
-          {rows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between gap-4 text-sm">
-              <dt>{row.label}</dt>
-              <dd className="flex shrink-0 items-center gap-1">
-                {row.keys.map((key, index) => (
-                  <span key={key} className="flex items-center gap-1">
-                    {index ? <span className="text-xs text-muted-foreground">then</span> : null}
-                    <kbd className="min-w-6 rounded border bg-muted px-1.5 py-0.5 text-center font-mono text-xs">{key}</kbd>
-                  </span>
-                ))}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </DialogContent>
-    </Dialog>
+    <Suspense fallback={null}>
+      <ShortcutHelp open={help} onOpenChange={setHelp} />
+    </Suspense>
   )
 }
