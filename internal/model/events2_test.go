@@ -50,8 +50,13 @@ func TestEvents2UpsertDedupAndNewestFirst(t *testing.T) {
 	if _, err := events.Get("missing"); !errors.Is(err, ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err := events.Upsert([]EventV2{{ID: "x", SiteID: "site-a", Kind: "pace", FirstSeen: base, Data: json.RawMessage(`"` + strings.Repeat("a", MaxEventData) + `"`)}}); err == nil {
-		t.Fatal("oversized data accepted")
+	// Oversized data never loses the event: it is replaced by its size.
+	big, err := events.Upsert([]EventV2{{ID: "x", SiteID: "site-a", Kind: "pace", FirstSeen: base, Data: json.RawMessage(`"` + strings.Repeat("a", MaxEventData) + `"`)}})
+	if err != nil || string(big[0].Data) != fmt.Sprintf(`{"truncated":%d}`, MaxEventData+2) {
+		t.Fatalf("oversized data %s %v", big[0].Data, err)
+	}
+	if _, err := events.Upsert([]EventV2{{ID: "y", SiteID: "site-a", Kind: "pace", FirstSeen: base, Data: json.RawMessage(`{bad`)}}); err == nil {
+		t.Fatal("invalid data accepted")
 	}
 }
 

@@ -233,14 +233,18 @@ func (s *BoltStore) prepareNext() State {
 }
 
 // commitState writes next inside tx: client sessions of moved APs are
-// closed, ap_config records of removed APs are dropped, then the state
-// buckets are rewritten.
+// closed ("site moved"); a removed AP's active sessions are closed ("AP
+// removed") and its ap_config and ap_status records dropped (its history
+// stays until retention or PurgeAPHistory); a newly registered AP's
+// pending-AP dismissal is cleared; then the state buckets are rewritten.
 func (s *BoltStore) commitState(tx *bolt.Tx, next State) error {
 	present := make(map[string]bool, len(next.APs))
 	for _, current := range next.APs {
 		present[current.ID] = true
 	}
+	known := make(map[string]bool, len(s.state.APs))
 	for _, previous := range s.state.APs {
+		known[previous.ID] = true
 		for _, current := range next.APs {
 			if previous.ID == current.ID && previous.SiteID != current.SiteID {
 				if err := closeActiveSessions(tx, previous.SiteID, previous.ID, next.UpdatedAt, "site moved"); err != nil {
@@ -249,8 +253,22 @@ func (s *BoltStore) commitState(tx *bolt.Tx, next State) error {
 			}
 		}
 		if !present[previous.ID] {
-			if bucket := tx.Bucket([]byte(BucketAPConfig)); bucket != nil {
-				if err := bucket.Delete([]byte(previous.ID)); err != nil {
+			if err := closeActiveSessions(tx, previous.SiteID, previous.ID, next.UpdatedAt, "AP removed"); err != nil {
+				return err
+			}
+			for _, name := range []string{BucketAPConfig, BucketAPStatus} {
+				if bucket := tx.Bucket([]byte(name)); bucket != nil {
+					if err := bucket.Delete([]byte(previous.ID)); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	if bucket := tx.Bucket([]byte(BucketPendingDismissed)); bucket != nil {
+		for _, current := range next.APs {
+			if !known[current.ID] {
+				if err := bucket.Delete([]byte(current.ID)); err != nil {
 					return err
 				}
 			}
