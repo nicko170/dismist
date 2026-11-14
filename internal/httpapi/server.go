@@ -34,6 +34,8 @@ type Server struct {
 	mutationLock    *sync.Mutex
 	tokens          TokenManager
 	next            fs.FS
+	system          SystemInfo
+	backupBusy      sync.Mutex
 }
 
 func New(store model.StateStore, control *controller.Server, base []byte, apID string, allowedHosts ...string) *Server {
@@ -109,6 +111,10 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	switch {
 	case request.URL.Path == "/api/system/tokens" || strings.HasPrefix(request.URL.Path, "/api/system/tokens/"):
 		s.systemTokens(writer, request)
+	case request.URL.Path == "/api/system" || strings.HasPrefix(request.URL.Path, "/api/system/"):
+		s.systemResource(writer, request)
+	case request.URL.Path == "/api/onboarding" || strings.HasPrefix(request.URL.Path, "/api/onboarding/"):
+		s.onboarding(writer, request)
 	case request.URL.Path == "/api/aps" && request.Method == http.MethodGet:
 		state := s.store.Snapshot()
 		aps := make([]map[string]any, 0, len(state.APs))
