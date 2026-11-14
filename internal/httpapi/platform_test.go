@@ -297,15 +297,16 @@ func TestRegisterAPStoresPrivateRecordAndReturnsRedactedView(t *testing.T) {
 	if listed.Code != http.StatusOK || bytes.Contains(listed.Body.Bytes(), []byte(secret)) {
 		t.Fatalf("AP list leaked private path: %d %s", listed.Code, listed.Body.String())
 	}
-	for _, candidate := range []map[string]string{
-		{"id": "02-aa-00-00-00-06", "management_ip": "192.0.2.11", "site_id": "b", "secret_file": secret},
-		{"id": "02-aa-00-00-00-05", "management_ip": "192.0.2.10", "site_id": "b", "secret_file": secret},
-	} {
-		body, _ := json.Marshal(candidate)
-		duplicate := request(t, handler, http.MethodPost, "/api/aps", string(body))
-		if duplicate.Code != http.StatusConflict || store.Snapshot().Revision != state.Revision {
-			t.Fatalf("duplicate AP accepted: %d %s", duplicate.Code, duplicate.Body.String())
-		}
+	body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "management_ip": "192.0.2.11", "site_id": "b", "secret_file": secret})
+	duplicate := request(t, handler, http.MethodPost, "/api/aps", string(body))
+	if duplicate.Code != http.StatusConflict || store.Snapshot().Revision != state.Revision {
+		t.Fatalf("duplicate AP ID accepted: %d %s", duplicate.Code, duplicate.Body.String())
+	}
+	// APs are identified by ID, so a second AP may share another's address
+	// (several APs behind one NAT).
+	body, _ = json.Marshal(map[string]string{"id": "02-aa-00-00-00-05", "management_ip": "192.0.2.10", "site_id": "b", "secret_file": secret})
+	if shared := request(t, handler, http.MethodPost, "/api/aps", string(body)); shared.Code != http.StatusCreated {
+		t.Fatalf("AP sharing an address rejected: %d %s", shared.Code, shared.Body.String())
 	}
 }
 
@@ -421,7 +422,7 @@ func TestEditAPRejectsInvalidBindingsWithoutChangingState(t *testing.T) {
 	}
 	before := store.Snapshot()
 	for _, input := range []map[string]string{
-		{"management_ip": "invalid"}, {"management_ip": otherIP}, {"secret_file": secret},
+		{"management_ip": "invalid"}, {"secret_file": secret},
 	} {
 		body, _ := json.Marshal(input)
 		response := request(t, handler, http.MethodPut, "/api/aps/ap-a", string(body))
@@ -429,9 +430,9 @@ func TestEditAPRejectsInvalidBindingsWithoutChangingState(t *testing.T) {
 			t.Fatalf("invalid AP edit committed: %d %s", response.Code, body)
 		}
 	}
-	duplicateLegacy := request(t, handler, http.MethodPut, "/api/aps/ap-b", `{"management_ip":"127.0.0.1"}`)
-	if duplicateLegacy.Code != http.StatusConflict || store.Snapshot().Revision != before.Revision {
-		t.Fatalf("legacy controller IP collision accepted: %d %s", duplicateLegacy.Code, duplicateLegacy.Body.String())
+	shared := request(t, handler, http.MethodPut, "/api/aps/ap-a", `{"management_ip":"`+otherIP+`"}`)
+	if shared.Code != http.StatusOK {
+		t.Fatalf("pinning an AP to a shared address rejected: %d %s", shared.Code, shared.Body.String())
 	}
 }
 
@@ -476,17 +477,35 @@ func TestAPNoOpEditReturnsPersistedRevision(t *testing.T) {
 	}
 }
 
-func TestRegisterAPRejectsLegacyControllerIPCollision(t *testing.T) {
+func TestRegisterAPWithSharedOrNoSourceAddress(t *testing.T) {
 	handler, store, _ := platformFixture(t)
 	secret := filepath.Join(t.TempDir(), "new.bin")
 	if err := os.WriteFile(secret, bytes.Repeat([]byte{1}, 32), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	before := store.Snapshot().Revision
 	body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "management_ip": "127.0.0.1", "site_id": "b", "secret_file": secret})
+	if response := request(t, handler, http.MethodPost, "/api/aps", string(body)); response.Code != http.StatusCreated {
+		t.Fatalf("AP sharing the legacy AP's address rejected: %d %s", response.Code, response.Body.String())
+	}
+	body, _ = json.Marshal(map[string]string{"id": "02-aa-00-00-00-07", "site_id": "b", "secret_file": secret})
 	response := request(t, handler, http.MethodPost, "/api/aps", string(body))
-	if response.Code != http.StatusConflict || store.Snapshot().Revision != before {
-		t.Fatalf("legacy IP reused: %d %s", response.Code, response.Body.String())
+	if response.Code != http.StatusCreated {
+		t.Fatalf("AP without a management IP rejected: %d %s", response.Code, response.Body.String())
+	}
+	var created struct {
+		AP map[string]any `json:"ap"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &created); err != nil || created.AP["management_ip"] != "" {
+		t.Fatalf("unpinned AP view: %s %v", response.Body.String(), err)
+	}
+	for _, ap := range store.Snapshot().APs {
+		if ap.ID == "02-aa-00-00-00-07" && ap.ManagementIP != "" {
+			t.Fatalf("unpinned AP stored with address %q", ap.ManagementIP)
+		}
+	}
+	body, _ = json.Marshal(map[string]string{"id": "02-aa-00-00-00-08", "management_ip": "nope", "site_id": "b", "secret_file": secret})
+	if response := request(t, handler, http.MethodPost, "/api/aps", string(body)); response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid management IP accepted: %d", response.Code)
 	}
 }
 

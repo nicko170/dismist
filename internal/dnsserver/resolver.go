@@ -53,6 +53,23 @@ func (r *Resolver) AllowAP(address string) error {
 	return nil
 }
 
+// ReplaceAPs sets the source addresses allowed to use AP DNS to exactly
+// addresses. Several APs may share one address (behind NAT).
+func (r *Resolver) ReplaceAPs(addresses []string) error {
+	allowed := make(map[string]bool, len(addresses))
+	for _, address := range addresses {
+		ip := net.ParseIP(address)
+		if ip == nil {
+			return errors.New("invalid AP address")
+		}
+		allowed[ip.String()] = true
+	}
+	r.mu.Lock()
+	r.allowedIPs = allowed
+	r.mu.Unlock()
+	return nil
+}
+
 func (r *Resolver) RemoveAP(address string) {
 	ip := net.ParseIP(address)
 	if ip == nil {

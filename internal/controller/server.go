@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -63,9 +64,11 @@ type Status struct {
 	TLSCipherSuite  string    `json:"tls_cipher_suite"`
 	LastDisconnect  time.Time `json:"last_disconnect"`
 	Firmware        string    `json:"firmware"`
+	Model           string    `json:"model,omitempty"`
 	LastSeen        time.Time `json:"last_seen"`
 	AppliedRevision uint64    `json:"applied_revision"`
 	LastError       string    `json:"last_error,omitempty"`
+	RemoteAddress   string    `json:"remote_address,omitempty"`
 }
 
 type ClientActivity struct {
@@ -84,21 +87,29 @@ type ConnectionEvent struct {
 }
 
 type TelemetrySnapshot struct {
-	FullFrames        uint64             `json:"full_frames"`
-	FastFrames        uint64             `json:"fast_frames"`
-	LastFull          time.Time          `json:"last_full"`
-	LastFast          time.Time          `json:"last_fast"`
-	UptimeSeconds     uint64             `json:"uptime_seconds"`
-	VAPs              []telemetry.VAP    `json:"vaps"`
-	Radios            []telemetry.Radio  `json:"radios"`
-	RecentClients     []ClientActivity   `json:"recent_clients"`
-	AssociatedClients []telemetry.Client `json:"associated_clients"`
-	Events            []ConnectionEvent  `json:"events"`
+	FullFrames        uint64                `json:"full_frames"`
+	FastFrames        uint64                `json:"fast_frames"`
+	LastFull          time.Time             `json:"last_full"`
+	LastFast          time.Time             `json:"last_fast"`
+	UptimeSeconds     uint64                `json:"uptime_seconds"`
+	VAPs              []telemetry.VAP       `json:"vaps"`
+	Radios            []telemetry.Radio     `json:"radios"`
+	RecentClients     []ClientActivity      `json:"recent_clients"`
+	AssociatedClients []telemetry.Client    `json:"associated_clients"`
+	Interfaces        []telemetry.Interface `json:"interfaces"`
+	Events            []ConnectionEvent     `json:"events"`
 }
 
 func NewServer(options Options) (*Server, error) {
-	allowed := net.ParseIP(options.AllowedIP)
-	if allowed == nil || options.ID == "" || len(options.CertDER) == 0 || !json.Valid(options.Config) {
+	// AllowedIP optionally pins the AP to one source address. Without it the
+	// AP is accepted from anywhere and identified by its authenticated ID.
+	var allowed net.IP
+	if address := strings.TrimSpace(options.AllowedIP); address != "" {
+		if allowed = net.ParseIP(address); allowed == nil {
+			return nil, errors.New("invalid controller options")
+		}
+	}
+	if options.ID == "" || len(options.CertDER) == 0 || !json.Valid(options.Config) {
 		return nil, errors.New("invalid controller options")
 	}
 	if options.UDPProbeAddress != "" {
@@ -150,9 +161,22 @@ func (s *Server) Status() Status {
 	return s.status
 }
 
-// AllowedManagementIP returns the registered AP address without exposing its credential.
+// AllowedManagementIP returns the AP's optional source address pin, or "".
 func (s *Server) AllowedManagementIP() string {
+	if s.allowedIP == nil {
+		return ""
+	}
 	return s.allowedIP.String()
+}
+
+// acceptsSource reports whether a connection from remoteAddr may be this AP:
+// always, unless the AP is pinned to a source address.
+func (s *Server) acceptsSource(remoteAddr string) bool {
+	if s.allowedIP == nil {
+		return true
+	}
+	host, _, err := net.SplitHostPort(remoteAddr)
+	return err == nil && net.ParseIP(host).Equal(s.allowedIP)
 }
 
 func (s *Server) ConfigSnapshot() ([]byte, uint64) {
@@ -168,6 +192,7 @@ func (s *Server) TelemetrySnapshot() TelemetrySnapshot {
 	result.VAPs = append([]telemetry.VAP(nil), s.stats.VAPs...)
 	result.Radios = append([]telemetry.Radio(nil), s.stats.Radios...)
 	result.Events = append([]ConnectionEvent(nil), s.stats.Events...)
+	result.Interfaces = append([]telemetry.Interface(nil), s.stats.Interfaces...)
 	result.RecentClients = make([]ClientActivity, 0, len(s.clients))
 	for _, client := range s.clients {
 		result.RecentClients = append(result.RecentClients, client)
@@ -223,33 +248,30 @@ func (s *Server) Disconnect() {
 	}
 }
 
+// ServeHTTP serves this AP alone. The Manager routes by AP ID instead; this
+// entry point remains for single-AP use and tests.
 func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if request.URL.Path != "/ws" {
 		http.NotFound(writer, request)
 		return
 	}
-	host, _, err := net.SplitHostPort(request.RemoteAddr)
-	if err != nil || !net.ParseIP(host).Equal(s.allowedIP) || request.TLS == nil {
+	if request.TLS == nil || !s.acceptsSource(request.RemoteAddr) {
 		http.Error(writer, "AP not registered", http.StatusForbidden)
 		return
 	}
-	upgrader := websocket.Upgrader{
-		ReadBufferSize: 4096, WriteBufferSize: 4096,
-		Subprotocols: []string{"mist-ep-v0"},
-		CheckOrigin:  func(*http.Request) bool { return true },
-	}
-	conn, err := upgrader.Upgrade(writer, request, nil)
+	conn, err := apUpgrader().Upgrade(writer, request, nil)
 	if err != nil {
 		return
 	}
+	s.serveConn(conn, request.TLS.CipherSuite, request.RemoteAddr, nil)
+}
+
+// serveConn runs one AP connection. hello, when set, is an ep-auth frame the
+// Manager already read to route the connection. The connection only becomes
+// this AP's active session once it authenticates, so an unauthenticated
+// client naming this AP cannot displace the real one.
+func (s *Server) serveConn(conn *websocket.Conn, cipherSuite uint16, remoteAddr string, hello []byte) {
 	defer conn.Close()
-	s.mu.Lock()
-	previous := s.active
-	s.active = conn
-	s.mu.Unlock()
-	if previous != nil && previous != conn {
-		_ = previous.Close()
-	}
 	defer func() {
 		s.mu.Lock()
 		if s.active == conn {
@@ -262,15 +284,19 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}()
 	conn.SetReadLimit(8 << 20)
 	authenticator := s.auth
-	authenticator.CipherSuite = request.TLS.CipherSuite
-	if err := s.handle(conn, authenticator); err != nil {
-		_ = conn.WriteControl(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid AP message"),
-			time.Now().Add(time.Second))
+	authenticator.CipherSuite = cipherSuite
+	if err := s.handle(conn, authenticator, remoteAddr, hello); err != nil {
+		closeWithPolicyViolation(conn, "invalid AP message")
 	}
 }
 
-func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator) error {
+func clockBody() []byte {
+	var body [8]byte
+	binary.BigEndian.PutUint64(body[:], uint64(time.Now().UnixMicro()))
+	return body[:]
+}
+
+func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remoteAddr string, pending []byte) error {
 	const (
 		awaitHello = iota
 		awaitClientProof
@@ -281,9 +307,16 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator) error
 	var reply1 Reply1
 	var authHandle uint64
 	for {
-		messageType, raw, err := conn.ReadMessage()
-		if err != nil {
-			return nil
+		var messageType int
+		var raw []byte
+		if pending != nil {
+			messageType, raw, pending = websocket.BinaryMessage, pending, nil
+		} else {
+			var err error
+			messageType, raw, err = conn.ReadMessage()
+			if err != nil {
+				return nil
+			}
 		}
 		if messageType != websocket.BinaryMessage {
 			return ErrAuthentication
@@ -292,9 +325,11 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator) error
 		if err != nil || message.Version != 1 || message.ServiceClass > 2 {
 			return ErrAuthentication
 		}
-		s.mu.Lock()
-		s.status.LastSeen = time.Now()
-		s.mu.Unlock()
+		if state == authed {
+			s.mu.Lock()
+			s.status.LastSeen = time.Now()
+			s.mu.Unlock()
+		}
 		if state == authed && s.onAPFrame != nil {
 			copyMessage := message
 			copyMessage.Body = append([]byte(nil), message.Body...)
@@ -305,9 +340,7 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator) error
 			if message.ServiceClass != 2 {
 				return ErrAuthentication
 			}
-			var body [8]byte
-			binary.BigEndian.PutUint64(body[:], uint64(time.Now().UnixMicro()))
-			if err := writeReply(conn, message, body[:]); err != nil {
+			if err := writeReply(conn, message, clockBody()); err != nil {
 				return err
 			}
 		case "ep-auth":
@@ -357,14 +390,23 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator) error
 				}
 				state = authed
 				s.mu.Lock()
+				previous := s.active
+				s.active = conn
 				s.status.Connected = true
+				s.status.LastSeen = time.Now()
+				s.status.RemoteAddress = remoteHost(remoteAddr)
 				s.status.ConnectedAt = time.Now()
 				s.status.ConnectionCount++
 				s.status.TLSCipherSuite = tls.CipherSuiteName(authenticator.CipherSuite)
 				s.status.Firmware = hello.Firmware
+				s.status.Model = hello.Model
 				s.status.LastError = ""
 				s.addEventLocked(ConnectionEvent{When: time.Now(), Kind: "connection", Title: "AP authenticated", Detail: hello.Firmware})
 				s.mu.Unlock()
+				if previous != nil && previous != conn {
+					_ = previous.Close()
+				}
+				log.Printf("AP %s authenticated from %s (%s)", authenticator.ID, remoteHost(remoteAddr), hello.Firmware)
 			default:
 				return ErrAuthentication
 			}
@@ -510,6 +552,9 @@ func (s *Server) observeTelemetry(body []byte) {
 		s.stats.VAPs = append([]telemetry.VAP(nil), update.VAPs...)
 		s.stats.Radios = append([]telemetry.Radio(nil), update.Radios...)
 		s.stats.UptimeSeconds = update.UptimeSeconds
+		if len(update.Interfaces) != 0 {
+			s.stats.Interfaces = append([]telemetry.Interface(nil), update.Interfaces...)
+		}
 		s.associated = mergeAssociated(s.associated, update.Clients)
 	case "ap-stats-fast-":
 		s.stats.FastFrames++
@@ -607,4 +652,11 @@ func writeReply(conn *websocket.Conn, request protocol.Message, body []byte) err
 	}
 	_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	return conn.WriteMessage(websocket.BinaryMessage, frame)
+}
+
+func remoteHost(remoteAddr string) string {
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host
+	}
+	return remoteAddr
 }

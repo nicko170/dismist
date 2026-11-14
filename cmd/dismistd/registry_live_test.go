@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -151,7 +150,7 @@ func TestReconcileActivatesPersistedAPAndWithdrawsOldIP(t *testing.T) {
 	if !ok || first == nil {
 		t.Fatal("newly persisted AP was not registered")
 	}
-	assertAPAccess(t, manager, resolver, "127.0.0.2", true)
+	assertAPAccess(t, manager, resolver, "ap-one", "127.0.0.2", true)
 
 	if err := store.Update(func(state *model.State) error {
 		state.APs[0].Name = "Renamed"
@@ -178,8 +177,8 @@ func TestReconcileActivatesPersistedAPAndWithdrawsOldIP(t *testing.T) {
 	if current, _ := manager.Server("ap-one"); current == first {
 		t.Fatal("changed source IP kept the old AP session")
 	}
-	assertAPAccess(t, manager, resolver, "127.0.0.2", false)
-	assertAPAccess(t, manager, resolver, "127.0.0.3", true)
+	assertAPAccess(t, manager, resolver, "ap-one", "127.0.0.2", false)
+	assertAPAccess(t, manager, resolver, "ap-one", "127.0.0.3", true)
 
 	if err := store.Update(func(state *model.State) error {
 		state.APs = nil
@@ -193,7 +192,7 @@ func TestReconcileActivatesPersistedAPAndWithdrawsOldIP(t *testing.T) {
 	if _, ok := manager.Server("ap-one"); ok {
 		t.Fatal("removed AP retained a control session")
 	}
-	assertAPAccess(t, manager, resolver, "127.0.0.3", false)
+	assertAPAccess(t, manager, resolver, "ap-one", "127.0.0.3", false)
 }
 
 func TestAPRegistryPollsPersistedAPs(t *testing.T) {
@@ -233,7 +232,7 @@ func TestAPRegistryPollsPersistedAPs(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for {
 		if _, ok := manager.Server("ap-new"); ok {
-			assertAPAccess(t, manager, resolver, "127.0.0.5", true)
+			assertAPAccess(t, manager, resolver, "ap-new", "127.0.0.5", true)
 			return
 		}
 		select {
@@ -266,12 +265,12 @@ func TestReconcileWaitsForSiteAssignment(t *testing.T) {
 	if err := registry.reconcile(state); err != nil {
 		t.Fatalf("unassigned AP caused an error: %v", err)
 	}
-	assertAPAccess(t, manager, resolver, "127.0.0.4", false)
+	assertAPAccess(t, manager, resolver, "ap-pending", "127.0.0.4", false)
 	state.APs[0].SiteID = "office"
 	if err := registry.reconcile(state); err != nil {
 		t.Fatal(err)
 	}
-	assertAPAccess(t, manager, resolver, "127.0.0.4", true)
+	assertAPAccess(t, manager, resolver, "ap-pending", "127.0.0.4", true)
 }
 
 func TestReconcileInvalidNewAPKeepsExistingSession(t *testing.T) {
@@ -304,25 +303,25 @@ func TestReconcileInvalidNewAPKeepsExistingSession(t *testing.T) {
 	if current, _ := manager.Server("ap-good"); current != good {
 		t.Fatal("unrelated invalid AP replaced the existing session")
 	}
-	assertAPAccess(t, manager, resolver, "127.0.0.7", true)
-	assertAPAccess(t, manager, resolver, "127.0.0.8", false)
+	assertAPAccess(t, manager, resolver, "ap-good", "127.0.0.7", true)
+	assertAPAccess(t, manager, resolver, "ap-bad", "127.0.0.8", false)
 }
 
-func assertAPAccess(t *testing.T, manager *controller.Manager, resolver *dnsserver.Resolver, address string, allowed bool) {
+// assertAPAccess checks an AP's pinned address against AP DNS and its control
+// session. WSS routing is by authenticated AP ID, so a withdrawn or re-pinned
+// AP must no longer have a session pinned to the old address.
+func assertAPAccess(t *testing.T, manager *controller.Manager, resolver *dnsserver.Resolver, id, address string, allowed bool) {
 	t.Helper()
 	query := new(dns.Msg)
 	query.SetQuestion("ep-terminator.mistsys.net.", dns.TypeA)
 	answer := resolver.Resolve(query, net.ParseIP(address))
-	request := httptest.NewRequest(http.MethodGet, "/ws", nil)
-	request.RemoteAddr = net.JoinHostPort(address, "1234")
-	request.TLS = &tls.ConnectionState{}
-	response := httptest.NewRecorder()
-	manager.ServeHTTP(response, request)
+	server, ok := manager.Server(id)
+	pinned := ok && server.AllowedManagementIP() == address
 	if allowed {
-		if answer.Rcode != dns.RcodeSuccess || len(answer.Answer) != 1 || response.Code == http.StatusForbidden {
-			t.Fatalf("registered AP %s lacks DNS or WSS: DNS %d/%d, WSS %d", address, answer.Rcode, len(answer.Answer), response.Code)
+		if answer.Rcode != dns.RcodeSuccess || len(answer.Answer) != 1 || !pinned {
+			t.Fatalf("registered AP %s at %s lacks DNS or its session: DNS %d/%d, session %t", id, address, answer.Rcode, len(answer.Answer), pinned)
 		}
-	} else if answer.Rcode != dns.RcodeRefused || response.Code != http.StatusForbidden {
-		t.Fatalf("withdrawn AP %s retains DNS or WSS: DNS %d, WSS %d", address, answer.Rcode, response.Code)
+	} else if answer.Rcode != dns.RcodeRefused || pinned {
+		t.Fatalf("withdrawn AP %s at %s retains DNS or its session: DNS %d, session %t", id, address, answer.Rcode, pinned)
 	}
 }

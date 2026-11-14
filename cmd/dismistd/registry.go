@@ -36,12 +36,11 @@ func prepareAPs(state model.State, options registryOptions) (*controller.Manager
 		if ap.SiteID == "" {
 			continue
 		}
+		// The management IP is an optional source pin (and the AP DNS
+		// allowlist); APs are identified by their authenticated ID.
 		address := ap.ManagementIP
 		if address == "" && ap.ID == options.DefaultID {
 			address = options.DefaultIP
-		}
-		if address == "" {
-			continue
 		}
 		configTime := ap.ConfigUpdatedAt
 		if configTime.IsZero() {
@@ -85,7 +84,9 @@ func prepareAPs(state model.State, options registryOptions) (*controller.Manager
 		if err := manager.Register(ap.ID, address, server); err != nil {
 			return nil, nil, err
 		}
-		addresses = append(addresses, address)
+		if address != "" {
+			addresses = append(addresses, address)
+		}
 	}
 	return manager, addresses, nil
 }

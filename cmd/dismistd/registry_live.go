@@ -66,20 +66,20 @@ func (r *apRegistry) reconcile(state model.State) error {
 	desired := make(map[string]apBinding, len(state.APs))
 	for _, ap := range state.APs {
 		binding := bindingForAP(ap, r.options)
-		if ap.SiteID != "" && binding.address != "" {
+		if ap.SiteID != "" {
 			desired[ap.ID] = binding
 		}
 	}
-	// Withdraw all stale addresses before adding any new ones, including when
-	// two APs exchange addresses in the same database update.
+	// Withdraw stale registrations before adding new ones. The DNS allowlist
+	// is rebuilt from the active set afterwards, so APs may share addresses.
+	defer r.syncDNS()
 	for id, active := range r.active {
 		if desired[id] == active {
 			continue
 		}
 		r.manager.Remove(id)
-		r.resolver.RemoveAP(active.address)
 		delete(r.active, id)
-		log.Printf("AP %s registration withdrawn from %s", id, active.address)
+		log.Printf("AP %s registration withdrawn%s", id, fromAddress(active.address))
 	}
 	var failures []error
 	for _, ap := range state.APs {
@@ -103,15 +103,30 @@ func (r *apRegistry) reconcile(state model.State) error {
 			failures = append(failures, fmt.Errorf("AP %s: %w", ap.ID, err))
 			continue
 		}
-		if err := r.resolver.AllowAP(binding.address); err != nil {
-			r.manager.Remove(ap.ID)
-			failures = append(failures, fmt.Errorf("AP %s DNS: %w", ap.ID, err))
-			continue
-		}
 		r.active[ap.ID] = binding
-		log.Printf("AP %s registered from %s", ap.ID, binding.address)
+		log.Printf("AP %s registered%s", ap.ID, fromAddress(binding.address))
 	}
 	return errors.Join(failures...)
+}
+
+// syncDNS allows AP DNS for every active AP's pinned address.
+func (r *apRegistry) syncDNS() {
+	addresses := make([]string, 0, len(r.active))
+	for _, binding := range r.active {
+		if binding.address != "" {
+			addresses = append(addresses, binding.address)
+		}
+	}
+	if err := r.resolver.ReplaceAPs(addresses); err != nil {
+		log.Printf("AP DNS allowlist: %v", err)
+	}
+}
+
+func fromAddress(address string) string {
+	if address == "" {
+		return " (any source address)"
+	}
+	return " pinned to " + address
 }
 
 func runAPRegistry(ctx context.Context, store model.StateStore, registry *apRegistry, interval time.Duration) {
