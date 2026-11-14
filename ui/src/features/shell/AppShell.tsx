@@ -4,6 +4,7 @@ import { WifiOff } from 'lucide-react'
 import { useStreamStatus } from '@/api/sse'
 import { BottomTabs } from './BottomTabs'
 import { useNavigationEffects } from './location'
+import { KeyboardShortcuts } from './shortcuts'
 import { Sidebar } from './Sidebar'
 import { useCurrentSiteId, useNavSite, useOfflineCount } from './site'
 import { useDocumentTitle, usePageName } from './title'
@@ -69,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
       <BottomTabs />
+      <KeyboardShortcuts />
     </div>
   )
 }

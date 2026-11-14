@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
 import { Link, useMatches, useNavigate, useRouter, useSearch } from '@tanstack/react-router'
-import { ChevronLeft, ChevronRight, Ellipsis, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -10,7 +9,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { inputClass } from '@/components/ui/input'
+import { SearchInput } from '@/components/app/SearchInput'
 import { StreamIndicator } from '@/components/app/StreamIndicator'
 import { cn } from '@/lib/utils'
 import { getPreviousPathname } from './location'
@@ -52,53 +51,20 @@ function Breadcrumbs() {
 function ListSearch({ className }: { className?: string }) {
   const navigate = useNavigate()
   const q = useSearch({ strict: false, select: (s) => (s as { q?: string }).q ?? '' })
-  // A draft while typing; the URL is the source of truth otherwise.
-  const [draft, setDraft] = useState<string | null>(null)
-  const value = draft ?? q
-  const input = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (draft === null) return
-    const timer = window.setTimeout(() => {
-      void navigate({
-        to: '.' as never,
-        search: ((prev: Record<string, unknown>) => ({ ...prev, q: draft.trim() || undefined })) as never,
-        replace: true,
-      }).then(() => setDraft(null))
-    }, 200)
-    return () => window.clearTimeout(timer)
-  }, [draft, navigate])
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
-      event.preventDefault()
-      input.current?.focus()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
-
   return (
-    <label className={cn('relative block', className)}>
-      <span className="sr-only">Search this list</span>
-      <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-      <input
-        ref={input}
-        type="search"
-        value={value}
-        onChange={(event) => setDraft(event.target.value)}
-        placeholder="Search"
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        className={cn(inputClass, 'pr-9 pl-9')}
-      />
-      <kbd aria-hidden className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 rounded border px-1.5 font-mono text-xs text-muted-foreground max-lg:hidden">
-        /
-      </kbd>
-    </label>
+    <SearchInput
+      className={className}
+      label="Search this list"
+      value={q}
+      shortcut
+      onChange={(next) =>
+        void navigate({
+          to: '.' as never,
+          search: ((prev: Record<string, unknown>) => ({ ...prev, q: next || undefined })) as never,
+          replace: true,
+        })
+      }
+    />
   )
 }
 

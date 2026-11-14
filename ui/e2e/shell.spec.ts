@@ -69,11 +69,11 @@ test.describe('shell', () => {
   test('site switcher lists sites and keeps the section', async ({ signedIn: page }) => {
     await page.getByRole('button', { name: /Site: Home/ }).first().click()
     if (isPhone(page)) {
-      await page.getByRole('dialog', { name: 'Switch site' }).getByRole('button', { name: /Lab/ }).click()
+      await page.getByRole('dialog', { name: 'Switch site' }).getByRole('button', { name: /Office/ }).click()
     } else {
-      await page.getByRole('option', { name: /Lab/ }).click()
+      await page.getByRole('option', { name: /Office/ }).click()
     }
-    await expect(page).toHaveURL(/\/next\/sites\/lab\/overview$/)
+    await expect(page).toHaveURL(/\/next\/sites\/office\/overview$/)
   })
 
   test('the bottom tabs hide while the on-screen keyboard is open', async ({ signedIn: page }) => {

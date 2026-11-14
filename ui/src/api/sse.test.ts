@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, type InfiniteData } from '@tanstack/react-query'
 import { keys } from './keys'
-import { BACKOFF_MS, OFFLINE_AFTER_MS, SiteStream, applyStreamBatch, getStreamStatus, invalidateSite } from './sse'
-import type { APLive, APView, EventPage } from './types'
-import { aps } from './mocks/data'
+import { BACKOFF_MS, OFFLINE_AFTER_MS, SiteStream, applyStreamBatch, getStreamHealth, getStreamStatus, invalidateSite, reconnectStream } from './sse'
+import type { APLive, APView, EventPage, SiteSummary } from './types'
+import { aps, sites } from './mocks/data'
 import { toLive } from './mocks/handlers'
 
 class FakeEventSource extends EventTarget {
@@ -38,6 +38,7 @@ function setup(probe: () => Promise<'authenticated' | 'expired' | 'unknown'> = a
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const onExpired = vi.fn()
   const doc = Object.assign(new EventTarget(), { visibilityState: 'visible' as DocumentVisibilityState })
+  const win = new EventTarget()
   const stream = new SiteStream({
     siteId: site,
     queryClient: qc,
@@ -47,9 +48,10 @@ function setup(probe: () => Promise<'authenticated' | 'expired' | 'unknown'> = a
       createEventSource: (url) => new FakeEventSource(url) as unknown as EventSource,
       frame: (fn) => fn(),
       document: doc as unknown as Document,
+      window: win as unknown as Window,
     },
   })
-  return { qc, stream, onExpired, doc, source: () => FakeEventSource.instances.at(-1)! }
+  return { qc, stream, onExpired, doc, win, source: () => FakeEventSource.instances.at(-1)! }
 }
 
 beforeEach(() => {
@@ -98,11 +100,22 @@ describe('applyStreamBatch', () => {
   it('config invalidates the object kind and affected AP configs', () => {
     const qc = new QueryClient()
     const spy = vi.spyOn(qc, 'invalidateQueries')
-    applyStreamBatch(qc, site, [{ type: 'config', data: { revision: 5, kind: 'wlan.updated', object_id: 'n1', affected_aps: ['a1'], actor: null } }])
+    applyStreamBatch(qc, site, [{ type: 'config', data: { revision: 5, kind: 'wlan.updated', object_id: 'n1', affected_aps: ['a1'], actor: { kind: 'session', name: 'admin' } } }])
     const calls = spy.mock.calls.map(([arg]) => (arg as { queryKey: unknown }).queryKey)
     expect(calls).toContainEqual(keys.siteNetworks(site))
     expect(calls).toContainEqual(keys.network('n1'))
     expect(calls).toContainEqual(keys.apConfig('a1'))
+    expect(calls).toContainEqual(keys.siteRecommendations(site))
+  })
+
+  it('a site change refreshes its expert patch and RF profile', () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    applyStreamBatch(qc, site, [{ type: 'config', data: { revision: 6, kind: 'site.updated', object_id: site, affected_aps: [], actor: { kind: 'session', name: 'admin' } } }])
+    const calls = spy.mock.calls.map(([arg]) => (arg as { queryKey: unknown }).queryKey)
+    expect(calls).toContainEqual(keys.siteExpert(site))
+    expect(calls).toContainEqual(keys.siteRF(site))
+    expect(calls).toContainEqual(keys.sites)
   })
 
   it('push and pending update their keys', () => {
@@ -113,6 +126,64 @@ describe('applyStreamBatch', () => {
     ])
     expect(qc.getQueryData(keys.sitePush(site))).toMatchObject({ a1: { state: 'applied' } })
     expect(qc.getQueryData(keys.pendingCount)).toBe(2)
+  })
+})
+
+describe('applyStreamBatch: counts, pending and the pre-v1 stream', () => {
+  it('keeps the site summary counts in step with the AP list', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(keys.siteAPs(site), homeAPs())
+    qc.setQueryData(keys.sites, sites.map((s) => ({ ...s, counts: { ...s.counts } })))
+    const garage = homeAPs().find((ap) => !ap.connected)!
+    applyStreamBatch(qc, site, [{ type: 'ap', data: { ...toLive(garage), connected: true, status: 'in_sync', client_count: 2 } }])
+    const home = qc.getQueryData<SiteSummary[]>(keys.sites)!.find((s) => s.id === site)!
+    expect(home.counts.aps_online).toBe(3)
+    expect(home.counts.clients).toBe(homeAPs().reduce((sum, ap) => sum + (ap.connected ? ap.client_count : 0), 0) + 2)
+    // Other sites are untouched.
+    expect(qc.getQueryData<SiteSummary[]>(keys.sites)!.find((s) => s.id !== site)!.counts).toEqual(sites.find((s) => s.id !== site)!.counts)
+  })
+
+  it('pending sets the count everywhere it is shown', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(keys.sites, sites.map((s) => ({ ...s, counts: { ...s.counts } })))
+    applyStreamBatch(qc, site, [{ type: 'pending', data: { count: 4 } }])
+    expect(qc.getQueryData(keys.pendingCount)).toBe(4)
+    expect(qc.getQueryData<SiteSummary[]>(keys.sites)!.every((s) => s.counts.pending_aps === 4)).toBe(true)
+  })
+
+  it('folds a pre-v1 `update` into the list and derives status', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(keys.siteAPs(site), homeAPs())
+    const [hallway, garage, study] = homeAPs()
+    applyStreamBatch(qc, site, [
+      {
+        type: 'update',
+        data: {
+          site_id: site,
+          revision: 50,
+          observed_at: '2026-11-14T00:00:00Z',
+          aps: [
+            { id: hallway.id, connected: false, applied_revision: 42, client_count: 0 },
+            { id: garage.id, connected: true, applied_revision: 42, client_count: 3 },
+            { id: study.id, connected: true, applied_revision: 43, client_count: 4 },
+          ],
+        },
+      },
+    ])
+    const list = qc.getQueryData<APView[]>(keys.siteAPs(site))!
+    expect(list.find((ap) => ap.id === hallway.id)).toMatchObject({ connected: false, status: 'offline' })
+    expect(list.find((ap) => ap.id === garage.id)).toMatchObject({ connected: true, status: 'in_sync', client_count: 3, last_seen: '2026-11-14T00:00:00Z' })
+    expect(list.find((ap) => ap.id === study.id)).toMatchObject({ status: 'in_sync', applied_revision: 43 })
+  })
+
+  it('ignores messages for another site and malformed data', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(keys.siteAPs(site), homeAPs())
+    applyStreamBatch(qc, site, [
+      { type: 'snapshot', data: { site_id: 'elsewhere', revision: 1, aps: [] } },
+      { type: 'ap', data: null as unknown as APLive },
+    ])
+    expect(qc.getQueryData<APView[]>(keys.siteAPs(site))).toHaveLength(homeAPs().length)
   })
 })
 
@@ -215,6 +286,46 @@ describe('SiteStream', () => {
     expect(FakeEventSource.instances).toHaveLength(2)
     source().open()
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.site(site) })
+    stream.stop()
+  })
+
+  it('reports attempts and the next retry, and reconnects now on request', async () => {
+    const { stream, source } = setup()
+    stream.start()
+    expect(getStreamHealth()).toMatchObject({ status: 'connecting', siteId: site })
+    source().open()
+    source().fail(true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(getStreamHealth()).toMatchObject({ status: 'reconnecting', attempts: 1 })
+    expect(getStreamHealth().nextRetryAt).not.toBeNull()
+    reconnectStream()
+    expect(FakeEventSource.instances).toHaveLength(2)
+    expect(getStreamHealth().nextRetryAt).toBeNull()
+    source().open()
+    expect(getStreamHealth()).toMatchObject({ status: 'live', attempts: 0 })
+    stream.stop()
+    expect(getStreamHealth().status).toBe('idle')
+  })
+
+  it('retries at once when the network comes back', async () => {
+    const { stream, source, win } = setup()
+    stream.start()
+    source().open()
+    source().fail(true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(FakeEventSource.instances).toHaveLength(1)
+    win.dispatchEvent(new Event('online'))
+    expect(FakeEventSource.instances).toHaveLength(2)
+    stream.stop()
+  })
+
+  it('records when the last message arrived', async () => {
+    const { stream, source } = setup()
+    stream.start()
+    source().open()
+    expect(getStreamHealth().lastMessageAt).toBeNull()
+    source().emit('pending', { count: 1 })
+    expect(getStreamHealth().lastMessageAt).toBe(Date.now())
     stream.stop()
   })
 })

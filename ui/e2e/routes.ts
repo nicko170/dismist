@@ -14,4 +14,6 @@ export const routes: RouteCase[] = [
   { path: '/next/sites/home', heading: /Page not found|Home/, signedIn: true },
   { path: '/next/sites/nowhere/overview', heading: 'Site not found', signedIn: true },
   { path: '/next/does-not-exist', heading: 'Page not found', signedIn: true },
+  // Every shared component and form control (mock builds only).
+  { path: '/next/dev/kit', heading: 'Component kit', signedIn: true },
 ]

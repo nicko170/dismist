@@ -11,9 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as OnboardRouteRouteImport } from './routes/onboard/route'
-import { Route as OnboardIndexRouteImport } from './routes/onboard/index'
-import { Route as OnboardRegisterRouteImport } from './routes/onboard/register'
+import { Route as DevKitRouteImport } from './routes/dev.kit'
 import { Route as SitesSiteIdRouteRouteImport } from './routes/sites/$siteId/route'
 
 const IndexRoute = IndexRouteImport.update({
@@ -26,20 +24,10 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const OnboardRouteRoute = OnboardRouteRouteImport.update({
-  id: '/onboard',
-  path: '/onboard',
+const DevKitRoute = DevKitRouteImport.update({
+  id: '/dev/kit',
+  path: '/dev/kit',
   getParentRoute: () => rootRouteImport,
-} as any)
-const OnboardIndexRoute = OnboardIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => OnboardRouteRoute,
-} as any)
-const OnboardRegisterRoute = OnboardRegisterRouteImport.update({
-  id: '/register',
-  path: '/register',
-  getParentRoute: () => OnboardRouteRoute,
 } as any)
 const SitesSiteIdRouteRoute = SitesSiteIdRouteRouteImport.update({
   id: '/sites/$siteId',
@@ -49,54 +37,36 @@ const SitesSiteIdRouteRoute = SitesSiteIdRouteRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/onboard': typeof OnboardRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRoute
-  '/onboard/register': typeof OnboardRegisterRoute
-  '/onboard/': typeof OnboardIndexRoute
+  '/dev/kit': typeof DevKitRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRoute
-  '/onboard/register': typeof OnboardRegisterRoute
-  '/onboard': typeof OnboardIndexRoute
+  '/dev/kit': typeof DevKitRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/onboard': typeof OnboardRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/sites/$siteId': typeof SitesSiteIdRouteRoute
-  '/onboard/register': typeof OnboardRegisterRoute
-  '/onboard/': typeof OnboardIndexRoute
+  '/dev/kit': typeof DevKitRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/onboard'
-    | '/login'
-    | '/sites/$siteId'
-    | '/onboard/register'
-    | '/onboard/'
+  fullPaths: '/' | '/login' | '/sites/$siteId' | '/dev/kit'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/sites/$siteId' | '/onboard/register' | '/onboard'
-  id:
-    | '__root__'
-    | '/'
-    | '/onboard'
-    | '/login'
-    | '/sites/$siteId'
-    | '/onboard/register'
-    | '/onboard/'
+  to: '/' | '/login' | '/sites/$siteId' | '/dev/kit'
+  id: '__root__' | '/' | '/login' | '/sites/$siteId' | '/dev/kit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  OnboardRouteRoute: typeof OnboardRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
   SitesSiteIdRouteRoute: typeof SitesSiteIdRouteRoute
+  DevKitRoute: typeof DevKitRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -115,26 +85,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/onboard': {
-      id: '/onboard'
-      path: '/onboard'
-      fullPath: '/onboard'
-      preLoaderRoute: typeof OnboardRouteRouteImport
+    '/dev/kit': {
+      id: '/dev/kit'
+      path: '/dev/kit'
+      fullPath: '/dev/kit'
+      preLoaderRoute: typeof DevKitRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/onboard/': {
-      id: '/onboard/'
-      path: '/'
-      fullPath: '/onboard/'
-      preLoaderRoute: typeof OnboardIndexRouteImport
-      parentRoute: typeof OnboardRouteRoute
-    }
-    '/onboard/register': {
-      id: '/onboard/register'
-      path: '/register'
-      fullPath: '/onboard/register'
-      preLoaderRoute: typeof OnboardRegisterRouteImport
-      parentRoute: typeof OnboardRouteRoute
     }
     '/sites/$siteId': {
       id: '/sites/$siteId'
@@ -146,25 +102,11 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface OnboardRouteRouteChildren {
-  OnboardRegisterRoute: typeof OnboardRegisterRoute
-  OnboardIndexRoute: typeof OnboardIndexRoute
-}
-
-const OnboardRouteRouteChildren: OnboardRouteRouteChildren = {
-  OnboardRegisterRoute: OnboardRegisterRoute,
-  OnboardIndexRoute: OnboardIndexRoute,
-}
-
-const OnboardRouteRouteWithChildren = OnboardRouteRoute._addFileChildren(
-  OnboardRouteRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  OnboardRouteRoute: OnboardRouteRouteWithChildren,
   LoginRoute: LoginRoute,
   SitesSiteIdRouteRoute: SitesSiteIdRouteRoute,
+  DevKitRoute: DevKitRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
