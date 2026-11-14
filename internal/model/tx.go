@@ -170,4 +170,5 @@ func (t *Tx) PutMetaJSON(key string, value any) error {
 
 type memBuckets struct {
 	apConfig map[string][]byte
+	history  []ChangeRecord
 }

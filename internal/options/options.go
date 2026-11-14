@@ -119,6 +119,10 @@ type Option struct {
 	FirmwarePaths []string // every path this option writes, e.g. "WLANs[].Hidden"
 	Catalogue     string   // e.g. "wlans.md §5.1"
 	VisibleWhen   []Condition
+	// DismistOnly options are never sent to the AP (site name, timezone,
+	// the planner's allowed channels, the experimental switch); they have
+	// no firmware paths.
+	DismistOnly bool
 }
 
 // Int returns a pointer to v, for Min and Max.
@@ -254,8 +258,11 @@ func validateOption(o Option, pathExists func(string) bool) []error {
 			fail("enum value %q has unknown confidence %q", enum.Value, enum.Confidence)
 		}
 	}
-	if len(o.FirmwarePaths) == 0 && o.Tier != TierReadonly {
+	if len(o.FirmwarePaths) == 0 && o.Tier != TierReadonly && !o.DismistOnly {
 		fail("firmware paths required")
+	}
+	if o.DismistOnly && len(o.FirmwarePaths) > 0 {
+		fail("dismist-only options write no firmware paths")
 	}
 	for _, path := range o.FirmwarePaths {
 		if pathExists != nil && !pathExists(path) {

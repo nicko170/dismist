@@ -24,7 +24,8 @@ func TestAUTableMatchesAppendixA(t *testing.T) {
 		{Band5, 20, 165, true, false}, {Band5, 40, 165, false, false},
 		{Band5, 20, 120, false, false}, {Band5, 20, 124, false, false}, {Band5, 20, 128, false, false},
 		{Band5, 80, 52, true, true}, {Band5, 80, 144, true, true}, {Band5, 80, 36, true, false},
-		{Band5, 160, 36, true, false}, {Band5, 160, 100, false, false}, {Band5, 160, 64, true, true},
+		// No 160 MHz chanspec on AP33 under AU/890 (live finding, §9 Q10).
+		{Band5, 160, 36, false, false}, {Band5, 160, 64, false, false},
 		{Band5, 20, 34, false, false},
 	} {
 		dfs, ok := au.Valid(test.band, test.width, test.ch)
@@ -38,10 +39,10 @@ func TestAUTableMatchesAppendixA(t *testing.T) {
 	if got := au.Block(Band5, 20, 36); !reflect.DeepEqual(got, []int{36}) {
 		t.Fatalf("20 MHz block %v", got)
 	}
-	if !au.Table(Band24, 40).ExpertOnly || !au.Table(Band5, 160).NeedsLabTest {
+	if !au.Table(Band24, 40).ExpertOnly || au.Table(Band5, 160) != nil {
 		t.Fatal("width flags")
 	}
-	if !reflect.DeepEqual(au.Widths(Band5), []int{20, 40, 80, 160}) {
+	if !reflect.DeepEqual(au.Widths(Band5), []int{20, 40, 80}) {
 		t.Fatal("widths")
 	}
 	for _, ch := range au.DefaultAuto[Band5] {

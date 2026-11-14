@@ -25,9 +25,10 @@ const (
 // RetentionPolicy says how long history is kept. A zero duration (or
 // count) keeps that history forever.
 type RetentionPolicy struct {
-	// Enabled switches history pruning on. It is off in phase 1 and
-	// switched on in phase 3 (design §8.6); while off, RunRetention only
-	// expires web sessions and pending-AP dismissals.
+	// Enabled switches history pruning and the hourly rollups on. It was
+	// off in phase 1 and is on by default from phase 3 (design §8.6);
+	// while off, RunRetention only expires web sessions and pending-AP
+	// dismissals.
 	Enabled bool
 	// Samples applies to minute samples, SamplesHourly to the hourly
 	// rollups (phase 3), Sessions to client sessions (by last activity;
@@ -43,9 +44,11 @@ type RetentionPolicy struct {
 	BatchSize int
 }
 
-// DefaultRetention returns the design defaults, with pruning off.
+// DefaultRetention returns the design defaults with pruning on (phase 3,
+// design §8.6).
 func DefaultRetention() RetentionPolicy {
 	return RetentionPolicy{
+		Enabled: true,
 		Samples: DefaultRetainSamples, SamplesHourly: DefaultRetainSamplesHourly,
 		Sessions: DefaultRetainSessions, Events: DefaultRetainEvents,
 		ConfigHistory: DefaultRetainConfigHistory, BatchSize: DefaultRetentionBatch,
@@ -213,9 +216,12 @@ func (s *BoltStore) RunRetention(ctx context.Context, policy RetentionPolicy, in
 		now := time.Now().UTC()
 		result, err := s.Expire(now)
 		if err == nil && policy.Enabled {
-			var pruned PruneResult
-			pruned, err = s.Prune(ctx, policy, now)
-			result.add(pruned)
+			// Roll up before pruning, so no hour is pruned unrolled.
+			if _, err = s.RollupSamples(ctx, now, policy.batch()/10); err == nil {
+				var pruned PruneResult
+				pruned, err = s.Prune(ctx, policy, now)
+				result.add(pruned)
+			}
 		}
 		if report != nil && !errors.Is(err, context.Canceled) {
 			report(result, err)

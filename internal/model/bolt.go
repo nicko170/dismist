@@ -287,7 +287,7 @@ func (s *BoltStore) commitState(tx *bolt.Tx, next State) error {
 			if err := closeActiveSessions(tx, previous.SiteID, previous.ID, next.UpdatedAt, "AP removed"); err != nil {
 				return err
 			}
-			for _, name := range []string{BucketAPConfig, BucketAPStatus} {
+			for _, name := range []string{BucketAPConfig, BucketAPStatus, BucketScans} {
 				if bucket := tx.Bucket([]byte(name)); bucket != nil {
 					if err := bucket.Delete([]byte(previous.ID)); err != nil {
 						return err

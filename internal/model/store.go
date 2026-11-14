@@ -233,7 +233,7 @@ func (s *Store) UpdateTx(change func(*State, *Tx) error) error {
 		}
 	}
 	next.UpdatedAt = time.Now().UTC()
-	staged := memBuckets{apConfig: make(map[string][]byte, len(s.mem.apConfig))}
+	staged := memBuckets{apConfig: make(map[string][]byte, len(s.mem.apConfig)), history: append([]ChangeRecord(nil), s.mem.history...)}
 	for key, value := range s.mem.apConfig {
 		staged.apConfig[key] = value
 	}

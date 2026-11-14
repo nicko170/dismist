@@ -70,6 +70,7 @@ export interface OptionMeta {
   firmwarePaths: string[];
   catalogue: string;
   visibleWhen: { key: string; in: string[] }[];
+  dismistOnly: boolean;
 }
 
 `)
@@ -107,7 +108,7 @@ export interface OptionMeta {
 			{"default", option.Default}, {"tier", option.Tier}, {"confidence", option.Confidence},
 			{"experimental", option.Confidence == NeedsLiveTest}, {"disruption", option.Disruption},
 			{"secret", option.Secret}, {"phase", option.Phase}, {"firmwarePaths", paths},
-			{"catalogue", option.Catalogue}, {"visibleWhen", visible},
+			{"catalogue", option.Catalogue}, {"visibleWhen", visible}, {"dismistOnly", option.DismistOnly},
 		}
 		fmt.Fprintf(&entries, "  %s: {\n", literal(option.Key))
 		for _, field := range fields {
@@ -168,8 +169,18 @@ func zodType(o Option) string {
 	case "[]int":
 		return "z.array(" + bounds("z.number().int()") + ")"
 	case "[]string":
+		if len(o.Enum) > 0 {
+			values := make([]string, 0, len(o.Enum))
+			for _, enum := range o.Enum {
+				values = append(values, enum.Value)
+			}
+			return "z.array(z.enum(" + literal(values) + "))"
+		}
 		return "z.array(z.string())"
 	default:
+		if o.Control == "list" || o.Control == "mac_list" {
+			return "z.array(z.record(z.string(), z.unknown()))"
+		}
 		return "z.record(z.string(), z.unknown())"
 	}
 }
