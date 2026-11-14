@@ -56,3 +56,16 @@ test.describe('sign-in', () => {
     await expect(page).toHaveURL(/\/next\/sites\/home\/overview$/)
   })
 })
+
+test('touch devices get 16 px inputs at every width; mouse users get 14 px from md', async ({ page }, testInfo) => {
+  await page.goto('/next/login')
+  await ready(page)
+  const { coarse, size } = await page.evaluate(() => ({
+    coarse: matchMedia('(pointer: coarse)').matches,
+    size: getComputedStyle(document.querySelector('input[type=password]')!).fontSize,
+  }))
+  const touch = Boolean(testInfo.project.use.hasTouch)
+  expect(coarse).toBe(touch)
+  const width = page.viewportSize()!.width
+  expect(size).toBe(touch || width < 768 ? '16px' : '14px')
+})

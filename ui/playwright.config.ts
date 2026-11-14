@@ -3,8 +3,9 @@ import { defineConfig, devices } from '@playwright/test'
 // End-to-end harness (design §7.7, §7.10). Phase 0 runs against the MSW mock
 // build served by `vite preview`; later phases add a project that points
 // E2E_BASE_URL at dismistd plus tools/fakeap. Every spec runs at the four
-// widths, plus touch runs at 768 (iPad portrait) and 1024 (iPad landscape),
-// so the 16 px rule is checked under `pointer: coarse` too.
+// widths (390×844, 768×1024, 1024×768, 1440×900), plus touch runs at 768
+// (iPad portrait) and 1024 (iPad landscape), so the 16 px rule is checked
+// under `pointer: coarse` too.
 
 const port = Number(process.env.E2E_PORT ?? 4319)
 const external = process.env.E2E_BASE_URL
@@ -22,6 +23,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'phone-390', use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 } },
+    { name: 'tablet-768', use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 } } },
     { name: 'tablet-768-touch', use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } },
     { name: 'laptop-1024', use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 768 } } },
     { name: 'tablet-1024-touch', use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 768 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } },
