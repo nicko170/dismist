@@ -113,6 +113,8 @@ export function offlineFor(ap: Pick<APView, 'connected' | 'last_seen'>, now: num
   if (ap.connected) return undefined
   const seen = parseTime(ap.last_seen)
   if (!seen) return undefined
+  // Under a minute reads as plain "Offline": the stream may have just said so.
+  if (now - seen.getTime() < 60_000) return undefined
   return formatDuration(Math.max(0, (now - seen.getTime()) / 1000)).split(' ').slice(0, 2).join(' ')
 }
 

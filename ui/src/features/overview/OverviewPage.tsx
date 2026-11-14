@@ -100,7 +100,7 @@ export function OverviewPage({ siteId, range }: { siteId: string; range: History
           to={`/sites/${siteId}/clients`}
         />
         <StatTile label="WLANs" icon={<Wifi />} value={wlans} detail="enabled" to={`/sites/${siteId}/wlans`} />
-        <StatTile label="Channels" icon={<AudioWaveform />} value={siteChannels(list) || '–'} to={`/sites/${siteId}/rf`} />
+        <StatTile label="Channels" icon={<AudioWaveform />} value={siteChannels(list) || '–'} valueClassName="text-lg break-words" to={`/sites/${siteId}/rf`} />
       </div>
 
       {!aps.isPending && list.length === 0 ? (

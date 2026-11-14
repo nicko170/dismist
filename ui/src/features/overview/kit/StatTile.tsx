@@ -11,6 +11,7 @@ export function StatTile({
   search,
   tone,
   icon,
+  valueClassName,
 }: {
   label: string
   value: ReactNode
@@ -19,6 +20,7 @@ export function StatTile({
   search?: Record<string, unknown>
   tone?: 'crit' | 'warn'
   icon?: ReactNode
+  valueClassName?: string
 }) {
   const body = (
     <>
@@ -31,6 +33,7 @@ export function StatTile({
           'text-2xl leading-tight font-semibold tabular-nums',
           tone === 'crit' && 'text-destructive',
           tone === 'warn' && 'text-warning',
+          valueClassName,
         )}
       >
         {value}

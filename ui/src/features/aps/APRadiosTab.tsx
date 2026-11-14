@@ -112,7 +112,7 @@ function RadioCard({ ap, radio, trend }: { ap: APDetail; radio: RadioView; trend
             </ul>
           </div>
         ) : null}
-        {trend ? (
+        {trend && trend.util.some((v) => v !== null) ? (
           <div className="grid gap-1.5">
             <h3 className="text-xs font-medium text-muted-foreground">Last 24 h</h3>
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
