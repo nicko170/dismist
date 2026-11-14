@@ -86,12 +86,16 @@ var precompressedEncodings = []struct{ token, suffix string }{{"br", ".br"}, {"g
 // hands the compressed bytes to a client that did not ask for them.
 func (s *Server) precompressed(writer http.ResponseWriter, request *http.Request, name string) string {
 	accepted := acceptedEncodings(request.Header.Get("Accept-Encoding"))
+	varied := false
 	for _, encoding := range precompressedEncodings {
 		info, err := fs.Stat(s.next, name+encoding.suffix)
 		if err != nil || info.IsDir() {
 			continue
 		}
-		writer.Header().Add("Vary", "Accept-Encoding")
+		if !varied {
+			writer.Header().Add("Vary", "Accept-Encoding")
+			varied = true
+		}
 		if !accepted[encoding.token] {
 			continue
 		}

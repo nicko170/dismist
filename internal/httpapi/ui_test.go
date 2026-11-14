@@ -133,7 +133,7 @@ func TestNextAssetsServePrecompressedSiblings(t *testing.T) {
 		if got := response.Header().Get("Content-Type"); !strings.HasPrefix(got, tc.contentType) {
 			t.Fatalf("%s (%s): Content-Type %q, want %q", tc.target, tc.accept, got, tc.contentType)
 		}
-		if got := response.Header().Get("Vary") == "Accept-Encoding"; got != tc.vary {
+		if got := strings.Join(response.Header().Values("Vary"), ",") == "Accept-Encoding"; got != tc.vary {
 			t.Fatalf("%s (%s): Vary %q", tc.target, tc.accept, response.Header().Get("Vary"))
 		}
 		if strings.HasPrefix(tc.target, "/_ui/index-") && response.Header().Get("Cache-Control") != immutableCC {
