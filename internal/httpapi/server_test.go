@@ -23,8 +23,11 @@ func apiFixture(t *testing.T, allowedHosts ...string) (http.Handler, *model.Stor
 		t.Fatal(err)
 	}
 	err = store.Update(func(state *model.State) error {
+		// Every AP with a site has a site record: compile (like the AP
+		// registry) never compiles an AP whose site does not exist.
+		state.Sites = []model.Site{{ID: "lab", Name: "Lab"}}
 		state.APs = []model.APRecord{{ID: "ap-1", Name: "bench", SiteID: "lab", SecretFile: "private/secret.bin", Secret: testSecret}}
-		state.Networks = []model.Network{{ID: "wlan-1", SSID: "TestSSID", PSK: "example-passphrase-11", VLANID: 123, Enabled: true}}
+		state.Networks = []model.Network{{ID: "wlan-1", SiteID: "lab", SSID: "TestSSID", PSK: "example-passphrase-11", VLANID: 123, Enabled: true}}
 		return nil
 	})
 	if err != nil {

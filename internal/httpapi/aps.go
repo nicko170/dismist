@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/nicko170/dismist/internal/compile"
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
 	"github.com/nicko170/dismist/internal/telemetry"
@@ -114,9 +115,13 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 			return
 		}
 	}
-	var updated model.APRecord
-	var config []byte
-	err := s.store.Update(func(state *model.State) error {
+	var siteID string
+	for _, ap := range s.store.Snapshot().APs {
+		if ap.ID == apID {
+			siteID = ap.SiteID
+		}
+	}
+	_, err := s.mutate([]string{siteID}, func(state *model.State, _ *model.Tx) error {
 		index := -1
 		for i := range state.APs {
 			if state.APs[i].ID == apID {
@@ -127,7 +132,7 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 		if index < 0 {
 			return notFound("AP")
 		}
-		updated = state.APs[index]
+		updated := state.APs[index]
 		if input.Name != nil {
 			updated.Name = strings.TrimSpace(*input.Name)
 		}
@@ -149,25 +154,10 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 		if updated.Name == previous.Name && updated.Model == previous.Model && updated.ManagementIP == previous.ManagementIP && bytes.Equal(updated.Secret, previous.Secret) {
 			return errNoChange
 		}
-		updated.ConfigRevision = state.Revision + 1
-		updated.ConfigUpdatedAt = state.UpdatedAt
-		var site model.Site
-		for _, candidate := range state.Sites {
-			if candidate.ID == updated.SiteID {
-				site = candidate
-				break
-			}
-		}
-		networks := make([]model.Network, 0)
-		for _, network := range state.Networks {
-			if network.SiteID == updated.SiteID && updated.SiteID != "" {
-				networks = append(networks, network)
-			}
-		}
-		var err error
-		config, err = controller.BuildSiteConfig(s.base, site, updated, networks, updated.ConfigUpdatedAt)
-		if err != nil {
-			return err
+		if updated.SiteID != siteID {
+			// Moved since the snapshot above: the mutation lock makes this
+			// unreachable from the API, but never compile the wrong site.
+			return conflict("the AP moved to another site; retry")
 		}
 		state.APs[index] = updated
 		return nil
@@ -187,17 +177,14 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 		writeChangeError(writer, err)
 		return
 	}
-	if control := s.controlFor(apID); control != nil {
-		changed, err := control.SetConfigIfNewer(config, updated.ConfigRevision)
-		if err != nil {
-			writeAPIError(writer, internalError("AP config update failed"))
+	state := s.store.Snapshot()
+	for _, ap := range state.APs {
+		if ap.ID == apID {
+			respond(writer, http.StatusOK, map[string]any{"ap": s.apView(ap), "revision": state.Revision})
 			return
 		}
-		if changed {
-			control.Disconnect()
-		}
 	}
-	respond(writer, http.StatusOK, map[string]any{"ap": s.apView(updated), "revision": s.store.Snapshot().Revision})
+	writeAPIError(writer, notFound("AP"))
 }
 
 func (s *Server) moveAP(writer http.ResponseWriter, request *http.Request) {
@@ -225,54 +212,53 @@ func (s *Server) moveAP(writer http.ResponseWriter, request *http.Request) {
 		}
 	}
 	var oldSite string
-	var config []byte
-	var configRevision uint64
-	err := s.store.Update(func(state *model.State) error {
-		var site model.Site
-		for _, candidate := range state.Sites {
-			if candidate.ID == input.SiteID {
-				site = candidate
-				break
-			}
+	for _, ap := range s.store.Snapshot().APs {
+		if ap.ID == apID {
+			oldSite = ap.SiteID
 		}
+	}
+	// Change detection compiles both sites: the moved AP's config changes;
+	// the other APs of either site keep theirs.
+	var unassigned *compile.Push
+	_, err := s.mutate([]string{oldSite, input.SiteID}, func(state *model.State, tx *model.Tx) error {
 		for index := range state.APs {
-			if state.APs[index].ID != apID {
+			ap := &state.APs[index]
+			if ap.ID != apID {
 				continue
 			}
-			oldSite = state.APs[index].SiteID
-			state.APs[index].SiteID = input.SiteID
-			state.APs[index].ConfigRevision = state.Revision + 1
-			state.APs[index].ConfigUpdatedAt = state.UpdatedAt
-			configRevision = state.APs[index].ConfigRevision
-			networks := make([]model.Network, 0)
-			for _, network := range state.Networks {
-				if network.SiteID == input.SiteID {
-					networks = append(networks, network)
-				}
+			if ap.SiteID != oldSite {
+				return conflict("the AP moved to another site; retry")
 			}
-			var err error
-			config, err = controller.BuildSiteConfig(s.base, site, state.APs[index], networks, state.APs[index].ConfigUpdatedAt)
-			return err
+			ap.SiteID = input.SiteID
+			if input.SiteID != "" {
+				return nil
+			}
+			// An AP without a site is not compiled by change detection. As
+			// before, it gets one last config with no site and no WLANs, at
+			// a new revision, before the registry withdraws it; its desired
+			// config is dropped so a later assignment counts as a change.
+			ap.ConfigRevision = state.Revision + 1
+			ap.ConfigUpdatedAt = state.UpdatedAt
+			config, err := compile.BuildSiteConfig(s.base, model.Site{}, *ap, nil, ap.ConfigUpdatedAt)
+			if err != nil {
+				return &compile.APError{APID: ap.ID, Err: err}
+			}
+			unassigned = &compile.Push{APID: ap.ID, Config: config, Revision: ap.ConfigRevision}
+			if tx != nil {
+				return tx.APConfig().Delete(ap.ID)
+			}
+			return nil
 		}
 		return notFound("AP")
 	})
+	if err == nil && unassigned != nil {
+		err = s.push([]compile.Push{*unassigned})
+	}
 	if err != nil {
 		writeChangeError(writer, err)
 		return
 	}
 	revision := s.store.Snapshot().Revision
-	if config != nil {
-		if control := s.controlFor(apID); control != nil {
-			changed, err := control.SetConfigIfNewer(config, configRevision)
-			if err != nil {
-				writeAPIError(writer, internalError("AP config update failed"))
-				return
-			}
-			if changed {
-				control.Disconnect()
-			}
-		}
-	}
 	respond(writer, http.StatusOK, map[string]any{
 		"id": apID, "site_id": input.SiteID,
 		"previous_site_id": oldSite, "revision": revision,
