@@ -14,3 +14,12 @@
 !web/vite.config.ts
 !web/src/
 !web/src/**
+!ui/
+!ui/**
+ui/node_modules
+ui/dist
+ui/test-results
+ui/playwright-report
+ui/blob-report
+ui/coverage
+ui/*.tsbuildinfo

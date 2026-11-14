@@ -1,7 +1,10 @@
 {{- if not .Values.privateSecret.name }}
 {{- fail "privateSecret.name is required: a Secret with admin.token and each AP's <name>.bin" }}
 {{- end }}
+{{- include "dismist.validateMetrics" . }}
 {{- $tlsSecret := include "dismist.tlsSecretName" . }}
+{{- $metricsExposed := include "dismist.metricsExposed" . }}
+{{- $metricsToken := include "dismist.metricsToken" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,6 +22,11 @@ spec:
   template:
     metadata:
       annotations:
+        {{- if and .Values.metrics.scrapeAnnotations $metricsExposed }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.metrics.port | quote }}
+        prometheus.io/path: /metrics
+        {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -61,6 +69,11 @@ spec:
                 chmod 0600 "$dest"
                 chown "$uid:$gid" "$dest"
               done
+              {{- if $metricsToken }}
+              cp -L /bootstrap-metrics/token /private/metrics.token
+              chmod 0600 /private/metrics.token
+              chown "$uid:$gid" /private/metrics.token
+              {{- end }}
               chown "$uid:$gid" /state /private
               chmod 0700 /state /private
               # dismistd refuses a group- or world-readable database.
@@ -81,6 +94,11 @@ spec:
             - name: bootstrap
               mountPath: /bootstrap
               readOnly: true
+            {{- if $metricsToken }}
+            - name: metrics-auth
+              mountPath: /bootstrap-metrics
+              readOnly: true
+            {{- end }}
             - name: private
               mountPath: /private
       containers:
@@ -109,7 +127,7 @@ spec:
             - -ws-listen=0.0.0.0:{{ .Values.listen.wss }}
             - -dns-listen=0.0.0.0:{{ .Values.listen.dns }}
             - -upstream-dns={{ .Values.controller.upstreamDNS }}
-            - -metrics-listen={{ .Values.controller.metricsListen }}
+            {{- include "dismist.metricsArgs" . | trim | nindent 12 }}
             {{- with .Values.controller.uiHost }}
             - -ui-host={{ . }}
             {{- end }}
@@ -142,15 +160,25 @@ spec:
             - name: ap-dns-tcp
               containerPort: {{ .Values.listen.dns }}
               protocol: TCP
+            {{- if $metricsExposed }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
+          # /healthz answers as soon as the UI listener is up, before any
+          # database migration, so the startup budget (5 minutes by default)
+          # only has to cover process start.
           startupProbe:
             httpGet:
               path: /healthz
               port: ui
             periodSeconds: 5
-            failureThreshold: 24
+            failureThreshold: {{ .Values.probes.startupFailureThreshold }}
+          # Ready once the database works, the AP WSS listener is bound and any
+          # migration has finished; until then the AP Service has no endpoint.
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: {{ .Values.probes.readinessPath }}
               port: ui
             periodSeconds: 10
             failureThreshold: 3
@@ -170,6 +198,10 @@ spec:
             - name: private
               mountPath: /private
               readOnly: true
+            # Writable scratch space (the root filesystem is read-only): backup
+            # downloads are staged here, never on the database volume.
+            - name: tmp
+              mountPath: /tmp
             {{- if $tlsSecret }}
             - name: tls
               mountPath: /tls
@@ -190,6 +222,17 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 4Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ .Values.backup.tmpSizeLimit }}
+        {{- if $metricsToken }}
+        - name: metrics-auth
+          secret:
+            secretName: {{ .Values.metrics.auth.existingSecret }}
+            items:
+              - key: {{ .Values.metrics.auth.key }}
+                path: token
+        {{- end }}
         {{- if $tlsSecret }}
         # Mounted directly (not copied) so renewals reach the pod; dismistd
         # restarts itself to serve them. World-readable inside the pod only,

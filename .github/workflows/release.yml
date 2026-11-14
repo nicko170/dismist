@@ -28,13 +28,30 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            ui/package-lock.json
 
-      - name: Build embedded UI
+      - name: Build embedded legacy UI
         working-directory: web
         run: |
           npm ci
           npm run build
+
+      # Only a stub of ui/dist is committed: the release binaries must embed a
+      # real build.
+      - name: Build embedded UI
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+          test -s dist/index.html
+          if grep -q 'UI not built' dist/index.html; then
+            echo "::error::ui/dist/index.html is still the stub"; exit 1
+          fi
+          if [ -z "$(find dist/_ui -type f ! -name .keep | head -n 1)" ]; then
+            echo "::error::ui/dist/_ui has no assets"; exit 1
+          fi
 
       - name: Set up Go
         uses: actions/setup-go@v7
