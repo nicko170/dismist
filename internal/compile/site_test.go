@@ -334,3 +334,23 @@ func TestPrepareSkipsUnassignedAPs(t *testing.T) {
 		t.Fatalf("served %+v", served)
 	}
 }
+
+func TestEffectiveViewIsKeyedAndUsesLocalFiles(t *testing.T) {
+	store := newStore(t)
+	state := store.Snapshot()
+	view, err := compile.Effective(aptemplate.Default(), state, apOne, store.HashKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Hash) != len("e1:")+64 || view.Report.LocalFiles != "unknown" || len(view.Canonical) == 0 {
+		t.Fatalf("view %+v", view.Report)
+	}
+	state.APs[0].LocalFiles = []model.LocalFile{{Name: "local_defaults.config"}}
+	present, _ := compile.Effective(aptemplate.Default(), state, apOne, store.HashKey())
+	if present.Report.LocalFiles != "present" || present.Hash == view.Hash {
+		t.Fatalf("local files ignored: %+v", present.Report)
+	}
+	if _, err := compile.Effective(aptemplate.Default(), state, apOne, nil); err == nil {
+		t.Fatal("unkeyed hash")
+	}
+}
