@@ -1098,9 +1098,21 @@ export default function App() {
                               </strong>
                             </div>
                             <div>
-                              <span>Management IP</span>
+                              <span>LAN IP</span>
                               <strong>
-                                {selectedAP.management_ip || "Unavailable"}
+                                {selectedAP.lan_ip || "Not reported yet"}
+                              </strong>
+                            </div>
+                            <div>
+                              <span>Public address</span>
+                              <strong>
+                                {selectedAP.remote_address || "Not seen yet"}
+                              </strong>
+                            </div>
+                            <div>
+                              <span>Source pin</span>
+                              <strong>
+                                {selectedAP.management_ip || "Any address"}
                               </strong>
                             </div>
                             <div>

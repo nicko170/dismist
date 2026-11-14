@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .tile { fill: #29323d; }
+    .sig { stroke: #c0459b; }
+    .dot { fill: #c0459b; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #e8ebef; }
+      .sig { stroke: #a83283; }
+      .dot { fill: #a83283; }
+    }
+  </style>
+  <rect class="tile" width="32" height="32" rx="8"/>
+  <g class="sig" fill="none" stroke-linecap="round" stroke-width="2.4">
+    <path d="M10 16.5a5.5 5.5 0 0 1 5.5 5.5"/>
+    <path d="M10 11.5a10.5 10.5 0 0 1 10.5 10.5" opacity=".8"/>
+    <path d="M10 6.5A15.5 15.5 0 0 1 25.5 22" opacity=".55"/>
+  </g>
+  <circle class="dot" cx="10" cy="22" r="2.4"/>
+</svg>

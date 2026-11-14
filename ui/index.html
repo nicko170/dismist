@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f9fb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141b22" />
+    <meta name="description" content="Dismist: a self-hosted controller for Mist access points." />
+    <meta name="apple-mobile-web-app-title" content="Dismist" />
+    <link rel="icon" href="/_ui/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/_ui/apple-touch-icon.png" />
+    <link rel="manifest" href="/_ui/manifest.webmanifest" />
+    <title>Dismist</title>
+    <script>
+      // Set the theme before first paint (design §7.2): dismist.theme is
+      // "light", "dark" or "system" (the default).
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('dismist.theme')
+          var dark =
+            stored === 'dark' ||
+            ((stored === null || stored === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (e) {}
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

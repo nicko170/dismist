@@ -1,0 +1,67 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "react",
+    "typescript",
+    "jsx-a11y",
+    "import",
+    "unicorn",
+    "vitest"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+    "no-console": [
+      "warn",
+      {
+        "allow": [
+          "warn",
+          "error"
+        ]
+      }
+    ],
+    "jsx-a11y/no-autofocus": "off",
+    "import/no-unassigned-import": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "react/jsx-no-useless-fragment": "warn",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "no-underscore-dangle": [
+      "warn",
+      {
+        "allow": [
+          "__dismistMock"
+        ]
+      }
+    ],
+    "vitest/require-mock-type-parameters": "off"
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "dist-mock/**",
+    "src/routeTree.gen.ts",
+    "node_modules/**",
+    "test-results/**",
+    "playwright-report/**"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "scripts/**",
+        "e2e/**"
+      ],
+      "rules": {
+        "no-console": "off",
+        "react-hooks/rules-of-hooks": "off"
+      }
+    }
+  ]
+}
