@@ -54,8 +54,8 @@ var experimentalFallback = map[string][]string{
 // experimentalKeys lists the option keys of changed whose values are
 // experimental. A value that is off (false, empty, zero) never counts; nor
 // does one equal to the object's current value (current, by option key:
-// forms send whole sections) or, for a new object (current nil), the
-// option's default.
+// forms send whole sections) or the option's default where the object
+// holds no value (a new object, current nil, or a migrated record).
 func experimentalKeys(registry *options.Registry, changed, current map[string]any) []string {
 	var keys []string
 	for key, value := range changed {
@@ -77,7 +77,11 @@ func experimentalKeys(registry *options.Registry, changed, current map[string]an
 		experimental := false
 		if registry != nil {
 			if option, ok := registry.Get(key); ok {
-				if current == nil && option.Default != nil && sameJSON(value, option.Default) {
+				// The default counts as unchanged for a new object, or when
+				// the object stores nothing for the option (a migrated
+				// record).
+				stored, held := current[key]
+				if (current == nil || !held || isZeroJSON(stored)) && option.Default != nil && sameJSON(value, option.Default) {
 					continue
 				}
 				experimental = option.Experimental(value)

@@ -67,3 +67,20 @@ describe('migration', () => {
     expect(view.report?.aps[0].mismatches).toEqual([])
   })
 })
+
+describe('migration report (internal/migrate V2Report)', () => {
+  it('maps sites, networks and APs onto the screen', () => {
+    const view = normaliseMigration({
+      state: 'committed', schema: 2, compat: 1, can_finalise: false,
+      report: {
+        verified: true,
+        sites: [{ id: 'home', probe: 'ap-1', rf_managed: true, typed: { rf: { managed: true } }, residual: { Radios: [{ Band: '5' }] } }],
+        networks: [{ id: 'net-1', site_id: 'home', ssid: 'Example', security: 'wpa2_wpa3_personal', bssid_index: 1, bssid_source: 'predicted', typed: { dtim: 2 } }],
+        aps: [{ id: 'ap-1', site_id: 'home', compiled: true, local_files: 'none', rf_override: { '5': { channel: 149 } }, equal: true }],
+      },
+    })
+    expect(view.report?.objects.map((o) => `${o.scope}:${o.name}`)).toEqual(['site:home', 'wlan:Example', 'ap:ap-1'])
+    expect(view.report?.objects[1].lifted).toMatchObject({ security: 'wpa2_wpa3_personal', bssid_index: 1, dtim: 2 })
+    expect(view.report?.aps).toEqual([{ id: 'ap-1', name: 'ap-1', verified: true, local_files: 'none', bssid_index: 'predicted', mismatches: [] }])
+  })
+})

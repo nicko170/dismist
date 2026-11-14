@@ -52,6 +52,59 @@ export type MigrationView = {
 const str = (value: unknown, fallback = ''): string => (typeof value === 'string' ? value : fallback)
 const arr = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : [])
 
+type Row = Record<string, unknown>
+const obj = (value: unknown): Row => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Row) : {})
+
+/**
+ * The lift report is internal/migrate's V2Report (redacted): sites,
+ * networks and APs, each with its typed lift and residual expert patch, and
+ * per AP whether its effective config verified equal. A report already in
+ * the screen's shape (objects) passes through.
+ */
+export function normaliseV2Report(report: Row): NonNullable<MigrationView['report']> {
+  if (Array.isArray(report.objects)) {
+    return {
+      objects: arr<MigrationObjectReport>(report.objects),
+      aps: arr<MigrationAPReport>(report.aps).map((ap) => ({ ...ap, mismatches: arr<string>(ap.mismatches) })),
+      normaliser_version: typeof report.normaliser_version === 'number' ? report.normaliser_version : null,
+    }
+  }
+  const networks = arr<Row>(report.networks)
+  const objects: MigrationObjectReport[] = [
+    ...arr<Row>(report.sites).map((site) => ({
+      scope: 'site' as const,
+      id: str(site.id),
+      name: str(site.name, str(site.id)),
+      lifted: { ...obj(site.typed), rf_managed: Boolean(site.rf_managed) },
+      residual: site.residual ?? {},
+    })),
+    ...networks.map((network) => ({
+      scope: 'wlan' as const,
+      id: str(network.id),
+      name: str(network.ssid, str(network.id)),
+      lifted: { security: network.security, bssid_index: network.bssid_index, ...obj(network.typed) },
+      residual: network.residual ?? {},
+    })),
+    ...arr<Row>(report.aps).map((ap) => ({
+      scope: 'ap' as const,
+      id: str(ap.id),
+      name: str(ap.name, str(ap.id)),
+      lifted: ap.rf_override ? { rf_override: ap.rf_override } : {},
+      residual: ap.residual ?? {},
+    })),
+  ]
+  const bssidSource = networks.some((n) => n.bssid_source === 'predicted') ? 'predicted' : networks.length ? 'measured' : ''
+  const aps: MigrationAPReport[] = arr<Row>(report.aps).map((ap) => ({
+    id: str(ap.id),
+    name: str(ap.name, str(ap.id)),
+    verified: Boolean(ap.equal),
+    local_files: str(ap.local_files, 'unknown'),
+    bssid_index: bssidSource,
+    mismatches: arr<string>(ap.mismatch),
+  }))
+  return { objects, aps, normaliser_version: typeof report.normaliser_version === 'number' ? report.normaliser_version : null }
+}
+
 export function normaliseMigration(body: unknown, system?: SystemView): MigrationView {
   const row = (body ?? {}) as Record<string, unknown>
   const report = (row.report && typeof row.report === 'object' ? row.report : null) as Record<string, unknown> | null
@@ -65,14 +118,8 @@ export function normaliseMigration(body: unknown, system?: SystemView): Migratio
     paths: arr<string>(row.paths).filter((p) => typeof p === 'string'),
     schema: typeof row.schema === 'number' ? row.schema : (system?.db.schema ?? 1),
     compat: typeof row.compat === 'number' ? row.compat : (system?.db.compat ?? 1),
-    report: report
-      ? {
-          objects: arr<MigrationObjectReport>(report.objects),
-          aps: arr<MigrationAPReport>(report.aps).map((ap) => ({ ...ap, mismatches: arr<string>(ap.mismatches) })),
-          normaliser_version: typeof report.normaliser_version === 'number' ? report.normaliser_version : null,
-        }
-      : null,
-    finalise_available: Boolean(row.finalise_available),
+    report: report ? normaliseV2Report(report) : null,
+    finalise_available: Boolean(row.finalise_available ?? row.can_finalise),
     finalise_after: str(row.finalise_after) || null,
     finalised: Boolean(row.finalised),
   }
