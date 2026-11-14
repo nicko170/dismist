@@ -239,7 +239,13 @@ func (s *Server) moveAP(writer http.ResponseWriter, request *http.Request) {
 			// config is dropped so a later assignment counts as a change.
 			ap.ConfigRevision = state.Revision + 1
 			ap.ConfigUpdatedAt = state.UpdatedAt
-			config, err := compile.BuildSiteConfig(s.base, model.Site{}, *ap, nil, ap.ConfigUpdatedAt)
+			networks := make([]model.Network, 0)
+			for _, network := range state.Networks {
+				if network.SiteID == "" {
+					networks = append(networks, network)
+				}
+			}
+			config, err := compile.BuildSiteConfig(s.base, model.Site{}, *ap, networks, ap.ConfigUpdatedAt)
 			if err != nil {
 				return &compile.APError{APID: ap.ID, Err: err}
 			}

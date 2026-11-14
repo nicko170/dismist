@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -130,8 +131,11 @@ func decodeJSON(request *http.Request, limit int64, value any, what string) erro
 	return nil
 }
 
+// isJSON accepts Content-Type application/json with or without parameters
+// (for example "; charset=utf-8").
 func isJSON(request *http.Request) bool {
-	return request.Header.Get("Content-Type") == "application/json"
+	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	return err == nil && mediaType == "application/json"
 }
 
 // decodeError turns a json decoding error into a 400, with a field error
