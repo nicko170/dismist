@@ -124,6 +124,14 @@ func (h *startupHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			})
 			return
 		}
+		// Not ready until the operator handler serves; otherwise a probe
+		// could pass while every other path still answers "starting".
+		if h.app.Load() == nil {
+			writeHealth(writer, http.StatusServiceUnavailable, api.ErrorBody{
+				Error: "the operator API is not installed yet", Code: api.ErrorCodeNotReady, Fields: map[string]string{"check": "app"},
+			})
+			return
+		}
 		writeHealth(writer, http.StatusOK, api.HealthView{Status: "ready"})
 		return
 	}

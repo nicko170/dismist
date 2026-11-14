@@ -52,7 +52,14 @@ func TestStartupHandlerHealthzFirst(t *testing.T) {
 	if !ready.Ready() {
 		t.Fatal("Ready() false after migration and bind")
 	}
-	check("bound", "/readyz", http.StatusOK, "")
+	// Every check passes, but the operator API is not installed yet.
+	check("bound", "/readyz", http.StatusServiceUnavailable, "app")
+	if response, _ := get("/api/sites"); response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("API before SetApp: %d", response.Code)
+	}
+	// Once the app is installed it gets everything but the probes.
+	handler.SetApp(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) }))
+	check("app installed", "/readyz", http.StatusOK, "")
 	probeErr = errors.New("disk full")
 	// The last result stands until probeInterval has passed.
 	check("probe failing, cached", "/readyz", http.StatusOK, "")
@@ -60,8 +67,6 @@ func TestStartupHandlerHealthzFirst(t *testing.T) {
 	check("probe failing", "/readyz", http.StatusServiceUnavailable, "database")
 	probeErr = nil
 	now = now.Add(probeInterval)
-	// Once the app is installed it gets everything but the probes.
-	handler.SetApp(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) }))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/sites", nil))
 	if response.Code != http.StatusTeapot {
@@ -94,6 +99,7 @@ func TestReadyzRateLimitsTheDatabaseCheck(t *testing.T) {
 	ready.migrated.Store(true)
 	ready.wssBound.Store(true)
 	handler := &startupHandler{readiness: ready}
+	handler.SetApp(http.NotFoundHandler())
 	get := func() int {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
