@@ -90,3 +90,23 @@ type ClientDetail struct {
 	Events         []EventView   `json:"events"`
 	NextBefore     *time.Time    `json:"next_before" tstype:"string | null,required"`
 }
+
+// ClientList is GET /api/sites/$id/clients?view=live (the bare array).
+type ClientList = []ClientView
+
+// SessionList is GET /api/sites/$id/clients?view=recent (the bare array):
+// client sessions that ended in the last 24 hours, newest first.
+type SessionList = []SessionView
+
+// ClientMetaInput is PUT /api/clients/$mac/meta (phase 4).
+type ClientMetaInput struct {
+	Alias string `json:"alias"`
+	Notes string `json:"notes"`
+}
+
+// ClientMeta is a client's alias and notes.
+type ClientMeta struct {
+	MAC   string `json:"mac"`
+	Alias string `json:"alias"`
+	Notes string `json:"notes"`
+}

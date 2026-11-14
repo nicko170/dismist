@@ -3,6 +3,71 @@
 // Regenerate with: go generate ./internal/api
 
 //////////
+// source: actions.go
+
+/**
+ * APAction names an AP action (POST /api/aps/$id/actions/$action).
+ */
+export const APActionLocate = "locate";
+export const APActionUnlocate = "unlocate";
+export const APActionPushConfig = "push-config";
+export const APActionReboot = "reboot";
+export const APActionRestartRadios = "restart-radios";
+export type APAction = typeof APActionLocate | typeof APActionUnlocate | typeof APActionPushConfig | typeof APActionReboot | typeof APActionRestartRadios;
+/**
+ * ActionInput is the body of an AP or client action (all optional).
+ */
+export interface ActionInput {
+  /**
+   * Minutes is the locate duration: 1, 5, 15 or 60 (default 5).
+   */
+  minutes?: number /* int */;
+  /**
+   * Band is "2.4", "5" or "" (both) for restart-radios.
+   */
+  band?: string;
+  /**
+   * Note is the blocked-client note.
+   */
+  note?: string;
+}
+/**
+ * ActionResult is the response of an action.
+ */
+export interface ActionResult {
+  action: string;
+  state: 'accepted' | 'done';
+  until?: string /* RFC3339 */;
+  action_id?: string;
+  /**
+   * Via says how the action was carried out: "ap-cmd-rx", "config"
+   * (LED.Locator), "push" or "reconnect".
+   */
+  via?: string;
+  revision?: number /* uint64 */;
+}
+/**
+ * CommandSupport says how an AP command could be sent (AP detail).
+ */
+export interface CommandSupport {
+  /**
+   * Reboot, RestartRadios and Disconnect are true when the AP's
+   * ap-cmd-rx feature is on for this AP (§5.6, experimental).
+   */
+  reboot: boolean;
+  restart_radios: boolean;
+  disconnect: boolean;
+  /**
+   * Locate is true when LED.Locator is offered (the site is experimental).
+   */
+  locate: boolean;
+  /**
+   * Fallback is the LAN-side command for an unsupported action.
+   */
+  fallback: string;
+}
+
+//////////
 // source: aps.go
 
 /**
@@ -345,6 +410,15 @@ export interface APDetail extends APView {
   rf_plan: { [band in Band]: PlannedRadio | null };
   locate_until: string | null;
   capabilities: APCapabilities;
+  /**
+   * Commands says which actions dismist can send this AP (phase 3).
+   */
+  commands: CommandSupport;
+  /**
+   * RebootsDetected is how often dismist saw the AP reboot (hello boot
+   * count or uptime), newest first, at most 10.
+   */
+  reboots_detected: string /* RFC3339 */[];
 }
 /**
  * PendingReason is why an AP is in the pending-adoption list.
@@ -369,6 +443,83 @@ export interface PendingAP {
   last_seen: string /* RFC3339 */;
   attempts: number /* int */;
   reason: PendingReason;
+  /**
+   * Dismissed is true for rows listed with ?dismissed=1 that are hidden
+   * until DismissedUntil.
+   */
+  dismissed: boolean;
+  dismissed_until: string | null;
+}
+/**
+ * PendingList is GET /api/aps/pending (the response is the bare array).
+ */
+export type PendingList = PendingAP[];
+/**
+ * APList is GET /api/aps?site= (the response is the bare array).
+ */
+export type APList = APView[];
+/**
+ * APPatch is PATCH /api/aps/$id (If-Match required): a JSON merge patch.
+ * Absent means unchanged. Secret is write-only (hex or base64); null or ""
+ * keeps it. ProtocolFeatures switches features per AP; a null value resets
+ * one to the daemon default. The overrides (phase 2) take null for
+ * "inherit the site value".
+ */
+export interface APPatch {
+  name?: string;
+  site_id?: string;
+  management_ip?: string;
+  secret?: string;
+  local_files?: LocalFileView[];
+  protocol_features?: { [feature: string]: boolean | null };
+  led_brightness?: number | null;
+  ssh_enabled?: boolean | null;
+  rf?: { [band in Band]?: Partial<RadioOverride> | null };
+  management?: unknown;
+  eth1?: unknown;
+  wired_client_stats?: boolean | null;
+}
+/**
+ * APDeleted is DELETE /api/aps/$id.
+ */
+export interface APDeleted {
+  id: string;
+  revision: number /* uint64 */;
+  purged_history: boolean;
+}
+/**
+ * APTelemetry is GET /api/aps/$id/telemetry (phase 1): the AP's decoded
+ * telemetry, empty while it is offline or before its first frame.
+ */
+export interface APTelemetry {
+  ap_id: string;
+  last_full: string | null;
+  last_fast: string | null;
+  full_frames: number /* uint64 */;
+  fast_frames: number /* uint64 */;
+  uptime_seconds: number /* uint64 */;
+  clock_skew_s: number | null;
+  config_timestamp: number /* float64 */;
+  country: string;
+  health: APHealth;
+  uplink: APUplink;
+  ip: APIP;
+  radios: RadioView[];
+  wlans: WLANLive[];
+}
+/**
+ * APLogLine is one kernel log line (24.1, phase 4).
+ */
+export interface APLogLine {
+  at: string | null;
+  text: string;
+}
+/**
+ * APLog is GET /api/aps/$id/log: the bounded kernel-log ring.
+ */
+export interface APLog {
+  ap_id: string;
+  lines: APLogLine[];
 }
 /**
  * APInput is POST /api/aps. Secret is the AP's 32-byte EEPROM secret as hex
@@ -449,6 +600,16 @@ export interface APConfigView {
   site_patch: { [key: string]: unknown };
   ap_patch: { [key: string]: unknown };
   h0: H0View | null;
+  /**
+   * Compile is the compile trace and shadowing (phase 2; null for the
+   * applied view).
+   */
+  compile: CompileReport | null;
+  /**
+   * Legacy is true when the config came from the frozen v0 compiler
+   * (legacy mode, design §4.7).
+   */
+  legacy: boolean;
 }
 
 //////////
@@ -543,6 +704,19 @@ export interface AuthSessionView {
   remote: string;
   user_agent: string;
   current: boolean;
+}
+/**
+ * AuthSessionList is GET /api/system/sessions (phase 1).
+ */
+export interface AuthSessionList {
+  sessions: AuthSessionView[];
+}
+/**
+ * RevokedSessions is DELETE /api/system/sessions/$id and POST
+ * /api/system/sessions/revoke-all.
+ */
+export interface RevokedSessions {
+  revoked: number /* int */;
 }
 
 //////////
@@ -641,6 +815,228 @@ export interface ClientDetail {
   sessions: SessionView[];
   events: EventView[];
   next_before: string | null;
+}
+/**
+ * ClientList is GET /api/sites/$id/clients?view=live (the bare array).
+ */
+export type ClientList = ClientView[];
+/**
+ * SessionList is GET /api/sites/$id/clients?view=recent (the bare array):
+ * client sessions that ended in the last 24 hours, newest first.
+ */
+export type SessionList = SessionView[];
+/**
+ * ClientMetaInput is PUT /api/clients/$mac/meta (phase 4).
+ */
+export interface ClientMetaInput {
+  alias: string;
+  notes: string;
+}
+/**
+ * ClientMeta is a client's alias and notes.
+ */
+export interface ClientMeta {
+  mac: string;
+  alias: string;
+  notes: string;
+}
+
+//////////
+// source: config.go
+
+/**
+ * ExpertScope is the object an expert patch belongs to.
+ */
+export const ExpertScopeSite = "site";
+export const ExpertScopeAP = "ap";
+export const ExpertScopeWLAN = "wlan";
+export type ExpertScope = typeof ExpertScopeSite | typeof ExpertScopeAP | typeof ExpertScopeWLAN;
+/**
+ * ExpertPatchView is GET /api/{sites,aps,sites/$s/networks}/$id/expert
+ * (alias …/advanced). Patch is redacted; a "[redacted]" value sent back
+ * keeps the stored secret.
+ */
+export interface ExpertPatchView {
+  scope: ExpertScope;
+  object_id: string;
+  patch: { [key: string]: unknown };
+  /**
+   * Field is the stored field the endpoint edits: "expert" once schema 2
+   * has committed, "advanced" in legacy mode (design §4.9).
+   */
+  field: 'expert' | 'advanced';
+  shadowed: string[];
+  partly_shadowed: string[];
+  ignored_keys: string[];
+  updated_rev: number /* uint64 */;
+}
+/**
+ * ExpertPatchInput is PUT …/expert. A null patch removes it. Confirm must
+ * be true to save a patch that shadows typed fields (the 422 lists them).
+ */
+export interface ExpertPatchInput {
+  patch: { [key: string]: unknown } | null;
+  confirm?: boolean;
+}
+/**
+ * TraceView is one typed option's compile trace (AP config view, phase 2).
+ */
+export interface TraceView {
+  option: string;
+  step: string;
+  paths: string[];
+}
+/**
+ * ShadowView is a typed option an expert patch overrides.
+ */
+export interface ShadowView {
+  option: string;
+  scope: string;
+  by: string;
+  object_id: string;
+  paths: string[];
+  partly: boolean;
+}
+/**
+ * CompileReport is the compile trace, shadowing, ignored keys, warnings and
+ * validation errors of one AP's config (GET /api/aps/$id/config, phase 2).
+ */
+export interface CompileReport {
+  trace: TraceView[];
+  shadowed: ShadowView[];
+  ignored: string[];
+  warnings: Warning[];
+  validation: Warning[];
+}
+/**
+ * AffectedAP is one AP a change affected and what happened to it.
+ */
+export interface AffectedAP {
+  id: string;
+  name: string;
+  state: string;
+  error: string;
+}
+/**
+ * ChangeActor is who made a change (no secrets).
+ */
+export interface ChangeActor {
+  kind: ActorKind;
+  name: string;
+  id: string;
+  remote: string;
+}
+/**
+ * ChangeSummary is one row of GET /api/sites/$id/changes (phase 2).
+ */
+export interface ChangeSummary {
+  revision: number /* uint64 */;
+  at: string /* RFC3339 */;
+  actor: ChangeActor;
+  kind: 'config' | 'action';
+  endpoint: string;
+  summary: string;
+  affected_aps: AffectedAP[];
+}
+/**
+ * ChangePage is GET /api/sites/$id/changes.
+ */
+export interface ChangePage {
+  changes: ChangeSummary[];
+  next_before: number | null;
+}
+/**
+ * ChangeObject names one object a change touched.
+ */
+export interface ChangeObject {
+  kind: 'site' | 'network' | 'ap';
+  id: string;
+  name: string;
+}
+/**
+ * ChangeDetail is GET /api/sites/$id/changes/$rev: the summary, the
+ * redacted typed snapshot at that revision, the diff of the typed objects
+ * against the previous revision, and each AP's effective hash.
+ */
+export interface ChangeDetail extends ChangeSummary {
+  objects: ChangeObject[];
+  snapshot: { [key: string]: unknown } | null;
+  diff: DiffEntry[];
+  effective: { [key: string]: string};
+  results: { [key: string]: APState};
+  restorable: boolean;
+}
+/**
+ * APState is one AP's result for a revision.
+ */
+export interface APState {
+  state: string;
+  at: string | null;
+  error: string;
+}
+/**
+ * RestoreInput is the body of POST /api/sites/$id/changes/$rev/restore.
+ * Secrets maps a secret's path (as named in the secret_required error) to
+ * the old value; KeepCurrent lists paths whose current secret is kept.
+ */
+export interface RestoreInput {
+  secrets?: { [key: string]: string};
+  keep_current?: string[];
+  keep_newer_wlans?: boolean;
+}
+/**
+ * RestorePlan is what a restore does (the object of its mutation response).
+ */
+export interface RestorePlan {
+  revision: number /* uint64 */;
+  changed: ChangeObject[];
+  recreated: ChangeObject[];
+  removed: ChangeObject[];
+  not_restored: ChangeObject[];
+  secret_fields: string[];
+}
+/**
+ * Recommendation is a named, previewable improvement (design §4.6). The
+ * change itself is previewed with POST …/recommendations/$id/apply?dry_run=1.
+ */
+export interface Recommendation {
+  id: string;
+  title: string;
+  detail: string;
+  scope: 'site' | 'ap' | 'wlan';
+  object_id: string;
+  disruption: Disruption;
+}
+/**
+ * MigrationStatus is GET /api/system/migration (phase 2).
+ */
+export interface MigrationStatus extends MigrationView {
+  at: string | null;
+  paths: string[];
+  schema: number /* uint64 */;
+  compat: number /* uint64 */;
+  copy: string;
+  /**
+   * Report is the v2 lift report (lifted values per object, residual
+   * patches, per-AP verification and local-file status), redacted;
+   * null before the migration has run.
+   */
+  report: { [key: string]: unknown } | null;
+  /**
+   * CanFinalise is true once the migration has committed and run for 30
+   * days (design §4.1 rule 5); FinaliseAfter is when that is.
+   */
+  can_finalise: boolean;
+  finalise_after: string | null;
+  finalised: boolean;
+}
+/**
+ * MigrationRun is the response of POST /api/system/migration/retry and
+ * …/finalise.
+ */
+export interface MigrationRun {
+  dry_run: boolean;
+  status: MigrationStatus;
 }
 
 //////////
@@ -784,6 +1180,62 @@ export interface EventPage {
 }
 
 //////////
+// source: history.go
+
+/**
+ * SampleRadio is one radio in a sample.
+ */
+export interface SampleRadio {
+  band: string;
+  channel: number /* int */;
+  width: number /* int */;
+  util: number /* float64 */;
+  noise_dbm: number /* int */;
+  clients: number /* int */;
+  max_power_dbm: number /* int */;
+}
+/**
+ * Sample is one point of GET /api/sites/$id/history/samples: the site sum
+ * (or one AP with ?ap=) over one step.
+ */
+export interface Sample {
+  at: string /* RFC3339 */;
+  clients: number /* int */;
+  aps_connected: number /* int */;
+  tx_bytes: number /* uint64 */;
+  rx_bytes: number /* uint64 */;
+  average_rssi: number | null;
+  radios: SampleRadio[];
+}
+/**
+ * SamplePage is GET /api/sites/$id/history/samples?ap=&range=&step=.
+ */
+export interface SamplePage {
+  site_id: string;
+  ap_id: string;
+  range: string;
+  step: string;
+  samples: Sample[];
+}
+/**
+ * SearchHit is one result of GET /api/search?q= (phase 4).
+ */
+export interface SearchHit {
+  kind: 'site' | 'ap' | 'wlan' | 'client';
+  id: string;
+  site_id: string;
+  title: string;
+  detail: string;
+}
+/**
+ * SearchResult is GET /api/search?q=.
+ */
+export interface SearchResult {
+  query: string;
+  hits: SearchHit[];
+}
+
+//////////
 // source: mutation.go
 
 /**
@@ -848,6 +1300,243 @@ export interface MutationResponse<T extends any> {
 }
 
 //////////
+// source: rf.go
+
+/**
+ * PowerPolicy is a band's transmit power policy: fixed dBm, or an Auto
+ * range the planner chooses from (design §3.10).
+ */
+export interface PowerPolicy {
+  mode: 'fixed' | 'auto';
+  /**
+   * DBm is the fixed power (mode "fixed").
+   */
+  dbm?: number /* int */;
+  /**
+   * Min and Max bound Auto power (mode "auto").
+   */
+  min?: number /* int */;
+  max?: number /* int */;
+}
+/**
+ * BandAdvanced are a band's advanced RF settings.
+ */
+export interface BandAdvanced {
+  taf: 'default' | 'off' | 'on';
+  twt: boolean;
+  antenna: 'default' | '4x4' | '3x3' | '2x2' | '1x1';
+  min_probe_rssi: number | null;
+  mu_mimo: boolean | null;
+  txbf: boolean | null;
+}
+/**
+ * ChannelChoice is one valid primary channel.
+ */
+export interface ChannelChoice {
+  channel: number /* int */;
+  dfs: boolean;
+}
+/**
+ * ValidChannels are the primaries valid for one width in the site's
+ * country (the regulatory table, design Appendix A). Widths that are
+ * expert-only or that AP33 does not offer under the ccrev (160 MHz under
+ * AU/890) are not listed.
+ */
+export interface ValidChannels {
+  width: number /* int */;
+  primaries: ChannelChoice[];
+  blocks: number /* int */[][];
+}
+/**
+ * BandProfileView is one band of the site RF profile.
+ */
+export interface BandProfileView {
+  enabled: boolean;
+  width: number /* int */;
+  channels: number /* int */[];
+  dfs: boolean;
+  dfs_fallback: number /* int */;
+  power: PowerPolicy;
+  preamble: 'auto' | 'short' | 'long';
+  advanced: BandAdvanced;
+  valid_channels: ValidChannels[];
+}
+/**
+ * PlanActual is what a radio reports (fields 31.3, 31.5, 31.8).
+ */
+export interface PlanActual {
+  channel: number /* int */;
+  width: number /* int */;
+  max_power_dbm: number /* int */;
+  util: number /* float64 */;
+  clients: number /* int */;
+}
+/**
+ * PlanStatus compares a radio's plan with its telemetry.
+ */
+export const PlanStatusMatch = "match";
+export const PlanStatusMismatch = "mismatch";
+export const PlanStatusCAC = "cac";
+export const PlanStatusRadioMissing = "radio_missing";
+export const PlanStatusOffline = "offline";
+export type PlanStatus = typeof PlanStatusMatch | typeof PlanStatusMismatch | typeof PlanStatusCAC | typeof PlanStatusRadioMissing | typeof PlanStatusOffline;
+/**
+ * PlanRow is one AP and band of the channel plan table.
+ */
+export interface PlanRow {
+  ap_id: string;
+  ap_name: string;
+  band: Band;
+  mode: 'auto' | 'static';
+  channel: number /* int */;
+  width: number /* int */;
+  power_dbm: number /* int */;
+  dfs_fallback: number | null;
+  source: string;
+  actual: PlanActual | null;
+  status: PlanStatus;
+}
+/**
+ * RFProfileView is GET /api/sites/$id/rf and SiteView.rf.
+ */
+export interface RFProfileView {
+  managed: boolean;
+  country: string;
+  ccrev: string | null;
+  band_24: BandProfileView;
+  band_5: BandProfileView;
+  /**
+   * ScanningRadio is null when the template decides (on).
+   */
+  scanning_radio: boolean | null;
+  plan: PlanRow[];
+  recommendations: Recommendation[];
+}
+/**
+ * BandProfileInput is one band of an RF profile change (merge patch).
+ */
+export interface BandProfileInput {
+  enabled?: boolean;
+  width?: number /* int */;
+  channels?: number /* int */[];
+  dfs?: boolean;
+  dfs_fallback?: number /* int */;
+  power?: PowerPolicy;
+  preamble?: string;
+  advanced?: Partial<BandAdvanced>;
+}
+/**
+ * RFProfileInput is PUT /api/sites/$id/rf and SitePatch.rf (merge patch).
+ */
+export interface RFProfileInput {
+  managed?: boolean;
+  band_24?: BandProfileInput;
+  band_5?: BandProfileInput;
+  scanning_radio?: boolean;
+}
+/**
+ * PlanChannel is a channel and power before or after planning.
+ */
+export interface PlanChannel {
+  channel: number /* int */;
+  width: number /* int */;
+  power_dbm: number /* int */;
+  dfs_fallback: number | null;
+}
+/**
+ * PlanChange is one AP and band of a plan proposal.
+ */
+export interface PlanChange {
+  ap_id: string;
+  ap_name: string;
+  band: Band;
+  from: PlanChannel;
+  to: PlanChannel;
+  cost_before: number /* float64 */;
+  cost_after: number /* float64 */;
+  /**
+   * Keep is true when the proposal is within the hysteresis (less than
+   * 25 % better) and the radio stays where it is.
+   */
+  keep: boolean;
+  reason: string;
+  disruption: Disruption;
+}
+/**
+ * PlanInputs summarises what the planner used.
+ */
+export interface PlanInputs {
+  aps: number /* int */;
+  /**
+   * ScansAgeSeconds is, per AP ID, the age of its last neighbour scan
+   * (null when it has none).
+   */
+  scans_age_s: { [ap: string]: number | null };
+}
+/**
+ * PlanProposal is POST /api/sites/$id/rf/plan?dry_run=1, and the object of
+ * the apply response.
+ */
+export interface PlanProposal {
+  inputs: PlanInputs;
+  changes: PlanChange[];
+}
+/**
+ * PlanApplyInput is the body of POST /api/sites/$id/rf/plan (optional).
+ * Only lists the AP and band pairs to apply; empty means every change that
+ * is not "keep".
+ */
+export interface PlanApplyInput {
+  only?: PlanSelection[];
+}
+/**
+ * PlanSelection names one AP and band.
+ */
+export interface PlanSelection {
+  ap_id: string;
+  band: Band;
+}
+/**
+ * Neighbour is one BSS another party runs, heard by a site AP's scan.
+ * Neighbour SSIDs and BSSIDs never leave the authenticated API.
+ */
+export interface Neighbour {
+  ssid: string;
+  bssid: string;
+  band: Band;
+  channel: number /* int */;
+  width: number /* int */;
+  rssi: number /* int */;
+  seen_by: string;
+  seen_by_name: string;
+  station_count: number | null;
+  util: number | null;
+  last_seen: string /* RFC3339 */;
+}
+/**
+ * ScanAge is the age of one AP's last scan on one band.
+ */
+export interface ScanAge {
+  ap_id: string;
+  ap_name: string;
+  band: Band;
+  at: string | null;
+  entries: number /* int */;
+}
+/**
+ * NeighbourPage is GET /api/sites/$id/rf/neighbours?band=.
+ */
+export interface NeighbourPage {
+  neighbours: Neighbour[];
+  /**
+   * Own lists the site's own BSSIDs heard by another site AP (AP-to-AP
+   * visibility); they are not neighbours.
+   */
+  own: Neighbour[];
+  scans: ScanAge[];
+}
+
+//////////
 // source: sites.go
 
 /**
@@ -875,7 +1564,7 @@ export interface SiteSummary {
  * (ssh, syslog, management, ap_defaults, protection, rf, expert) are added
  * in phase 2, additively.
  */
-export interface SiteView extends SiteSummary {
+export interface SiteView extends SiteSummary, SiteSettings {
   /**
    * CCRev is the regulatory revision for Country, null when the country
    * is not in the table.
@@ -891,6 +1580,177 @@ export interface SiteInput {
   name: string;
   country: string;
   timezone: string;
+}
+/**
+ * SiteList is GET /api/sites: every site with its counters (phase 1).
+ * The response body is the bare array.
+ */
+export type SiteList = SiteSummary[];
+/**
+ * SSHKeyView is one SSH public key (design §3.11 Access). Key is the
+ * "type base64" part; Comment is kept from the pasted line.
+ */
+export interface SSHKeyView {
+  key: string;
+  comment: string;
+  type: string;
+  fingerprint: string;
+}
+/**
+ * SiteSSHView is the site's SSH access (ssh.*).
+ */
+export interface SiteSSHView {
+  enabled: boolean;
+  keys: SSHKeyView[];
+  readonly_keys: SSHKeyView[];
+}
+/**
+ * SyslogTarget is one remote syslog destination (syslog[]).
+ */
+export interface SyslogTarget {
+  protocol: 'udp' | 'tcp';
+  host: string;
+  port: number /* int */;
+  facility: number /* int */;
+  severity: number /* int */;
+  tag: string;
+}
+/**
+ * ManagementView are the site's management defaults (management.*).
+ */
+export interface ManagementView {
+  /**
+   * VLANID 1 means untagged (the native VLAN).
+   */
+  vlan_id: number /* int */;
+  dns: string[];
+  ntp: string[];
+}
+/**
+ * Eth1View is an eth1 port mode (experimental).
+ */
+export interface Eth1View {
+  mode: 'same_as_uplink' | 'access' | 'trunk' | 'disabled';
+  vlans: number /* int */[];
+  pvid: number /* int */;
+}
+/**
+ * RecoveryView is config auto-recovery (experimental).
+ */
+export interface RecoveryView {
+  enabled: boolean;
+  minutes: number /* int */;
+}
+/**
+ * APDefaultsView are the site's AP defaults (ap_defaults.*).
+ */
+export interface APDefaultsView {
+  led_brightness: number /* int */;
+  hostname_from_name: boolean;
+  keep_wlans_up_on_uplink_down: boolean;
+  poe_constrained: 'keep_radios' | 'disable_radios';
+  wired_client_stats: boolean;
+  eth1: Eth1View | null;
+  config_recovery: RecoveryView | null;
+  ble_disabled: boolean;
+}
+/**
+ * BlockedClient is one entry of protection.blocked_clients.
+ */
+export interface BlockedClient {
+  mac: string;
+  note: string;
+}
+/**
+ * PenaltyBoxView is the repeated auth-failure penalty box (experimental).
+ */
+export interface PenaltyBoxView {
+  threshold: number /* int */;
+  window_sec: number /* int */;
+}
+/**
+ * ProtectionView is protection.*.
+ */
+export interface ProtectionView {
+  blocked_clients: BlockedClient[];
+  proxy_arp: boolean;
+  arp_spoof_check: boolean;
+  penalty_box: PenaltyBoxView | null;
+  dhcp_fingerprinting: boolean;
+}
+/**
+ * ExpertSummary says whether an object has an expert patch and which typed
+ * options it shadows (design §3.0).
+ */
+export interface ExpertSummary {
+  has_patch: boolean;
+  /**
+   * Field is "expert" once schema 2 has committed, "advanced" (the legacy
+   * field) in legacy mode.
+   */
+  field: 'expert' | 'advanced';
+  shadowed: string[];
+  partly_shadowed: string[];
+  /**
+   * OverriddenOn lists, per site option, the APs whose expert patch or
+   * typed override replaces it (cross-scope shadowing).
+   */
+  overridden_on: { [key: string]: string[]};
+}
+/**
+ * SiteSettings are the typed site settings of SiteView (phase 2).
+ */
+export interface SiteSettings {
+  ssh: SiteSSHView;
+  syslog: SyslogTarget[];
+  management: ManagementView;
+  ap_defaults: APDefaultsView;
+  protection: ProtectionView;
+  rf: RFProfileView;
+  expert: ExpertSummary;
+  /**
+   * ExperimentalInUse lists the option keys whose stored value is
+   * experimental in this site.
+   */
+  experimental_in_use: string[];
+  /**
+   * Typed is false while the schema-2 migration has not committed: the
+   * typed values above are then defaults, every typed form is read-only
+   * and dismist runs the legacy config unchanged (design §3.0).
+   */
+  typed: boolean;
+}
+/**
+ * SitePatch is PATCH /api/sites/$id: a JSON merge patch over SiteView.
+ * Absent means unchanged; null resets a field to its default. ssh.keys and
+ * ssh.readonly_keys take OpenSSH authorized_keys lines (comments kept).
+ */
+export interface SitePatch {
+  name?: string;
+  country?: string;
+  timezone?: string;
+  experimental?: boolean;
+  ssh?: SiteSSHInput;
+  syslog?: SyslogTarget[];
+  management?: ManagementView;
+  ap_defaults?: Partial<APDefaultsView>;
+  protection?: Partial<ProtectionView>;
+  rf?: RFProfileInput;
+}
+/**
+ * SiteSSHInput is the ssh part of SitePatch.
+ */
+export interface SiteSSHInput {
+  enabled?: boolean;
+  keys?: string[];
+  readonly_keys?: string[];
+}
+/**
+ * SiteDeleted is DELETE /api/sites/$id.
+ */
+export interface SiteDeleted {
+  id: string;
+  revision: number /* uint64 */;
 }
 
 //////////
@@ -1170,4 +2030,265 @@ export interface OnboardingView {
  */
 export interface HealthView {
   status: string;
+}
+
+//////////
+// source: wlans.go
+
+/**
+ * Security is a WLAN's security mode (design §3.9 composite table).
+ */
+export const SecurityWPA2Personal = "wpa2_personal";
+export const SecurityWPA2WPA3Personal = "wpa2_wpa3_personal";
+export const SecurityWPA3Personal = "wpa3_personal";
+export const SecurityOpen = "open";
+export const SecurityOWE = "owe";
+export const SecurityOWETransition = "owe_transition";
+export const SecurityWPA2Enterprise = "wpa2_enterprise";
+export const SecurityWPA2WPA3Enterprise = "wpa2_wpa3_enterprise";
+export const SecurityWPA3Enterprise = "wpa3_enterprise";
+export type Security = typeof SecurityWPA2Personal | typeof SecurityWPA2WPA3Personal | typeof SecurityWPA3Personal | typeof SecurityOpen | typeof SecurityOWE | typeof SecurityOWETransition | typeof SecurityWPA2Enterprise | typeof SecurityWPA2WPA3Enterprise | typeof SecurityWPA3Enterprise;
+/**
+ * RADIUSServerView is one RADIUS server; the secret is write-only.
+ */
+export interface RADIUSServerView {
+  host: string;
+  port: number /* int */;
+  has_secret: boolean;
+}
+/**
+ * CoAServerView is one Change-of-Authorisation server.
+ */
+export interface CoAServerView {
+  host: string;
+  local_port: number /* int */;
+  has_secret: boolean;
+}
+/**
+ * DynamicVLANView is RADIUS-assigned VLANs.
+ */
+export interface DynamicVLANView {
+  enabled: boolean;
+  type: 'standard' | 'airespace-interface-name';
+  vlans: number /* int */[];
+}
+/**
+ * RADIUSView is a WLAN's RADIUS settings (Enterprise modes, phase 4).
+ */
+export interface RADIUSView {
+  auth: RADIUSServerView[];
+  acct: RADIUSServerView[];
+  mac_auth: boolean;
+  acct_interim_sec: number /* int */;
+  nas_id: string;
+  nas_ip: string;
+  dynamic_vlan: DynamicVLANView | null;
+  reauth_sec: number /* int */;
+  reauth_on_session_timeout: boolean;
+  coa: CoAServerView[];
+  coa_no_event_timestamp: boolean;
+}
+/**
+ * RoamingView is a WLAN's roaming settings.
+ */
+export interface RoamingView {
+  fast: 'none' | 'okc' | '11r';
+  neighbor_report: boolean;
+  bss_transition: boolean;
+  ap_steering: boolean;
+  bss_load: boolean;
+  ap_key_cache: boolean;
+}
+/**
+ * BroadcastView is a WLAN's broadcast and multicast filtering.
+ */
+export interface BroadcastView {
+  limit: boolean;
+  allow_mdns: boolean;
+  allow_ssdp: boolean;
+  allow_ipv6_nd: boolean;
+  arp_filter: boolean;
+  mcast_to_ucast: boolean;
+  wireless_bridge_dhcp: boolean;
+}
+/**
+ * RateLimitView is a WLAN's rate limits in kbps (0 = unlimited).
+ */
+export interface RateLimitView {
+  wlan_up: number /* int */;
+  wlan_down: number /* int */;
+  client_up: number /* int */;
+  client_down: number /* int */;
+}
+/**
+ * Option82View is DHCP Option 82 (phase 4).
+ */
+export interface Option82View {
+  enabled: boolean;
+  circuit_id: string;
+}
+/**
+ * ScheduleRange is one weekday's on-air hours ("08:00" to "22:00").
+ */
+export interface ScheduleRange {
+  day: number /* int */;
+  start: string;
+  end: string;
+}
+/**
+ * ScheduleView is a WLAN's on-air schedule (experimental, phase 4).
+ */
+export interface ScheduleView {
+  enabled: boolean;
+  ranges: ScheduleRange[];
+}
+/**
+ * MPSKKeyView is one per-device passphrase; the passphrase is write-only.
+ */
+export interface MPSKKeyView {
+  id: string;
+  name: string;
+  has_passphrase: boolean;
+  vlan_id: number /* int */;
+  mac: string;
+  expires: string;
+}
+/**
+ * MPSKView is Multi-PSK (experimental, phase 4).
+ */
+export interface MPSKView {
+  enabled: boolean;
+  private: boolean;
+  keys: MPSKKeyView[];
+}
+/**
+ * WLANLiveSummary is what the site's APs report for a WLAN now.
+ */
+export interface WLANLiveSummary {
+  clients: number /* int */;
+  aps_broadcasting: number /* int */;
+  aps_total: number /* int */;
+}
+/**
+ * WLANView is one WLAN (GET /api/sites/$id/networks, phase 2). Secrets
+ * (passphrases, RADIUS secrets) are never included.
+ */
+export interface WLANView {
+  id: string;
+  site_id: string;
+  ssid: string;
+  enabled: boolean;
+  security: Security;
+  has_psk: boolean;
+  pmf: 'disabled' | 'optional' | 'required' | null;
+  radius: RADIUSView | null;
+  bands: Band[];
+  /**
+   * VLANID 1 means untagged.
+   */
+  vlan_id: number /* int */;
+  hidden: boolean;
+  isolation: 'none' | 'clients' | 'clients_and_lan';
+  bssid_index: number /* int */;
+  owe_bssid_index: number /* int */;
+  band_steering: boolean;
+  rates: 'compatible' | 'no_legacy' | 'high_density' | 'legacy_only';
+  min_rssi: { [key: string]: number /* int */};
+  dtim: number /* int */;
+  idle_timeout_sec: number /* int */;
+  max_clients: number | null;
+  roaming: RoamingView;
+  broadcast: BroadcastView;
+  dhcp_only: boolean;
+  dhcp_dns_only: boolean;
+  wmm_disabled: boolean;
+  uapsd_disabled: boolean;
+  disable_11ax: boolean;
+  disable_11nac: boolean;
+  group_rekey_sec: number /* int */;
+  eapol_v1: boolean;
+  sae_h2e_only: boolean;
+  transition_disable: boolean;
+  owe_ssid: string;
+  rate_limit: RateLimitView | null;
+  qos_class: string;
+  honour_blocklist: boolean;
+  option82: Option82View | null;
+  schedule: ScheduleView | null;
+  mpsk: MPSKView | null;
+  expert: ExpertSummary;
+  experimental_in_use: string[];
+  live: WLANLiveSummary;
+  updated_rev: number /* uint64 */;
+}
+/**
+ * RADIUSServerInput is one RADIUS server in a WLAN change. An absent
+ * secret keeps the stored one for the same host and port.
+ */
+export interface RADIUSServerInput {
+  host: string;
+  port: number /* int */;
+  secret?: string;
+}
+/**
+ * MPSKKeyInput is one per-device passphrase in a WLAN change. An absent
+ * passphrase keeps the stored one for the same ID.
+ */
+export interface MPSKKeyInput {
+  id?: string;
+  name: string;
+  passphrase?: string;
+  vlan_id?: number /* int */;
+  mac?: string;
+  expires?: string;
+}
+/**
+ * WLANInput is POST /api/sites/$id/networks and PATCH …/networks/$nid: a
+ * JSON merge patch over WLANView's editable fields, plus the write-only
+ * secrets. The fields not listed here are passed through as the same keys
+ * of WLANView (for example "roaming", "broadcast", "rate_limit").
+ */
+export interface WLANInput {
+  ssid?: string;
+  enabled?: boolean;
+  security?: string;
+  psk?: string;
+  pmf?: string;
+  bands?: Band[];
+  vlan_id?: number /* int */;
+  hidden?: boolean;
+  preset?: 'home' | 'guest' | 'iot';
+  radius?: RADIUSInput;
+  mpsk?: MPSKInput;
+}
+/**
+ * RADIUSInput is the radius part of WLANInput.
+ */
+export interface RADIUSInput {
+  auth?: RADIUSServerInput[];
+  acct?: RADIUSServerInput[];
+}
+/**
+ * MPSKInput is the mpsk part of WLANInput.
+ */
+export interface MPSKInput {
+  enabled?: boolean;
+  private?: boolean;
+  keys?: MPSKKeyInput[];
+}
+/**
+ * RevealView is POST /api/sites/$id/networks/$nid/reveal (phase 4, admin
+ * only, audit-logged): the passphrase and the Wi-Fi QR payload
+ * ("WIFI:T:WPA;S:…;P:…;;").
+ */
+export interface RevealView {
+  ssid: string;
+  psk: string;
+  wifi_qr: string;
+}
+/**
+ * WLANDeleted is DELETE /api/sites/$id/networks/$nid.
+ */
+export interface WLANDeleted {
+  id: string;
 }

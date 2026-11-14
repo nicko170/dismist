@@ -15,6 +15,7 @@ import (
 	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
+	"github.com/nicko170/dismist/internal/options"
 	"github.com/nicko170/dismist/internal/proxytrust"
 	"github.com/nicko170/dismist/internal/webgate"
 )
@@ -36,6 +37,20 @@ type Server struct {
 	next            fs.FS
 	system          SystemInfo
 	backupBusy      sync.Mutex
+
+	routes   router
+	config   Config
+	commands Commands
+	pusher   Pusher
+	sessions SessionManager
+	hub      *streamHub
+	pushes   *pushTracker
+	now      func() time.Time
+	// defaultFeatures are the -ap-features defaults.
+	defaultFeatures controller.Features
+	// legacyUI serves the legacy app at /legacy/ (until the release that
+	// deletes it, design §2.4).
+	legacyUI bool
 }
 
 func New(store model.StateStore, control *controller.Server, base []byte, apID string, allowedHosts ...string) *Server {
@@ -57,11 +72,16 @@ func New(store model.StateStore, control *controller.Server, base []byte, apID s
 		store: store, control: control, base: append([]byte(nil), base...),
 		apID: apID, web: web, assets: http.FileServer(http.FS(web)), hosts: hosts,
 		streamInterval: time.Second, streamHeartbeat: 15 * time.Second, streamMaxAge: 30 * time.Minute,
-		mutationLock: new(sync.Mutex), next: next,
+		mutationLock: new(sync.Mutex), next: next, hub: newStreamHub(), pushes: newPushTracker(),
+		now: func() time.Time { return time.Now().UTC() }, legacyUI: true,
 	}
 	if withTokens, ok := store.(interface{ Tokens() *model.TokenStore }); ok {
 		server.tokens = withTokens.Tokens()
 	}
+	if withSessions, ok := store.(interface{ Sessions() *model.SessionStore }); ok {
+		server.sessions = withSessions.Sessions()
+	}
+	server.registerRoutes()
 	return server
 }
 
@@ -71,6 +91,44 @@ func (s *Server) UseMutationLock(lock *sync.Mutex) *Server {
 	if lock != nil {
 		s.mutationLock = lock
 	}
+	return s
+}
+
+// UseConfig sets workstream A's typed-config layer.
+func (s *Server) UseConfig(config Config) *Server {
+	s.config = config
+	return s
+}
+
+// UseCommands sets the AP command channel (ap-cmd-rx, workstream B).
+func (s *Server) UseCommands(commands Commands) *Server {
+	s.commands = commands
+	return s
+}
+
+// UsePusher sets the config push lifecycle (workstream B).
+func (s *Server) UsePusher(pusher Pusher) *Server {
+	s.pusher = pusher
+	return s
+}
+
+// UseSessions sets the persisted web-session store for
+// /api/system/sessions. New picks the store's own Sessions() when it has
+// one.
+func (s *Server) UseSessions(sessions SessionManager) *Server {
+	s.sessions = sessions
+	return s
+}
+
+// UseDefaultFeatures sets the -ap-features defaults shown on AP detail.
+func (s *Server) UseDefaultFeatures(features controller.Features) *Server {
+	s.defaultFeatures = features
+	return s
+}
+
+// UseLegacyUI turns serving the legacy app at /legacy/ on or off.
+func (s *Server) UseLegacyUI(on bool) *Server {
+	s.legacyUI = on
 	return s
 }
 
@@ -92,6 +150,13 @@ func (s *Server) controlFor(apID string) *controller.Server {
 	return nil
 }
 
+func (s *Server) registry() *options.Registry {
+	if s.config.Registry != nil {
+		return s.config.Registry
+	}
+	return options.Default()
+}
+
 func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	// Bearer-token requests skip the origin check: browsers never attach a
@@ -104,72 +169,21 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		writeAPIError(writer, forbidden("this host or origin is not allowed; use the controller's own address"))
 		return
 	}
-	if strings.HasPrefix(request.URL.Path, "/api/") && request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions {
-		s.mutationLock.Lock()
-		defer s.mutationLock.Unlock()
-	}
-	switch {
-	case request.URL.Path == "/api/system/tokens" || strings.HasPrefix(request.URL.Path, "/api/system/tokens/"):
-		s.systemTokens(writer, request)
-	case request.URL.Path == "/api/system" || strings.HasPrefix(request.URL.Path, "/api/system/"):
-		s.systemResource(writer, request)
-	case request.URL.Path == "/api/onboarding" || strings.HasPrefix(request.URL.Path, "/api/onboarding/"):
-		s.onboarding(writer, request)
-	case request.URL.Path == "/api/aps" && request.Method == http.MethodGet:
-		state := s.store.Snapshot()
-		aps := make([]map[string]any, 0, len(state.APs))
-		for _, ap := range state.APs {
-			aps = append(aps, s.apView(ap))
+	if strings.HasPrefix(request.URL.Path, "/api/") {
+		if request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions {
+			s.mutationLock.Lock()
+			defer s.mutationLock.Unlock()
 		}
-		respond(writer, http.StatusOK, map[string]any{"aps": aps})
-	case request.URL.Path == "/api/aps" && request.Method == http.MethodPost:
-		s.registerAP(writer, request)
-	case strings.HasPrefix(request.URL.Path, "/api/aps/") && request.Method == http.MethodGet:
-		s.apResource(writer, request)
-	case strings.HasPrefix(request.URL.Path, "/api/aps/") && request.Method == http.MethodPut:
-		if len(strings.Split(strings.Trim(request.URL.Path, "/"), "/")) == 3 {
-			s.updateAP(writer, request)
-		} else {
-			s.moveAP(writer, request)
-		}
-	case request.URL.Path == "/api/sites" && request.Method == http.MethodGet:
-		s.listSites(writer)
-	case request.URL.Path == "/api/sites" && request.Method == http.MethodPost:
-		s.createSite(writer, request)
-	case strings.HasPrefix(request.URL.Path, "/api/sites/") && request.Method == http.MethodGet:
-		s.siteResource(writer, request)
-	case strings.HasPrefix(request.URL.Path, "/api/sites/") && request.Method == http.MethodPost:
-		s.siteMutation(writer, request)
-	case strings.HasPrefix(request.URL.Path, "/api/sites/") && request.Method == http.MethodPut:
-		s.siteUpdate(writer, request)
-	case strings.HasPrefix(request.URL.Path, "/api/sites/") && request.Method == http.MethodDelete:
-		s.siteDelete(writer, request)
-	case request.URL.Path == "/api/status" && request.Method == http.MethodGet:
-		s.legacyStatus(writer)
-	case request.URL.Path == "/api/telemetry" && request.Method == http.MethodGet:
-		s.legacyTelemetry(writer)
-	case request.URL.Path == "/api/clients" && request.Method == http.MethodGet:
-		s.legacyClients(writer)
-	case request.URL.Path == "/api/events" && request.Method == http.MethodGet:
-		s.legacyEvents(writer)
-	case request.URL.Path == "/api/networks" && request.Method == http.MethodGet:
-		s.listNetworks(writer, s.currentSiteID())
-	case request.URL.Path == "/api/networks" && request.Method == http.MethodPost:
-		s.createNetwork(writer, request, s.currentSiteID())
-	case strings.HasPrefix(request.URL.Path, "/api/networks/") && request.Method == http.MethodPut:
-		id := strings.TrimPrefix(request.URL.Path, "/api/networks/")
-		s.editNetwork(writer, request, s.currentSiteID(), id)
-	case strings.HasPrefix(request.URL.Path, "/api/networks/") && request.Method == http.MethodDelete:
-		id := strings.TrimPrefix(request.URL.Path, "/api/networks/")
-		s.removeNetwork(writer, s.currentSiteID(), id)
-	default:
-		if (request.Method == http.MethodGet || request.Method == http.MethodHead) &&
-			!strings.HasPrefix(request.URL.Path, "/api/") && !strings.HasPrefix(request.URL.Path, "/auth/") {
-			s.serveUI(writer, request)
-		} else {
+		if !s.routes.serve(writer, request) {
 			routeNotFound(writer)
 		}
+		return
 	}
+	if (request.Method == http.MethodGet || request.Method == http.MethodHead) && !strings.HasPrefix(request.URL.Path, "/auth/") {
+		s.serveUI(writer, request)
+		return
+	}
+	routeNotFound(writer)
 }
 
 func (s *Server) allowedHost(host string) bool {
@@ -237,4 +251,20 @@ func respond(writer http.ResponseWriter, status int, value any) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(value)
+}
+
+// legacyClient reports whether the request comes from the legacy app served
+// at /legacy/ (its fetches and its EventSource carry the page as Referer).
+// The endpoints it uses answer in their phase-0 shapes for it, so the
+// legacy UI keeps working until the release that deletes it.
+func legacyClient(request *http.Request) bool {
+	referer := request.Header.Get("Referer")
+	if referer == "" {
+		return false
+	}
+	parsed, err := url.Parse(referer)
+	if err != nil {
+		return false
+	}
+	return parsed.Path == "/legacy" || strings.HasPrefix(parsed.Path, "/legacy/")
 }

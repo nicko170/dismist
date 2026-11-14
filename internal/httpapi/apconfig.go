@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/compile"
@@ -25,20 +24,11 @@ type h0Store interface {
 	H0() (map[string]model.H0Record, error)
 }
 
-// apResource serves GET /api/aps/{id}/... (phase 0: the config view).
-func (s *Server) apResource(writer http.ResponseWriter, request *http.Request) {
-	parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
-	if len(parts) == 4 && parts[3] == "config" {
-		s.apConfigView(writer, request, parts[2])
-		return
-	}
-	routeNotFound(writer)
-}
-
 // apConfigView serves GET /api/aps/{id}/config?view=effective|normalised|applied
 // (design §4.5, §4.9): the redacted config with its keyed effective hash.
 // view=normalised is admin only.
-func (s *Server) apConfigView(writer http.ResponseWriter, request *http.Request, apID string) {
+func (s *Server) apConfigView(writer http.ResponseWriter, request *http.Request, p params) {
+	apID := p["ap"]
 	view := api.ConfigView(request.URL.Query().Get("view"))
 	if view == "" {
 		view = api.ConfigViewEffective
@@ -76,9 +66,11 @@ func (s *Server) apConfigView(writer http.ResponseWriter, request *http.Request,
 	if keyed, ok := s.store.(hashKeyStore); ok {
 		key = keyed.HashKey()
 	}
+	field := s.expertField()
 	result := api.APConfigView{
 		APID: apID, View: view, NormaliserVersion: effective.Version,
-		SitePatch: redactPatch(site.Advanced), APPatch: redactPatch(ap.Advanced),
+		SitePatch: redactPatch(recordKey(site, field)), APPatch: redactPatch(recordKey(ap, field)),
+		Legacy: !s.typedEnabled(),
 	}
 	var config []byte
 	switch view {
@@ -114,6 +106,7 @@ func (s *Server) apConfigView(writer http.ResponseWriter, request *http.Request,
 			return
 		}
 		config, result.Revision = output.Config, compile.ConfigRevision(state, ap)
+		result.Compile = compileReport(output)
 	}
 	canonical, report, err := effective.Normalise(config, compile.EffectiveContext(ap))
 	if err != nil {
@@ -156,6 +149,26 @@ func (s *Server) apConfigView(writer http.ResponseWriter, request *http.Request,
 		}
 	}
 	respond(writer, http.StatusOK, result)
+}
+
+// compileReport converts the compile trace and findings for the view.
+func compileReport(output compile.Output) *api.CompileReport {
+	report := &api.CompileReport{Trace: []api.TraceView{}, Shadowed: []api.ShadowView{}, Ignored: nonNil(output.Ignored),
+		Warnings: []api.Warning{}, Validation: []api.Warning{}}
+	for _, entry := range output.Trace {
+		report.Trace = append(report.Trace, api.TraceView{Option: entry.Option, Step: entry.Step, Paths: nonNil(entry.Paths)})
+	}
+	for _, shadow := range output.Shadowed {
+		report.Shadowed = append(report.Shadowed, api.ShadowView{Option: shadow.Option, Scope: shadow.Scope, By: shadow.By,
+			ObjectID: shadow.ObjectID, Paths: nonNil(shadow.Paths), Partly: shadow.Partly})
+	}
+	for _, warning := range output.Warnings {
+		report.Warnings = append(report.Warnings, api.Warning{Code: warning.Code, Message: warning.Message})
+	}
+	for _, failure := range output.Validation {
+		report.Validation = append(report.Validation, api.Warning{Code: failure.Code, Message: failure.Message})
+	}
+	return report
 }
 
 func nonNil(values []string) []string {

@@ -3,9 +3,10 @@ package httpapi
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -14,86 +15,6 @@ import (
 	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/model"
 )
-
-func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
-	var input struct {
-		ID           string `json:"id"`
-		Name         string `json:"name"`
-		Model        string `json:"model"`
-		ManagementIP string `json:"management_ip"`
-		SiteID       string `json:"site_id"`
-		Secret       string `json:"secret"`
-		// LocalFiles are the AP's local_* files the CLI found (names and
-		// SHA-256 only); absent means never checked.
-		LocalFiles []api.LocalFileView `json:"local_files"`
-	}
-	if err := decodeJSON(request, 64*1024, &input, "AP registration"); err != nil {
-		writeError(writer, err)
-		return
-	}
-	mac, err := net.ParseMAC(strings.ReplaceAll(strings.TrimSpace(input.ID), "-", ":"))
-	if err != nil || len(mac) != 6 {
-		writeAPIError(writer, invalidField("id", "invalid AP ID: use its Ethernet MAC address"))
-		return
-	}
-	secret, err := parseAPSecret(input.Secret)
-	if err != nil {
-		writeAPIError(writer, invalidField("secret", err.Error()))
-		return
-	}
-	// The management IP is optional: it pins the AP to one source address.
-	managementIP := ""
-	if address := strings.TrimSpace(input.ManagementIP); address != "" {
-		ip := net.ParseIP(address)
-		if ip == nil {
-			writeAPIError(writer, invalidField("management_ip", "invalid AP management IP"))
-			return
-		}
-		managementIP = ip.String()
-	}
-	localFiles, badFiles := parseLocalFiles(input.LocalFiles, time.Now().UTC())
-	if badFiles != nil {
-		writeAPIError(writer, badFiles)
-		return
-	}
-	id := strings.ReplaceAll(mac.String(), ":", "-")
-	_, err = s.mutate([]string{input.SiteID}, func(state *model.State, _ *model.Tx) error {
-		foundSite := input.SiteID == ""
-		for _, candidate := range state.Sites {
-			if candidate.ID == input.SiteID {
-				foundSite = true
-				break
-			}
-		}
-		if !foundSite {
-			return notFound("site").withField("site_id", "no such site")
-		}
-		for _, candidate := range state.APs {
-			if candidate.ID == id {
-				return conflict("AP already registered").withField("id", "an AP with this ID is already registered")
-			}
-		}
-		// A new AP in a site compiles as changed (it has no baseline), so
-		// change detection sets its revision; an AP without a site starts
-		// at the new revision too.
-		state.APs = append(state.APs, model.APRecord{ID: id, Name: strings.TrimSpace(input.Name), Model: strings.TrimSpace(input.Model),
-			ManagementIP: managementIP, SiteID: input.SiteID, Secret: secret, LocalFiles: localFiles,
-			ConfigRevision: state.Revision + 1, ConfigUpdatedAt: state.UpdatedAt})
-		return nil
-	})
-	if err != nil {
-		writeChangeError(writer, err)
-		return
-	}
-	state := s.store.Snapshot()
-	for _, ap := range state.APs {
-		if ap.ID == id {
-			respond(writer, http.StatusCreated, map[string]any{"ap": s.apView(ap), "revision": state.Revision})
-			return
-		}
-	}
-	writeAPIError(writer, internalError("the registered AP was not stored"))
-}
 
 // parseAPSecret reads an AP's 32-byte EEPROM secret given as hex (64
 // digits, optionally separated by spaces or colons) or base64 (standard or
@@ -144,4 +65,67 @@ func parseLocalFiles(files []api.LocalFileView, now time.Time) ([]model.LocalFil
 		result = append(result, model.LocalFile{Name: file.Name, SHA256: digest, SeenAt: seen})
 	}
 	return result, nil
+}
+
+// remarshal converts a decoded JSON value into a typed one.
+func remarshal(value any, target any) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, target)
+}
+
+// asInt reads a whole JSON number.
+func asInt(value any) (int, bool) {
+	switch typed := value.(type) {
+	case json.Number:
+		if i, err := typed.Int64(); err == nil {
+			return int(i), true
+		}
+	case int:
+		return typed, true
+	case float64:
+		if typed == float64(int(typed)) {
+			return int(typed), true
+		}
+	}
+	return 0, false
+}
+
+// onboardingView serves GET /api/onboarding (design §3.15): what an AP
+// needs to reach this controller.
+func (s *Server) onboardingView(writer http.ResponseWriter, _ *http.Request, _ params) {
+	view := api.OnboardingView{WSSURL: s.system.wssURL(), DNSMode: s.system.DNSMode(), CAPems: []api.CAPem{}}
+	for _, ca := range s.caCertificates() {
+		name := ca.Subject.CommonName
+		if name == "" {
+			name = ca.Subject.String()
+		}
+		view.CAPems = append(view.CAPems, api.CAPem{Name: name, PEM: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.Raw}))})
+	}
+	if ini, err := RenderCloudINI(view.WSSURL); err == nil {
+		view.CloudINI = ini
+	}
+	respond(writer, http.StatusOK, view)
+}
+
+// caBundle serves GET /api/onboarding/ca-bundle.pem: the CAs an AP needs to
+// trust the endpoint (the CLI adds them to the AP's stock Mist bundle).
+func (s *Server) caBundle(writer http.ResponseWriter, request *http.Request, _ params) {
+	var bundle strings.Builder
+	for _, ca := range s.caCertificates() {
+		name := ca.Subject.CommonName
+		if name == "" {
+			name = ca.Subject.String()
+		}
+		fmt.Fprintf(&bundle, "# %s (expires %s)\n", strings.ReplaceAll(name, "\n", " "), ca.NotAfter.UTC().Format("2006-01-02"))
+		bundle.Write(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.Raw}))
+	}
+	writer.Header().Set("Content-Type", "application/x-pem-file")
+	writer.Header().Set("Content-Disposition", `attachment; filename="dismist-ca-bundle.pem"`)
+	writer.WriteHeader(http.StatusOK)
+	if request.Method != http.MethodHead {
+		_, _ = writer.Write([]byte(bundle.String()))
+	}
 }
