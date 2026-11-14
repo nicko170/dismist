@@ -28,7 +28,7 @@ metrics:
   service:
     annotations: {example.com/note: metrics}
   serviceMonitor:
-    labels: {release: kube-prom}
+    labels: {release: kube-prometheus-stack}
     sampleLimit: 20000
     relabelings:
       - action: replace
@@ -39,7 +39,7 @@ metrics:
         sourceLabels: [__name__]
         regex: go_gc_.*
   prometheusRule:
-    labels: {release: kube-prom}
+    labels: {release: kube-prometheus-stack}
     disabledAlerts: [DismistAPFlapping]
     severityOverrides: {DismistAPSilent: info}
     extraGroups:
