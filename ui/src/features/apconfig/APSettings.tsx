@@ -474,7 +474,9 @@ type BandOverrideForm = {
   power_mode: 'inherit' | 'fixed'
   power: number | string | null
 }
-type RadiosForm = { rf: Record<Band, BandOverrideForm> }
+/** b24/b5, not "2.4": a dot in a key is a nested path to react-hook-form. */
+type RadiosForm = { rf: { b24: BandOverrideForm; b5: BandOverrideForm } }
+const FORM_BAND: Record<Band, 'b24' | 'b5'> = { '2.4': 'b24', '5': 'b5' }
 
 function bandOverrideForm(ap: APSettingsView, band: Band): BandOverrideForm {
   const o = ap.overrides.rf?.[band]
@@ -492,7 +494,7 @@ function bandOverrideForm(ap: APSettingsView, band: Band): BandOverrideForm {
 
 function RadiosSection({ siteId, ap }: { siteId: string; ap: APSettingsView }) {
   const rf = useQuery(rfQuery(siteId))
-  const toValues = (a: APSettingsView): RadiosForm => ({ rf: { '2.4': bandOverrideForm(a, '2.4'), '5': bandOverrideForm(a, '5') } })
+  const toValues = (a: APSettingsView): RadiosForm => ({ rf: { b24: bandOverrideForm(a, '2.4'), b5: bandOverrideForm(a, '5') } })
   const values = toValues(ap)
   const profile = rf.data
   const schema = useMemo(
@@ -500,18 +502,19 @@ function RadiosSection({ siteId, ap }: { siteId: string; ap: APSettingsView }) {
       z.object({
         rf: z.record(z.string(), z.any()).superRefine((value, ctx) => {
           for (const band of ['2.4', '5'] as Band[]) {
-            const v = value[band] as BandOverrideForm
+            const key = FORM_BAND[band]
+            const v = value[key] as BandOverrideForm
             if (v.use_site) continue
             const bandProfile = profile?.[BAND_KEY[band]]
             const width = v.width || bandProfile?.width || 20
             if (v.channel_mode === 'static') {
-              if (!Number.isInteger(v.channel)) ctx.addIssue({ code: 'custom', path: [band, 'channel'], message: 'Choose a channel.' })
+              if (!Number.isInteger(v.channel)) ctx.addIssue({ code: 'custom', path: [key, 'channel'], message: 'Choose a channel.' })
               else {
                 const error = staticChannelError(band, v.channel as number, width, Boolean(bandProfile?.dfs), bandProfile?.valid_channels)
-                if (error) ctx.addIssue({ code: 'custom', path: [band, 'channel'], message: error })
+                if (error) ctx.addIssue({ code: 'custom', path: [key, 'channel'], message: error })
               }
             }
-            if (v.power_mode === 'fixed' && !(Number.isInteger(v.power) && (v.power as number) >= 1 && (v.power as number) <= 25)) ctx.addIssue({ code: 'custom', path: [band, 'power'], message: 'Enter 1 to 25 dBm.' })
+            if (v.power_mode === 'fixed' && !(Number.isInteger(v.power) && (v.power as number) >= 1 && (v.power as number) <= 25)) ctx.addIssue({ code: 'custom', path: [key, 'power'], message: 'Enter 1 to 25 dBm.' })
           }
         }),
       }),
@@ -537,11 +540,11 @@ function RadiosSection({ siteId, ap }: { siteId: string; ap: APSettingsView }) {
       toBody={(v, patch) => {
         const changed = (patch.rf ?? {}) as Record<string, unknown>
         const rfBody: Record<string, unknown> = {}
-        for (const band of Object.keys(changed) as Band[]) rfBody[band] = radioInput(v.rf[band])
+        for (const band of ['2.4', '5'] as Band[]) if (FORM_BAND[band] in changed) rfBody[band] = radioInput(v.rf[FORM_BAND[band]])
         return { overrides: { rf: rfBody } }
       }}
       confirm={(v, base) => {
-        const off = (['2.4', '5'] as Band[]).filter((b) => v.rf[b].enabled === 'off' && base.rf[b].enabled !== 'off')
+        const off = (['2.4', '5'] as Band[]).filter((b) => v.rf[FORM_BAND[b]].enabled === 'off' && base.rf[FORM_BAND[b]].enabled !== 'off')
         return off.length
           ? { title: `Turn off the ${off.join(' and ')} GHz radio on ${ap.name || ap.id}?`, description: 'Clients on that band are disconnected from this AP.', action: 'Turn off and save', destructive: true }
           : null
@@ -570,16 +573,16 @@ function liveRadio(ap: APSettingsView, band: Band): RadioView | undefined {
 
 function BandOverrideCard({ band, ap, profile }: { band: Band; ap: APSettingsView; profile: RFProfileView | undefined }) {
   const { control, setValue, formState } = useFormContext<RadiosForm>()
-  const v = useWatch({ control, name: `rf.${band}` }) as BandOverrideForm
+  const v = useWatch({ control, name: `rf.${FORM_BAND[band]}` }) as BandOverrideForm
   const channelState = useOptionState('ap.rf.channel', { value: v.use_site ? null : v.channel })
   const bandProfile = profile?.[BAND_KEY[band]]
   const siteWidth = bandProfile?.width ?? (band === '2.4' ? 20 : 80)
   const width = v.width || siteWidth
   const plan = ap.rf_plan?.[band]
   const live = liveRadio(ap, band)
-  const errors = (formState.errors.rf as Record<string, Record<string, { message?: string }>> | undefined)?.[band]
+  const errors = (formState.errors.rf as Record<string, Record<string, { message?: string }>> | undefined)?.[FORM_BAND[band]]
   const editable = channelState.editable
-  const set = <K extends keyof BandOverrideForm>(key: K, value: BandOverrideForm[K]) => setValue(`rf.${band}.${key}` as never, value as never, { shouldDirty: true, shouldValidate: true })
+  const set = <K extends keyof BandOverrideForm>(key: K, value: BandOverrideForm[K]) => setValue(`rf.${FORM_BAND[band]}.${key}` as never, value as never, { shouldDirty: true, shouldValidate: true })
   const choices = primaries(band, width, bandProfile?.valid_channels)
   const sitePower = bandProfile?.power.mode === 'fixed' ? `${bandProfile.power.dbm} dBm` : bandProfile ? `Auto ${bandProfile.power.min}–${bandProfile.power.max} dBm` : '–'
   const id = useId()
@@ -686,7 +689,7 @@ function BandOverrideCard({ band, ap, profile }: { band: Band; ap: APSettingsVie
 
 function PowerInput({ band, disabled, error }: { band: Band; disabled: boolean; error?: string }) {
   const { control } = useFormContext<RadiosForm>()
-  const { field } = useController({ control, name: `rf.${band}.power` as never })
+  const { field } = useController({ control, name: `rf.${FORM_BAND[band]}.power` as never })
   const id = useId()
   return (
     <div className="grid gap-1">

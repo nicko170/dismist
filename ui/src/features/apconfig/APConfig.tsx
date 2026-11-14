@@ -216,7 +216,7 @@ function HistoryView({ siteId, apId }: { siteId: string; apId: string }) {
           return (
             <li key={c.revision} className="relative grid gap-1 rounded-lg border bg-card p-3 text-sm hover:bg-accent/40">
               <div className="flex flex-wrap items-center gap-2">
-                <Link to={`/sites/${encodeURIComponent(siteId)}/changes/${c.revision}` as never} className="font-medium after:absolute after:inset-0 after:content-['']">
+                <Link to={`/sites/${encodeURIComponent(siteId)}/changes/${c.revision}` as never} className="inline-flex min-h-11 items-center font-medium after:absolute after:inset-0 after:content-['']">
                   Revision {c.revision}
                 </Link>
                 <RelativeTime value={c.at} />

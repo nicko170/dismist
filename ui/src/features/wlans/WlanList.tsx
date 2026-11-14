@@ -252,7 +252,7 @@ function WlanTable({ list, base, ...actions }: TableProps) {
         {list.map((view) => (
           <li key={view.id} className="relative grid gap-2 rounded-xl border bg-card p-4">
             <div className="flex items-start justify-between gap-2">
-              <Link to={`${base}/${encodeURIComponent(view.id)}` as never} className="min-w-0 text-base font-semibold break-words after:absolute after:inset-0 after:content-['']">
+              <Link to={`${base}/${encodeURIComponent(view.id)}` as never} className="inline-flex min-h-11 min-w-0 items-center text-base font-semibold break-words after:absolute after:inset-0 after:content-['']">
                 {view.ssid}
               </Link>
               <RowMenu view={view} base={base} {...actions} />

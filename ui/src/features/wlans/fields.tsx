@@ -143,7 +143,7 @@ export function MinRSSIField() {
     <FieldShell as="fieldset" labelAs="legend" id={id} label={state.meta.label} help={state.meta.help ?? undefined} badges={state.badges}>
       <div className="grid gap-3 sm:grid-cols-2">
         {(['2.4', '5'] as const).map((band) => (
-          <BandNumber key={band} name={`min_rssi.${band}`} label={`${band} GHz`} disabled={!state.editable || !bands.includes(band)} min={-95} max={-50} unit="dBm" error={fieldError(formState.errors, `min_rssi.${band}`)} />
+          <BandNumber key={band} name={`min_rssi.${band === '2.4' ? 'b24' : 'b5'}`} label={`${band} GHz`} disabled={!state.editable || !bands.includes(band)} min={-95} max={-50} unit="dBm" error={fieldError(formState.errors, `min_rssi.${band === '2.4' ? 'b24' : 'b5'}`)} />
         ))}
       </div>
     </FieldShell>

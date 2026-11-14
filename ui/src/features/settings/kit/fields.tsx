@@ -467,6 +467,7 @@ export function NumberInput({
   name?: string
   'aria-invalid'?: boolean
   'aria-describedby'?: string
+  'aria-label'?: string
 }) {
   const negativeOnly = max != null && max < 0
   const signed = !negativeOnly && min != null && min < 0
@@ -508,6 +509,7 @@ export function NumberInput({
           className={cn('tabular-nums', negativeOnly && 'pl-7')}
           aria-invalid={aria['aria-invalid']}
           aria-describedby={aria['aria-describedby']}
+          aria-label={aria['aria-label']}
         />
       </div>
       {signed ? (
@@ -568,7 +570,7 @@ export function SliderInput({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <NumberInput id={id} value={value} onChange={onChange} min={min} max={max} disabled={disabled} aria-describedby={describedByIds} />
+        <NumberInput id={id} value={value} onChange={onChange} min={min} max={max} disabled={disabled} aria-label={label} aria-describedby={describedByIds} />
         {offAtZero && value === 0 ? <span className="text-sm text-muted-foreground">Off</span> : null}
       </div>
     </div>

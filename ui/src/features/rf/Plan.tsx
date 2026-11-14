@@ -31,7 +31,7 @@ function ModeCell({ siteId, row }: { siteId: string; row: PlanRow }) {
       <Link
         to={`/sites/${encodeURIComponent(siteId)}/aps/${encodeURIComponent(row.ap_id)}/settings` as never}
         hash="radios"
-        className="font-medium text-brand underline-offset-2 hover:underline"
+        className="inline-flex min-h-11 items-center font-medium text-brand underline-offset-2 hover:underline md:min-h-0"
       >
         Static (AP override)
       </Link>

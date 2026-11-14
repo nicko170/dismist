@@ -9,18 +9,23 @@ import { cn } from '@/lib/utils'
 // components/ui) does not have yet. Built on radix-ui like the rest; offered
 // to WS-D for promotion into components/ui.
 
-/** 44 px tall touch target around a 24 px track; 20 px at md+ with a mouse. */
+/**
+ * A 44×56 px touch target (§7.7 rule 3) drawing a 28×48 px track; with a
+ * mouse at md and up it shrinks to a 20×36 px switch.
+ */
 export function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimitive.Root>) {
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        'peer relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-input/45 transition-colors duration-150 outline-none before:absolute before:-inset-2 before:content-[""] focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-brand fine:md:h-5 fine:md:w-9',
+        'group relative inline-flex h-11 w-14 shrink-0 cursor-pointer items-center justify-center rounded-full outline-none disabled:cursor-not-allowed disabled:opacity-50 fine:md:h-5 fine:md:w-9',
+        'before:absolute before:inset-x-1 before:top-1/2 before:h-7 before:-translate-y-1/2 before:rounded-full before:bg-input/45 before:transition-colors before:duration-150 before:content-[""] data-[state=checked]:before:bg-brand fine:md:before:inset-x-0 fine:md:before:h-5',
+        'focus-visible:before:ring-3 focus-visible:before:ring-ring/40',
         className,
       )}
       {...props}
     >
-      <SwitchPrimitive.Thumb className="pointer-events-none block size-6 rounded-full bg-card shadow-sm ring-0 transition-transform duration-150 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0 fine:md:size-4 fine:md:data-[state=checked]:translate-x-4" />
+      <SwitchPrimitive.Thumb className="pointer-events-none relative block size-6 rounded-full bg-card shadow-sm ring-0 transition-transform duration-150 data-[state=checked]:translate-x-2.5 data-[state=unchecked]:-translate-x-2.5 fine:md:size-4 fine:md:data-[state=checked]:translate-x-2 fine:md:data-[state=unchecked]:-translate-x-2" />
     </SwitchPrimitive.Root>
   )
 }

@@ -72,7 +72,7 @@ export function wlanSchema(ctx: Context) {
       }),
       band_steering: z.boolean(),
       rates: leafSchema('wlan.rates'),
-      min_rssi: z.object({ '2.4': optionalInt('wlan.min_rssi'), '5': optionalInt('wlan.min_rssi') }),
+      min_rssi: z.object({ b24: optionalInt('wlan.min_rssi'), b5: optionalInt('wlan.min_rssi') }),
       dtim: intOrText('wlan.dtim'),
       wmm_disabled: z.boolean(),
       uapsd_disabled: z.boolean(),

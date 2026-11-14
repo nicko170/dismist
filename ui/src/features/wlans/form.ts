@@ -48,7 +48,8 @@ export type WlanForm = {
   roaming: { fast: FastRoaming; ap_key_cache: boolean; neighbor_report: boolean; bss_transition: boolean; ap_steering: boolean; bss_load: boolean }
   band_steering: boolean
   rates: RatesProfile
-  min_rssi: Record<Band, number | string | null>
+  /** b24/b5, not "2.4": a dot in a key is a nested path to react-hook-form. */
+  min_rssi: { b24: number | string | null; b5: number | string | null }
   dtim: number | string | null
   wmm_disabled: boolean
   uapsd_disabled: boolean
@@ -99,7 +100,7 @@ export function newWlanForm(): WlanForm {
     roaming: { fast: 'none', ap_key_cache: false, neighbor_report: true, bss_transition: true, ap_steering: false, bss_load: true },
     band_steering: false,
     rates: 'compatible',
-    min_rssi: { '2.4': null, '5': null },
+    min_rssi: { b24: null, b5: null },
     dtim: 2,
     wmm_disabled: false,
     uapsd_disabled: false,
@@ -171,7 +172,7 @@ export function toForm(view: WLANView): WlanForm {
     roaming: { ...base.roaming, ...view.roaming },
     band_steering: view.band_steering,
     rates: view.rates ?? 'compatible',
-    min_rssi: { '2.4': view.min_rssi?.['2.4'] ?? null, '5': view.min_rssi?.['5'] ?? null },
+    min_rssi: { b24: view.min_rssi?.['2.4'] ?? null, b5: view.min_rssi?.['5'] ?? null },
     dtim: view.dtim ?? 2,
     wmm_disabled: view.wmm_disabled ?? false,
     uapsd_disabled: view.uapsd_disabled ?? false,
@@ -259,7 +260,7 @@ const composite: Record<string, (values: WlanForm) => unknown> = {
   min_rssi: (v) => {
     const out: Partial<Record<Band, number>> = {}
     for (const band of ['2.4', '5'] as Band[]) {
-      const n = num(v.min_rssi[band])
+      const n = num(v.min_rssi[band === '2.4' ? 'b24' : 'b5'])
       if (n != null) out[band] = n
     }
     return Object.keys(out).length ? out : null

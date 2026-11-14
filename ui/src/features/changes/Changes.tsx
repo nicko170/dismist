@@ -49,7 +49,7 @@ export function ChangesList({ siteId }: { siteId: string }) {
           <ul className="grid gap-2" aria-label="Config revisions">
             {list.map((change) => (
               <li key={change.revision} className="relative grid gap-1.5 rounded-xl border bg-card p-4 text-sm hover:bg-accent/40 md:grid-cols-[6rem_minmax(0,1fr)_minmax(0,16rem)] md:items-start md:gap-4">
-                <Link to={`${base}/${change.revision}` as never} className="font-semibold tabular-nums after:absolute after:inset-0 after:content-['']">
+                <Link to={`${base}/${change.revision}` as never} className="inline-flex min-h-11 items-center font-semibold tabular-nums after:absolute after:inset-0 after:content-['']">
                   Rev {change.revision}
                 </Link>
                 <div className="grid min-w-0 gap-0.5">

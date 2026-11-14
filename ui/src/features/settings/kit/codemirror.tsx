@@ -23,7 +23,9 @@ const highlight = HighlightStyle.define([
 const theme = EditorView.theme({
   '&': { backgroundColor: 'var(--card)', color: 'var(--foreground)', borderRadius: 'var(--radius-md)', border: '1px solid color-mix(in oklch, var(--input) 70%, transparent)' },
   '&.cm-focused': { outline: '2px solid var(--ring)', outlineOffset: '2px' },
-  '.cm-content': { fontFamily: 'var(--font-mono)', fontSize: '13px', caretColor: 'var(--foreground)' },
+  // 16 px on phones and touch screens (§7.7 rule 1); 13 px only at md+ with a mouse.
+  '.cm-content': { fontFamily: 'var(--font-mono)', fontSize: '16px', caretColor: 'var(--foreground)' },
+  '@media (pointer: fine) and (min-width: 48rem)': { '.cm-content': { fontSize: '13px' } },
   '.cm-gutters': { backgroundColor: 'var(--muted)', color: 'var(--muted-foreground)', borderRight: '1px solid var(--border)' },
   '.cm-activeLine': { backgroundColor: 'color-mix(in oklch, var(--accent) 60%, transparent)' },
   '.cm-activeLineGutter': { backgroundColor: 'var(--accent)' },
@@ -78,7 +80,8 @@ export default function CodeMirrorJson({ value, onChange, readOnly, completions 
       syntaxHighlighting(highlight),
       theme,
       keymap.of([...foldKeymap, ...lintKeymap]),
-      EditorView.contentAttributes.of({ 'aria-label': ariaLabel }),
+      // Read-only views stay focusable so keyboard users can scroll them (axe scrollable-region-focusable).
+      EditorView.contentAttributes.of(readOnly ? { 'aria-label': ariaLabel, tabindex: '0', 'aria-readonly': 'true' } : { 'aria-label': ariaLabel }),
       EditorState.readOnly.of(Boolean(readOnly)),
       EditorView.editable.of(!readOnly),
     ]
