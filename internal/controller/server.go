@@ -391,7 +391,7 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if err != nil {
 		return
 	}
-	s.serveConn(conn, request.TLS.CipherSuite, request.RemoteAddr, nil)
+	s.serveConn(conn, request.TLS.CipherSuite, request.RemoteAddr, nil, nil)
 }
 
 // sessionEnd describes how one AP connection ended.
@@ -405,18 +405,21 @@ type sessionEnd struct {
 	readErr error
 	// subject is the subject of the last frame received.
 	subject string
+	// onAuthenticated is called once when the AP authenticates.
+	onAuthenticated func()
 }
 
 // serveConn runs one AP connection. hello, when set, is an ep-auth frame the
 // Manager already read to route the connection. The connection only becomes
 // this AP's active session once it authenticates, so an unauthenticated
-// client naming this AP cannot displace the real one.
-func (s *Server) serveConn(conn *websocket.Conn, cipherSuite uint16, remoteAddr string, hello []byte) sessionEnd {
+// client naming this AP cannot displace the real one. onAuthenticated, when
+// set, is called once the AP has authenticated.
+func (s *Server) serveConn(conn *websocket.Conn, cipherSuite uint16, remoteAddr string, hello []byte, onAuthenticated func()) sessionEnd {
 	defer conn.Close()
 	conn.SetReadLimit(8 << 20)
 	authenticator := s.auth
 	authenticator.CipherSuite = cipherSuite
-	var end sessionEnd
+	end := sessionEnd{onAuthenticated: onAuthenticated}
 	err := s.handle(conn, authenticator, remoteAddr, hello, &end)
 	if err != nil {
 		closeWithPolicyViolation(conn, "invalid AP message")
@@ -524,6 +527,12 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 			messageType, raw, err = conn.ReadMessage()
 			if err != nil {
 				end.readErr = err
+				if state == awaitClientProof {
+					// The AP left after our proof instead of sending its
+					// own: it holds a different secret (a real AP checks
+					// our proof first), or it timed out.
+					end.authFailure = AuthStageProof
+				}
 				return nil
 			}
 		}
@@ -608,6 +617,9 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 				state = authed
 				end.authenticated = true
 				s.authenticated(conn, authenticator, hello, helloBody, remoteAddr)
+				if end.onAuthenticated != nil {
+					end.onAuthenticated()
+				}
 			default:
 				return ErrAuthentication
 			}
@@ -826,8 +838,6 @@ func (s *Server) observeTelemetry(body []byte) {
 // connection event says whether the AP rebooted or only reconnected.
 func (s *Server) authenticated(conn *websocket.Conn, authenticator Authenticator, hello Hello, helloBody []byte, remoteAddr string) {
 	extras, failed := decodeHelloExtras(helloBody)
-	s.counters.connections.Add(1)
-	s.counters.decodeError("hello", len(failed))
 	now := time.Now()
 	s.mu.Lock()
 	previous := s.active
@@ -882,6 +892,10 @@ func (s *Server) authenticated(conn *websocket.Conn, authenticator Authenticator
 		s.addEventLocked(ConnectionEvent{When: now, Kind: "connection", Title: "AP authenticated", Detail: detail})
 	}
 	s.mu.Unlock()
+	// Counted after Status holds the new hello, so a reader that sees the
+	// connection counted also sees its hello.
+	s.counters.decodeError("hello", len(failed))
+	s.counters.connections.Add(1)
 	if previous != nil && previous != conn {
 		_ = previous.Close()
 	}

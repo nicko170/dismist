@@ -157,11 +157,9 @@ func (m *Manager) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		_ = conn.Close()
 		return
 	}
-	end := routed.server.serveConn(conn, request.TLS.CipherSuite, request.RemoteAddr, routed.raw)
-	switch {
-	case end.authenticated:
-		m.pending.forget(routed.hello.ID)
-	case end.authFailure != "":
+	end := routed.server.serveConn(conn, request.TLS.CipherSuite, request.RemoteAddr, routed.raw,
+		func() { m.pending.forget(routed.hello.ID) })
+	if !end.authenticated && end.authFailure != "" {
 		m.recordPending(routed.hello, routed.body, request.RemoteAddr, PendingAuthFailed)
 	}
 }

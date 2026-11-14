@@ -24,12 +24,18 @@ type apRegistry struct {
 	options      registryOptions
 	active       map[string]apBinding
 	mutationLock *sync.Mutex
+	// refused holds bindings whose control session could not be built, so
+	// they are not rebuilt every tick; a changed binding is tried again.
+	refused map[string]apBinding
+	// noSecret holds APs skipped for a missing secret (logged once).
+	noSecret map[string]bool
 }
 
 func newAPRegistry(manager *controller.Manager, resolver *dnsserver.Resolver, options registryOptions, initial model.State) *apRegistry {
 	registry := &apRegistry{
 		manager: manager, resolver: resolver, options: options,
 		active: make(map[string]apBinding), mutationLock: options.MutationLock,
+		refused: make(map[string]apBinding), noSecret: make(map[string]bool),
 	}
 	if registry.mutationLock == nil {
 		registry.mutationLock = new(sync.Mutex)
@@ -52,24 +58,37 @@ func (r *apRegistry) reconcileCurrent(store model.StateStore) error {
 }
 
 func bindingForAP(ap model.APRecord, options registryOptions) apBinding {
-	address := ap.ManagementIP
-	if address == "" && ap.ID == options.DefaultID {
-		address = options.DefaultIP
-	}
-	return apBinding{address: address, secret: string(ap.Secret)}
+	return apBinding{address: bindingAddress(ap, options), secret: string(ap.Secret)}
 }
 
-// reconcile applies registration changes only. The HTTP API updates existing
-// AP configs with SetConfig, so replacing their sessions here would disconnect
-// APs for ordinary site or WLAN edits.
+// reconcile applies registration changes, and each AP's protocol feature
+// switches, which take effect on the AP's next frame. The HTTP API updates
+// existing AP configs with SetConfig, so replacing their sessions here
+// would disconnect APs for ordinary site or WLAN edits. Each AP is handled
+// on its own: one that cannot be served never stops another.
 func (r *apRegistry) reconcile(state model.State) error {
 	desired := make(map[string]apBinding, len(state.APs))
+	missingSecret := make(map[string]bool)
 	for _, ap := range state.APs {
-		binding := bindingForAP(ap, r.options)
-		if ap.SiteID != "" {
-			desired[ap.ID] = binding
+		if ap.SiteID == "" {
+			continue
+		}
+		if len(ap.Secret) != model.SecretSize {
+			missingSecret[ap.ID] = true
+			if !r.noSecret[ap.ID] {
+				log.Printf("AP %s is not served: %v", ap.ID, errNoSecret)
+			}
+			continue
+		}
+		desired[ap.ID] = bindingForAP(ap, r.options)
+	}
+	r.noSecret = missingSecret
+	for id, binding := range r.refused {
+		if desired[id] != binding {
+			delete(r.refused, id)
 		}
 	}
+	defer r.syncFeatures(state)
 	// Withdraw stale registrations before adding new ones. The DNS allowlist
 	// is rebuilt from the active set afterwards, so APs may share addresses.
 	defer r.syncDNS()
@@ -87,6 +106,9 @@ func (r *apRegistry) reconcile(state model.State) error {
 		if !wanted || r.active[ap.ID] == binding {
 			continue
 		}
+		if refused, found := r.refused[ap.ID]; found && refused == binding {
+			continue
+		}
 		one := state
 		one.APs = []model.APRecord{ap}
 		prepared, _, err := prepareAPs(one, r.options)
@@ -96,7 +118,8 @@ func (r *apRegistry) reconcile(state model.State) error {
 		}
 		server, ok := prepared.Server(ap.ID)
 		if !ok {
-			failures = append(failures, fmt.Errorf("AP %s: no control session prepared", ap.ID))
+			// prepareAPs logged why; retry only when the binding changes.
+			r.refused[ap.ID] = binding
 			continue
 		}
 		if err := r.manager.Register(ap.ID, binding.address, server); err != nil {
@@ -107,6 +130,19 @@ func (r *apRegistry) reconcile(state model.State) error {
 		log.Printf("AP %s registered%s", ap.ID, fromAddress(binding.address))
 	}
 	return errors.Join(failures...)
+}
+
+// syncFeatures applies each registered AP's protocol features: the daemon
+// default overridden by the AP's stored protocol_features.
+func (r *apRegistry) syncFeatures(state model.State) {
+	for _, ap := range state.APs {
+		if _, active := r.active[ap.ID]; !active {
+			continue
+		}
+		if server, ok := r.manager.Server(ap.ID); ok {
+			server.SetFeatures(controller.ResolveFeatures(r.options.Features, ap.Features))
+		}
+	}
 }
 
 // syncDNS allows AP DNS for every active AP's pinned address.

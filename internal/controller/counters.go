@@ -63,8 +63,9 @@ type Counters struct {
 	// DecodeErrors counts skipped fields or sections by section ("hello"
 	// in phase 0; telemetry sections from phase 1).
 	DecodeErrors map[string]uint64 `json:"decode_errors"`
-	// Frames counts every frame received from the AP by subject
-	// (FrameSubjects).
+	// Frames counts every frame the AP's session received, by subject
+	// (FrameSubjects). Clock requests the Manager answers before the hello
+	// routes the connection are not included.
 	Frames map[string]uint64 `json:"frames"`
 }
 
