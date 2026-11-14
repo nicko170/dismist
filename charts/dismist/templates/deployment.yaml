@@ -72,7 +72,9 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
-              add: [CHOWN, FOWNER]
+              # CHOWN/FOWNER to hand files to the daemon user; DAC_READ_SEARCH to
+              # walk /state, which that user owns with mode 0700.
+              add: [CHOWN, FOWNER, DAC_READ_SEARCH]
           volumeMounts:
             - name: state
               mountPath: /state
