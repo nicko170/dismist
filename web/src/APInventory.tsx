@@ -14,12 +14,17 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { timeLabel } from "./api";
+import SecretField from "./SecretField";
+import { secretProblem } from "./secret";
 
 export type APEntry = {
   id: string;
   name: string;
   site_id: string;
   management_ip?: string;
+  lan_ip?: string;
+  remote_address?: string;
+  has_secret?: boolean;
   model: string;
   firmware: string;
   connected: boolean;
@@ -62,17 +67,17 @@ export default function APInventory({
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [newAP, setNewAP] = useState({
-    id: "",
-    name: "",
-    management_ip: "",
-    model: "",
-    secret_file: "",
-  });
+  const blankAP = { id: "", name: "", management_ip: "", secret: "" };
+  const [newAP, setNewAP] = useState(blankAP);
   const shown = aps.filter((ap) => ap.site_id === selectedSiteID);
 
   async function create(event: FormEvent) {
     event.preventDefault();
+    const problem = secretProblem(newAP.secret);
+    if (problem) {
+      setCreateError(problem);
+      return;
+    }
     setBusy("create");
     setCreateError("");
     try {
@@ -84,18 +89,11 @@ export default function APInventory({
           name: newAP.name.trim(),
           site_id: selectedSiteID,
           management_ip: newAP.management_ip.trim(),
-          model: newAP.model.trim(),
-          secret_file: newAP.secret_file.trim(),
+          secret: newAP.secret.trim(),
         }),
       });
       setCreateOpen(false);
-      setNewAP({
-        id: "",
-        name: "",
-        management_ip: "",
-        model: "",
-        secret_file: "",
-      });
+      setNewAP(blankAP);
       onCreated(created.ap.id);
     } catch (cause) {
       setCreateError(
@@ -157,8 +155,7 @@ export default function APInventory({
               <span>
                 <strong>{ap.name || ap.id}</strong>
                 <small>
-                  {ap.model || "AP"} ·{" "}
-                  {ap.management_ip || "Management IP pending"} · {ap.id}
+                  {ap.model || "AP"} · {addressLabel(ap)} · {ap.id}
                 </small>
               </span>
             </button>
@@ -224,9 +221,9 @@ export default function APInventory({
           <DialogHeader>
             <DialogTitle>Register access point</DialogTitle>
             <DialogDescription>
-              Add an AP to this site. Prepare its private 32-byte secret file on
-              the controller server first. The file path is stored privately and
-              cannot be viewed here afterward.
+              Add an AP to this site with its 32-byte EEPROM secret. The model
+              and firmware are read from the AP when it connects. The secret is
+              stored on this controller and is never shown again.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={create} className="register-form">
@@ -239,8 +236,11 @@ export default function APInventory({
                 onChange={(event) =>
                   setNewAP({ ...newAP, id: event.target.value })
                 }
-                placeholder="aa:bb:cc:dd:ee:ff"
+                placeholder="02-aa-bb-cc-dd-ee"
                 autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </div>
             <div className="field">
@@ -254,42 +254,32 @@ export default function APInventory({
                 placeholder="Reception AP"
               />
             </div>
+            <SecretField
+              id="ap-secret"
+              required
+              value={newAP.secret}
+              onChange={(secret) => setNewAP({ ...newAP, secret })}
+            />
             <div className="field">
-              <Label htmlFor="ap-ip">Management IP</Label>
+              <Label htmlFor="ap-ip">
+                Management IP <span className="subtle">(optional)</span>
+              </Label>
               <Input
                 id="ap-ip"
                 value={newAP.management_ip}
                 onChange={(event) =>
                   setNewAP({ ...newAP, management_ip: event.target.value })
                 }
-                placeholder="192.0.2.10"
-              />
-            </div>
-            <div className="field">
-              <Label htmlFor="ap-model">Model</Label>
-              <Input
-                id="ap-model"
-                value={newAP.model}
-                onChange={(event) =>
-                  setNewAP({ ...newAP, model: event.target.value })
-                }
-                placeholder="AP model"
-              />
-            </div>
-            <div className="field">
-              <Label htmlFor="ap-secret">Server secret file path</Label>
-              <Input
-                id="ap-secret"
-                required
-                value={newAP.secret_file}
-                onChange={(event) =>
-                  setNewAP({ ...newAP, secret_file: event.target.value })
-                }
-                placeholder="/var/lib/controller/secrets/ap.key"
+                placeholder="Any source address"
+                inputMode="decimal"
                 autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
               <span className="subtle">
-                Path on this controller server, not a file on your computer.
+                Optional: pin to a source IP. Leave blank to accept the AP from
+                any address, including behind NAT.
               </span>
             </div>
             {createError && (
@@ -314,4 +304,13 @@ export default function APInventory({
       </Dialog>
     </section>
   );
+}
+
+// addressLabel shows where the AP is: its own LAN address and, when it differs,
+// the public address its session arrives from.
+export function addressLabel(ap: APEntry): string {
+  const lan = ap.lan_ip || "";
+  const remote = ap.remote_address || "";
+  if (lan && remote && remote !== lan) return `${lan} via ${remote}`;
+  return lan || remote || "Address not seen yet";
 }
