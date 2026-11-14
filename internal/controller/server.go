@@ -318,6 +318,7 @@ func NewServer(options Options) (*Server, error) {
 		server.emitLocked(Event{Kind: EventConfig, Severity: SeverityError, Title: title, Detail: server.status.CompileError})
 	}
 	server.SetLocateUntil(options.LocateUntil)
+	server.flush()
 	return server, nil
 }
 

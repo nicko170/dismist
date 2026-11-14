@@ -81,6 +81,34 @@ func (s apStatusSink) SetConfigRequest(apID string, request controller.ConfigReq
 	})
 }
 
+func init() { extendObservation = observationV2 }
+
+// observationV2 fills the per-radio minute values (access radios only; the
+// scan radio is not a sample) and the AP model. The VAP list is stored by
+// the status sink as frames arrive, so it is left nil here.
+func observationV2(observation *model.Observation, status controller.Status, stats controller.TelemetrySnapshot) {
+	observation.Model = status.Model
+	if observation.SkipClients {
+		return
+	}
+	for _, radio := range stats.Radios {
+		if radio.Role != telemetry.RoleAccess {
+			continue
+		}
+		util := 0.0
+		switch {
+		case radio.ChanUtil != nil:
+			util = radio.ChanUtil.Mean.All
+		case radio.Utilization != nil:
+			util = radio.Utilization.All
+		}
+		observation.Radios = append(observation.Radios, model.RadioSample{
+			Dev: radio.Dev, Band: radio.Band, Channel: radio.Channel, Width: int(radio.WidthMHz),
+			UtilAll: util, NoiseDBm: radio.NoiseFloorDBm, Clients: radio.Clients, MaxPowerDBm: radio.MaxTxPowerDBm,
+		})
+	}
+}
+
 // lastKnownVAPs loads an AP's persisted VAP list for the unchanged-config
 // verification after a restart.
 func lastKnownVAPs(store *model.APStatusStore) func(apID string) []telemetry.VAP {

@@ -7,6 +7,11 @@ import (
 	"github.com/nicko170/dismist/internal/model"
 )
 
+// extendObservation adds the phase-1 observation fields (per-radio sample
+// values, the AP model) once the model's v2 Observation is merged; see
+// apstatus_sink.go.
+var extendObservation func(*model.Observation, controller.Status, controller.TelemetrySnapshot)
+
 func makeObservation(siteID, apID string, status controller.Status, stats controller.TelemetrySnapshot, at time.Time) model.Observation {
 	observation := model.Observation{
 		SiteID: siteID, APID: apID, At: at, Connected: status.Connected,
@@ -30,6 +35,9 @@ func makeObservation(siteID, apID string, status controller.Status, stats contro
 			When: event.When, Kind: event.Kind, Title: event.Title,
 			Detail: event.Detail, ClientMAC: event.ClientMAC,
 		})
+	}
+	if extendObservation != nil {
+		extendObservation(&observation, status, stats)
 	}
 	return observation
 }
