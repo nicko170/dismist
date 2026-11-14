@@ -64,8 +64,9 @@ api() {
     ${3:+--data "$3"} "http://$ui$2"
 }
 api POST /auth/login "{\"token\":\"$token\"}" >/dev/null
-field() { python3 -c "import json,sys; print(json.load(sys.stdin)$1)"; }
-site=$(api POST /api/sites '{"name":"Example Home","country":"AU","timezone":"UTC"}' | field "['site']['id']")
+# v1 answers a MutationResponse {object}; releases before it {site}.
+site=$(api POST /api/sites '{"name":"Example Home","country":"AU","timezone":"UTC"}' |
+  python3 -c "import json,sys; b=json.load(sys.stdin); print((b.get('object') or b.get('site') or b)['id'])")
 api POST "/api/sites/$site/networks" '{"ssid":"Example","psk":"example-passphrase-1","vlan_id":1,"enabled":true}' >/dev/null
 
 ap_ids=()
