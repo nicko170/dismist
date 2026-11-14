@@ -44,6 +44,7 @@ jobs:
         working-directory: ui
         run: |
           npm ci
+          scripts/ensure-native-typescript.sh
           npm run build
           test -s dist/index.html
           if grep -q 'UI not built' dist/index.html; then
