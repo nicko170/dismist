@@ -111,7 +111,7 @@ func compileTyped(in Input) (Output, error) {
 	var shadows []Shadow
 	for _, network := range in.Networks {
 		wlan, wlanShadows, err := compileWLAN(wlanInput{template: wlanTemplate, site: in.Site, ap: in.AP,
-			network: network, now: in.Now, rec: rec, warnings: &output.Warnings})
+			network: network, rec: rec, warnings: &output.Warnings})
 		if err != nil {
 			return output, err
 		}

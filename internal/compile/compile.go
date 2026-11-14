@@ -35,8 +35,8 @@ type Input struct {
 	// §4.4); anything lower is legacy mode, the v0 compiler exactly as
 	// ap-identity runs it. InputFor copies it from State.Schema.
 	Schema uint64
-	// Now is the wall-clock time for time-dependent typed fields (locate,
-	// WLAN schedules). Zero turns them off.
+	// Now is the wall-clock time for the locate expiry. Zero turns locate
+	// off. (WLAN schedules compile from their stored state.)
 	Now time.Time
 }
 

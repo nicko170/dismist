@@ -220,7 +220,6 @@ type wlanInput struct {
 	site     model.Site
 	ap       model.APRecord
 	network  model.Network
-	now      time.Time
 	rec      *recorder
 	warnings *[]Warning
 }
@@ -505,13 +504,10 @@ func compileWLAN(in wlanInput) (map[string]any, []Shadow, error) {
 			opt("wlan.option82.circuit_id", circuit, "DhcpOption82Data")
 		}
 	}
-	if sched := n.Schedule; sched != nil && sched.Enabled && !in.now.IsZero() {
-		on, err := ScheduleOn(*sched, in.site.Timezone, in.now)
-		if err != nil {
-			*in.warnings = append(*in.warnings, Warning{Code: "schedule_invalid", Option: "wlan.schedule", Message: err.Error()})
-		} else if !on {
-			opt("wlan.schedule", map[string]any{"Disabled": true, "Reason": num(8)}, "BSS")
-		}
+	// The schedule's on/off state is stored (Schedule.OffAir, set by the
+	// API's evaluator), never computed from the clock here.
+	if sched := n.Schedule; sched != nil && sched.Enabled && sched.OffAir {
+		opt("wlan.schedule", map[string]any{"Disabled": true, "Reason": num(8)}, "BSS")
 	}
 
 	// Expert patch, then the protected fields.

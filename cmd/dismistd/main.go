@@ -61,7 +61,7 @@ func main() {
 	backups := registerBackupFlags(flag.CommandLine)
 	notify := registerNotifyFlags(flag.CommandLine)
 	acceptLocalFiles := flag.String("migrate-accept-local-files", "", "comma-separated AP IDs whose /rw/etc/mist/ep-control/local_* files the operator accepts, so the schema-2 migration may claim equivalence for them (design §4.7 step 5)")
-	legacyUI := flag.Bool("legacy-ui", true, "serve the legacy web app at /legacy/ (until the release that deletes it)")
+	legacyUI := flag.Bool("legacy-ui", true, "serve the legacy web app at /legacy/ while the schema-2 migration has not committed (it is never served once typed settings are on)")
 	configPush := flag.String("config-push", controller.PushModeReconnect, "how a changed config reaches an AP by default: reconnect (the AP is disconnected and refetches) or notify (ep-config-change, experimental); each AP's protocol_features override it (design §5.6)")
 	retainSamples := flag.Duration("retain-samples", model.DefaultRetainSamples, "how long minute samples are kept (hourly rollups are kept 400 days)")
 	retainSessions := flag.Duration("retain-sessions", model.DefaultRetainSessions, "how long ended client sessions are kept")
@@ -317,8 +317,7 @@ func main() {
 
 	backupScheduler := newBackupScheduler(store, *backups, backupWarning(store))
 	builtVersion, builtCommit := buildVersion()
-	migrations := &migrationRunner{store: store, template: base, tempDir: os.TempDir(), accept: splitList(*acceptLocalFiles),
-		steps: migrate.Steps, logf: log.Printf}
+	migrations := newMigrationRunner(store, base, os.TempDir(), splitList(*acceptLocalFiles))
 	operatorAPI = httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock).UseSystem(httpapi.SystemInfo{
 		Version: builtVersion, Commit: builtCommit, StartedAt: startedAt, Ready: ready.Ready,
 		APURL: *apURL, WSSListen: listener.Addr().String(), Chain: certificate.Certificate, ExtraCAs: apCAs,
@@ -355,6 +354,7 @@ func main() {
 	backgroundCtx, stopBackground := context.WithCancel(context.Background())
 	defer stopBackground()
 	go operatorAPI.RunLocateExpiry(backgroundCtx, 15*time.Second)
+	go operatorAPI.RunSchedules(backgroundCtx, time.Minute)
 	go store.RunRetention(backgroundCtx, retention, model.DefaultRetentionInterval, func(result model.PruneResult, err error) {
 		if err != nil {
 			log.Printf("history retention: %v", err)

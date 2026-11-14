@@ -1032,6 +1032,9 @@ func (s *Server) validateWLANTyped(errs *fieldErrors, state model.State, siteID 
 		}
 	}
 	if value, ok := typed["schedule"].(map[string]any); ok {
+		// off_air is the evaluator's state (read-only): forms send the
+		// whole section back, so it is ignored, never stored.
+		delete(value, "off_air")
 		var schedule api.ScheduleView
 		if err := remarshal(value, &schedule); err != nil {
 			errs.add("schedule", "must be {enabled, windows}")

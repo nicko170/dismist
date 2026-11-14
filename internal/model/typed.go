@@ -306,6 +306,13 @@ type ScheduleWindow struct {
 type Schedule struct {
 	Enabled bool             `json:"enabled"`
 	Windows []ScheduleWindow `json:"windows,omitempty"`
+	// OffAir is the schedule's last evaluation (design §3.9): true while
+	// the WLAN is outside its windows and the site's APs take config
+	// pushes by notification. The API's schedule evaluator sets it every
+	// minute through a normal config change, so the compiled config never
+	// depends on the wall clock (a restart cannot change what an AP is
+	// served at the same revision). Read-only in the API.
+	OffAir bool `json:"off_air,omitempty"`
 }
 
 // RadioOverride is a per-AP radio override (design §3.6).

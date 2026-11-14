@@ -106,6 +106,10 @@ type ScheduleWindow struct {
 type ScheduleView struct {
 	Enabled bool             `json:"enabled"`
 	Windows []ScheduleWindow `json:"windows"`
+	// OffAir is true while the schedule holds the WLAN off air (read-only;
+	// evaluated every minute, only for APs that take config pushes by
+	// notification).
+	OffAir bool `json:"off_air"`
 }
 
 // MPSKKeyView is one per-device passphrase; the passphrase is write-only.

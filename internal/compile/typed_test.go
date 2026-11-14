@@ -412,7 +412,7 @@ func TestEnterpriseMPSKOption82AndSchedule(t *testing.T) {
 	mpsk.Security = model.SecurityWPA2Personal
 	mpsk.MPSK = &model.MultiPSK{Enabled: true, Keys: []model.MPSKKey{{ID: "11111111-0000-4000-8000-000000000001", Name: "tv", Passphrase: "tv-passphrase-01", VLANID: 50, MAC: "02:aa:00:00:00:99"}}}
 	mpsk.Option82 = &model.Option82{Enabled: true, CircuitID: "{SSID}:{AP_MAC}"}
-	mpsk.Schedule = &model.Schedule{Enabled: true, Windows: []model.ScheduleWindow{{Day: "mon", Start: "00:00", End: "01:00"}}}
+	mpsk.Schedule = &model.Schedule{Enabled: true, Windows: []model.ScheduleWindow{{Day: "mon", Start: "00:00", End: "01:00"}}, OffAir: true}
 	state.Networks = append(state.Networks, enterprise, mpsk)
 	_, root := compileTypedAP(t, state, typedAP)
 	wlans := root["WLANs"].([]any)
