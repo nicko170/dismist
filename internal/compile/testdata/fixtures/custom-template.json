@@ -1,0 +1,48 @@
+{
+ "template": "templates/custom-ap33.json",
+ "revision": 4,
+ "updated_at": "2026-11-03T00:00:00Z",
+ "sites": [
+  {
+   "id": "site-a",
+   "name": "Example",
+   "country": "AU",
+   "ssh_public_keys": [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICEhISEhISEhISEhISEhISEhISEhISEhISEhISEhISEh",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+   ]
+  }
+ ],
+ "aps": [
+  {
+   "id": "02-aa-00-00-00-06",
+   "name": "custom-ap",
+   "site_id": "site-a",
+   "secret": "ERERERERERERERERERERERERERERERERERERERERERE=",
+   "config_revision": 4,
+   "config_updated_at": "2026-11-03T00:00:00Z"
+  }
+ ],
+ "networks": [
+  {
+   "id": "wlan-a",
+   "site_id": "site-a",
+   "ssid": "Example",
+   "psk": "example-passphrase-08",
+   "vlan_id": 40,
+   "enabled": true,
+   "advanced": {
+    "RoamMode": "11r"
+   }
+  },
+  {
+   "id": "wlan-b",
+   "site_id": "site-a",
+   "ssid": "Example Off",
+   "psk": "example-passphrase-09",
+   "vlan_id": 41,
+   "enabled": false
+  }
+ ],
+ "name": "custom-template"
+}

@@ -1,0 +1,101 @@
+{
+ "template": "bundled",
+ "revision": 41,
+ "updated_at": "2026-11-10T09:00:00Z",
+ "sites": [
+  {
+   "id": "site-home",
+   "name": "Example Home",
+   "country": "AU",
+   "timezone": "Australia/Sydney",
+   "ssh_public_keys": [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"
+   ],
+   "advanced": {
+    "Radios": [
+     {
+      "Band": "2.4",
+      "CCRev": "AU/890",
+      "CCRevSP": "AU/890",
+      "Channel": 1,
+      "Width": 20,
+      "Power": 12,
+      "RRM": {
+       "Channel": 1,
+       "Width": 20,
+       "Power": 12
+      }
+     },
+     {
+      "Band": "5",
+      "CCRev": "AU/890",
+      "CCRevSP": "AU/890",
+      "Channel": 149,
+      "Width": 80,
+      "Power": 17,
+      "RRM": {
+       "Channel": 149,
+       "Width": 80,
+       "Power": 17
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "aps": [
+  {
+   "id": "02-aa-00-00-00-37",
+   "name": "Example Hallway",
+   "site_id": "site-home",
+   "secret": "ERERERERERERERERERERERERERERERERERERERERERE=",
+   "model": "AP33",
+   "firmware": "apfw-example",
+   "config_revision": 40,
+   "config_updated_at": "2026-11-09T22:15:01.5Z",
+   "applied_revision": 40
+  }
+ ],
+ "networks": [
+  {
+   "id": "6f2000aa-0000-4000-8000-000000000001",
+   "site_id": "site-home",
+   "ssid": "Example",
+   "psk": "example-passphrase-02",
+   "vlan_id": 1,
+   "enabled": true,
+   "advanced": {
+    "Auth": {
+     "AKM": {
+      "WPA2_PSK": true,
+      "WPA3_PSK": true,
+      "WPA2_PSK_SHA256": false,
+      "WPA2_PSK_FT": false,
+      "WPA2_EAP": false,
+      "WPA2_EAP_SHA256": false,
+      "WPA2_EAP_FT": false,
+      "WPA_PSK": false,
+      "WPA_EAP": false,
+      "WPA3_PSK_FT": false,
+      "WPA3_OWE": false,
+      "WPA3_EAP": false,
+      "WPA3_EAP_FT": false,
+      "WPA3_SUITEB": false,
+      "WPA3_PSK_SAE_EXT": false,
+      "WPA3_PSK_FT_SAE_EXT": false
+     },
+     "Pairwise": {
+      "GCMP256": false,
+      "CCMP": true
+     },
+     "WEP": null
+    },
+    "Dot11w": {
+     "Enabled": true,
+     "Required": false
+    }
+   }
+  }
+ ],
+ "name": "live-like"
+}

@@ -1,4 +1,4 @@
-package controller
+package compile
 
 import (
 	"encoding/json"
