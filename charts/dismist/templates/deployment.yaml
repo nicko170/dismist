@@ -63,6 +63,8 @@ spec:
               done
               chown "$uid:$gid" /state /private
               chmod 0700 /state /private
+              # dismistd refuses a group- or world-readable database.
+              chmod -R go-rwx /state
           securityContext:
             runAsNonRoot: false
             runAsUser: 0
@@ -159,11 +161,7 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
-            {{- $sc := deepCopy .Values.securityContext }}
-            {{- if or (lt (int .Values.listen.wss) 1024) (lt (int .Values.listen.dns) 1024) (lt (int .Values.listen.ui) 1024) }}
-            {{- $_ := set $sc "capabilities" (dict "drop" (list "ALL") "add" (list "NET_BIND_SERVICE")) }}
-            {{- end }}
-            {{- toYaml $sc | nindent 12 }}
+            {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             - name: state
               mountPath: /state
@@ -192,11 +190,12 @@ spec:
             sizeLimit: 4Mi
         {{- if $tlsSecret }}
         # Mounted directly (not copied) so renewals reach the pod; dismistd
-        # restarts itself to serve them.
+        # restarts itself to serve them. World-readable inside the pod only,
+        # because the daemon's UID doesn't own Secret volume files.
         - name: tls
           secret:
             secretName: {{ $tlsSecret }}
-            defaultMode: 0440
+            defaultMode: 0444
             items:
               - { key: tls.crt, path: tls.crt }
               - { key: tls.key, path: tls.key }

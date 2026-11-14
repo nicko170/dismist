@@ -71,7 +71,10 @@ controller:
 
 # Container listen ports. The AP Service maps 443 (and 53 if exposed) onto
 # these, so the daemon needs no privileged ports. With hostNetwork the APs
-# connect to these ports directly: set wss to 443 and dns to 53.
+# connect to these ports directly. The daemon runs unprivileged, so binding
+# 443 or 53 there needs the node's net.ipv4.ip_unprivileged_port_start
+# lowered; otherwise put the port in the AP's cloud.ini URL
+# (wss://host:8443/ws).
 listen:
   ui: 8088
   wss: 8443
@@ -141,8 +144,8 @@ podSecurityContext:
   runAsNonRoot: true
   runAsUser: 65532
   runAsGroup: 65532
-  fsGroup: 65532
-  fsGroupChangePolicy: OnRootMismatch
+  # No fsGroup: kubelet would add group read/write to controller.db on every
+  # pod start, and dismistd refuses a database that isn't private.
   seccompProfile:
     type: RuntimeDefault
 

@@ -88,6 +88,8 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
 
   image:
+    # Only publish an image for a tag whose tests passed.
+    needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
