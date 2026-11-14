@@ -56,7 +56,11 @@ type Options struct {
 	Features Features
 	// OnConfigDelivered is called after every ep-config reply, with the
 	// bytes sent (design §4.4: ap_config.delivered is written each time).
-	OnConfigDelivered  func(ConfigDelivery)
+	OnConfigDelivered func(ConfigDelivery)
+	// OnEvent, when set, receives every typed event (controller and PACE)
+	// for the events2 store (design §5.8). It is called on the AP's session
+	// goroutine and must not block.
+	OnEvent            func(Event)
 	OnTelemetry        func([]byte)
 	OnAPFrame          func(protocol.Message)
 	UDPProbeAddress    string
@@ -126,6 +130,26 @@ type Status struct {
 	// CompileError is the compile failure behind a delivered or absent
 	// config; cleared when a compiled config is set.
 	CompileError string `json:"compile_error,omitempty"`
+
+	// Status v2 (phase 1, design §5.4, §5.5, §5.7).
+
+	// DesiredConfigTimestamp is the Timestamp of the config dismist
+	// serves this AP (dismist_ap_desired_config_timestamp_seconds).
+	DesiredConfigTimestamp float64 `json:"desired_config_timestamp,omitempty"`
+	// ConfigRequest is the AP's last ep-config request: its applied
+	// Timestamp, rollback flag and capability tags.
+	ConfigRequest ConfigRequest `json:"config_request,omitzero"`
+	// Applied is the AP's last ep-config-applied report.
+	Applied ConfigApplied `json:"applied,omitzero"`
+	// TunnelIPv6 is the AP's tunnel address from its last ep-ip-register
+	// (diagnostic only); TunnelIPv6At is when it arrived.
+	TunnelIPv6   string    `json:"tunnel_ipv6,omitempty"`
+	TunnelIPv6At time.Time `json:"tunnel_ipv6_at,omitzero"`
+	// LastRebootDetected is when dismist last saw the AP had rebooted
+	// (a higher boot count in a hello or frame, or an uptime reset).
+	LastRebootDetected time.Time `json:"last_reboot_detected,omitzero"`
+	// LastFileOffer is the last crash report the AP offered (ep-file).
+	LastFileOffer *FileOffer `json:"last_file_offer,omitempty"`
 }
 
 type ClientActivity struct {
@@ -141,20 +165,6 @@ type ConnectionEvent struct {
 	Title     string    `json:"title"`
 	Detail    string    `json:"detail,omitempty"`
 	ClientMAC string    `json:"client_mac,omitempty"`
-}
-
-type TelemetrySnapshot struct {
-	FullFrames        uint64                `json:"full_frames"`
-	FastFrames        uint64                `json:"fast_frames"`
-	LastFull          time.Time             `json:"last_full"`
-	LastFast          time.Time             `json:"last_fast"`
-	UptimeSeconds     uint64                `json:"uptime_seconds"`
-	VAPs              []telemetry.VAP       `json:"vaps"`
-	Radios            []telemetry.Radio     `json:"radios"`
-	RecentClients     []ClientActivity      `json:"recent_clients"`
-	AssociatedClients []telemetry.Client    `json:"associated_clients"`
-	Interfaces        []telemetry.Interface `json:"interfaces"`
-	Events            []ConnectionEvent     `json:"events"`
 }
 
 func NewServer(options Options) (*Server, error) {
@@ -307,7 +317,7 @@ func (s *Server) TelemetrySnapshot() TelemetrySnapshot {
 	defer s.mu.RUnlock()
 	result := s.stats
 	result.VAPs = append([]telemetry.VAP(nil), s.stats.VAPs...)
-	result.Radios = append([]telemetry.Radio(nil), s.stats.Radios...)
+	result.Radios = append([]telemetry.RadioStats(nil), s.stats.Radios...)
 	result.Events = append([]ConnectionEvent(nil), s.stats.Events...)
 	result.Interfaces = append([]telemetry.Interface(nil), s.stats.Interfaces...)
 	result.RecentClients = make([]ClientActivity, 0, len(s.clients))
@@ -795,7 +805,7 @@ func (s *Server) observeTelemetry(body []byte) {
 		s.stats.FullFrames++
 		s.stats.LastFull = now
 		s.stats.VAPs = append([]telemetry.VAP(nil), update.VAPs...)
-		s.stats.Radios = append([]telemetry.Radio(nil), update.Radios...)
+		s.stats.Radios = append([]telemetry.RadioStats(nil), update.Radios...)
 		s.stats.UptimeSeconds = update.UptimeSeconds
 		if len(update.Interfaces) != 0 {
 			s.stats.Interfaces = append([]telemetry.Interface(nil), update.Interfaces...)

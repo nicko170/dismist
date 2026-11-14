@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -16,68 +15,6 @@ import (
 const maxPayload = 4 << 20
 
 var ErrMalformed = errors.New("malformed AP telemetry")
-
-type VAP struct {
-	Interface string `json:"interface"`
-	SSID      string `json:"ssid"`
-	BSSID     string `json:"bssid"`
-}
-
-type Radio struct {
-	Interface string `json:"interface"`
-	WidthMHz  uint64 `json:"width_mhz"`
-}
-
-type Client struct {
-	MAC              string  `json:"mac"`
-	Name             string  `json:"name,omitempty"`
-	IP               string  `json:"ip,omitempty"`
-	SSID             string  `json:"ssid"`
-	BSSID            string  `json:"bssid"`
-	VLANID           uint64  `json:"vlan_id"`
-	RSSI             int64   `json:"rssi"`
-	AverageRSSI      int64   `json:"average_rssi"`
-	ConnectedSeconds uint64  `json:"connected_seconds"`
-	InactiveMillis   uint64  `json:"inactive_millis"`
-	TxMbps           float64 `json:"tx_mbps"`
-	RxMbps           float64 `json:"rx_mbps"`
-	TxBytes          uint64  `json:"tx_bytes"`
-	RxBytes          uint64  `json:"rx_bytes"`
-	Auth             string  `json:"auth,omitempty"`
-	Cipher           string  `json:"cipher,omitempty"`
-	Protocol         string  `json:"protocol,omitempty"`
-}
-
-type Event struct {
-	When      time.Time `json:"when"`
-	Type      int       `json:"type"`
-	Title     string    `json:"title"`
-	Text      string    `json:"text"`
-	ClientMAC string    `json:"client_mac,omitempty"`
-	ClientIP  string    `json:"client_ip,omitempty"`
-}
-
-// Interface is one of the AP's own network interfaces (ap-stats-full field
-// 26) with its addresses in CIDR form.
-type Interface struct {
-	Name      string   `json:"name"`
-	Addresses []string `json:"addresses,omitempty"`
-}
-
-type Update struct {
-	Topic           string      `json:"topic"`
-	APID            string      `json:"ap_id"`
-	Model           string      `json:"model,omitempty"`
-	Firmware        string      `json:"firmware,omitempty"`
-	UptimeSeconds   uint64      `json:"uptime_seconds,omitempty"`
-	ConfigTimestamp float64     `json:"config_timestamp,omitempty"`
-	Error           string      `json:"error,omitempty"`
-	VAPs            []VAP       `json:"vaps,omitempty"`
-	Radios          []Radio     `json:"radios,omitempty"`
-	Clients         []Client    `json:"clients,omitempty"`
-	Interfaces      []Interface `json:"interfaces,omitempty"`
-	Event           *Event      `json:"event,omitempty"`
-}
 
 func Decode(body []byte) (Update, error) {
 	if len(body) > maxPayload || len(body) == 0 {
@@ -255,11 +192,11 @@ func parseAPStats(body []byte, update *Update) error {
 			}
 			update.VAPs = append(update.VAPs, vap)
 		case 36:
-			radio, err := parseRadio(item.bytes)
+			probe, err := parseProbe(item.bytes)
 			if err != nil {
 				return err
 			}
-			update.Radios = append(update.Radios, radio)
+			update.Probes = append(update.Probes, probe)
 		case 33:
 			client, err := parseClient(item.bytes)
 			if err != nil {
@@ -413,22 +350,19 @@ func parseVAP(body []byte) (VAP, error) {
 	return vap, nil
 }
 
-func parseRadio(body []byte) (Radio, error) {
+func parseProbe(body []byte) (Probe, error) {
 	fields, err := scan(body)
 	if err != nil {
-		return Radio{}, err
+		return Probe{}, err
 	}
-	var radio Radio
+	var probe Probe
 	for _, item := range fields {
 		switch item.number {
 		case 1:
-			radio.Interface = string(item.bytes)
+			probe.Dev = string(item.bytes)
 		case 4:
-			radio.WidthMHz = item.value
+			probe.WidthMHz = int(item.value)
 		}
 	}
-	if radio.Interface == "" {
-		return Radio{}, fmt.Errorf("%w: radio missing interface", ErrMalformed)
-	}
-	return radio, nil
+	return probe, nil
 }
