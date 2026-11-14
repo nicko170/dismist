@@ -426,3 +426,21 @@ func Prepare(template []byte, state model.State, delivered DeliveredLookup) []Se
 	sort.Slice(result, func(i, j int) bool { return result[i].APID < result[j].APID })
 	return result
 }
+
+// SiteShadows aggregates cross-scope shadowing per site option (design
+// §4.4): for each site-scoped typed option an AP expert patch overrides,
+// the IDs of those APs, sorted ("Overridden on 1 AP").
+func (r SiteResult) SiteShadows() map[string][]string {
+	result := map[string][]string{}
+	for _, one := range r.APs {
+		for _, shadow := range one.Output.Shadowed {
+			if shadow.By == ScopeAP && shadow.Scope == ScopeSite {
+				result[shadow.Option] = append(result[shadow.Option], one.APID)
+			}
+		}
+	}
+	for option := range result {
+		sort.Strings(result[option])
+	}
+	return result
+}

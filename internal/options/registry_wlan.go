@@ -51,7 +51,7 @@ var wlanOptions = []Option{
 		},
 		Tier: TierBasic, Confidence: Confirmed,
 		FirmwarePaths: []string{"WLANs[].Auth.Type", "WLANs[].Auth.AKM", "WLANs[].Auth.Pairwise", "WLANs[].Auth.PSK",
-			"WLANs[].Dot11w", "WLANs[].OWE", "WLANs[].Auth.TransitionDisableIndication", "WLANs[].Auth_servers"},
+			"WLANs[].Dot11w", "WLANs[].OWE", "WLANs[].Auth.TransitionDisableIndication", "WLANs[].Auth.SAEHash2ElementOnly", "WLANs[].Auth_servers"},
 		Catalogue: "wlans.md §7.2",
 	}),
 	wlanOption(Option{

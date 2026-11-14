@@ -3155,7 +3155,7 @@ export const optionMeta: Record<string, OptionMeta> = {
     disruption: "wlan_restart",
     secret: false,
     phase: 2,
-    firmwarePaths: ["WLANs[].Auth.Type","WLANs[].Auth.AKM","WLANs[].Auth.Pairwise","WLANs[].Auth.PSK","WLANs[].Dot11w","WLANs[].OWE","WLANs[].Auth.TransitionDisableIndication","WLANs[].Auth_servers"],
+    firmwarePaths: ["WLANs[].Auth.Type","WLANs[].Auth.AKM","WLANs[].Auth.Pairwise","WLANs[].Auth.PSK","WLANs[].Dot11w","WLANs[].OWE","WLANs[].Auth.TransitionDisableIndication","WLANs[].Auth.SAEHash2ElementOnly","WLANs[].Auth_servers"],
     catalogue: "wlans.md §7.2",
     visibleWhen: [],
     dismistOnly: false,
