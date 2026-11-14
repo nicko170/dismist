@@ -268,7 +268,28 @@ func clone(state State) State {
 	return state
 }
 
+// ErrInvalid marks the errors of the store's own state rules (a duplicate
+// or missing ID, an out-of-range network value, a malformed advanced
+// patch): the state a mutation produced is refused as it is, and retrying
+// will not help. errors.Is(err, ErrInvalid) tells them apart from storage
+// failures (an I/O error, a full disk), which are not the caller's fault.
+var ErrInvalid = errors.New("invalid state")
+
+// invalidState is a validate error: its message, matching ErrInvalid.
+type invalidState struct{ err error }
+
+func (e invalidState) Error() string        { return e.err.Error() }
+func (e invalidState) Unwrap() error        { return e.err }
+func (e invalidState) Is(target error) bool { return target == ErrInvalid }
+
 func validate(state State) error {
+	if err := checkState(state); err != nil {
+		return invalidState{err: err}
+	}
+	return nil
+}
+
+func checkState(state State) error {
 	sites := map[string]bool{}
 	for _, site := range state.Sites {
 		if site.ID == "" || site.Name == "" || sites[site.ID] || validateAdvanced(site.Advanced) != nil {

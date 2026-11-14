@@ -3,12 +3,16 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/nicko170/dismist/internal/api"
+	"github.com/nicko170/dismist/internal/compile"
+	"github.com/nicko170/dismist/internal/controller"
+	"github.com/nicko170/dismist/internal/model"
 )
 
 // decodeErrorBody asserts that a response is the {error, code, fields}
@@ -160,5 +164,63 @@ func TestConflictNamesTheField(t *testing.T) {
 	}
 	if got := decodeErrorBody(t, "duplicate", response); got.Code != api.ErrorCodeConflict || got.Fields["id"] == "" {
 		t.Fatalf("duplicate body %+v", got)
+	}
+}
+
+// fullDiskStore fails every commit the way bbolt does when the volume is
+// full.
+type fullDiskStore struct{ *model.BoltStore }
+
+var errFullDisk = errors.New("write /state/controller.db: no space left on device")
+
+func (fullDiskStore) Update(func(*model.State) error) error { return errFullDisk }
+func (fullDiskStore) UpdateTx(func(*model.State, *model.Tx) error) error {
+	return errFullDisk
+}
+
+func TestMutationFailureStatuses(t *testing.T) {
+	// A storage failure is a 500 that does not carry the error text.
+	_, store, _ := platformFixture(t)
+	handler := NewWithManager(fullDiskStore{store}, controller.NewManager(), []byte(`{"WLANs":[{"Auth":{"Type":"psk","PSK":"example-passphrase-16"}}]}`), "", "*")
+	for _, mutation := range []struct{ method, path, body string }{
+		{http.MethodPut, "/api/sites/a", `{"name":"Renamed"}`},
+		{http.MethodPost, "/api/sites", `{"name":"New"}`},
+		{http.MethodPut, "/api/sites/a/networks/wlan-a", `{"ssid":"Other"}`},
+	} {
+		response := request(t, handler, mutation.method, mutation.path, mutation.body)
+		label := mutation.method + " " + mutation.path
+		if response.Code != http.StatusInternalServerError {
+			t.Fatalf("%s on a full disk: %d %s", label, response.Code, response.Body.String())
+		}
+		if body := decodeErrorBody(t, label, response); body.Code != api.ErrorCodeInternal || strings.Contains(response.Body.String(), "/state") || strings.Contains(response.Body.String(), "space") {
+			t.Fatalf("%s: %s", label, response.Body.String())
+		}
+	}
+
+	// A store rule the new state breaks stays a 400 with its message.
+	recorder := httptest.NewRecorder()
+	err := store.Update(func(state *model.State) error {
+		state.Sites = append(state.Sites, state.Sites[0])
+		return nil
+	})
+	if !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("duplicate site: %v, want model.ErrInvalid", err)
+	}
+	writeError(recorder, err)
+	if body := decodeErrorBody(t, "store rule", recorder); recorder.Code != http.StatusBadRequest || body.Code != api.ErrorCodeInvalid || body.Error != err.Error() {
+		t.Fatalf("store rule: %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	// Compile failures of several APs: one 422 naming each.
+	recorder = httptest.NewRecorder()
+	writeError(recorder, errors.Join(
+		&compile.APError{APID: "ap-1", Err: errors.New("WLAN template needs PSK auth")},
+		&compile.APError{APID: "ap-2", Err: errors.New("bad patch")},
+	))
+	body := decodeErrorBody(t, "compile failures", recorder)
+	if recorder.Code != http.StatusUnprocessableEntity || body.Code != api.ErrorCodeInvalid ||
+		!strings.Contains(body.Error, "ap-1") || !strings.Contains(body.Error, "ap-2") ||
+		!strings.Contains(body.Fields["aps.ap-1"], "PSK") || !strings.Contains(body.Fields["aps.ap-2"], "bad patch") {
+		t.Fatalf("compile failures: %d %s", recorder.Code, recorder.Body.String())
 	}
 }

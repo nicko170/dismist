@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
 	"github.com/nicko170/dismist/internal/proxytrust"
@@ -256,8 +258,11 @@ func TestOfflineAPConfigValidationLeavesStateUnchanged(t *testing.T) {
 	handler.manager.Remove("ap-a")
 	before := store.Snapshot()
 	response := request(t, handler, http.MethodPut, "/api/sites/a/networks/wlan-a/advanced", `{"patch":{"Auth":null}}`)
-	if response.Code != http.StatusBadRequest {
+	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid patch accepted: %d %s", response.Code, response.Body.String())
+	}
+	if body := decodeErrorBody(t, "compile failure", response); body.Code != api.ErrorCodeInvalid || body.Fields["aps.ap-a"] == "" || !strings.Contains(body.Error, "ap-a") {
+		t.Fatalf("compile failure does not name the AP: %s", response.Body.String())
 	}
 	after := store.Snapshot()
 	if after.Revision != before.Revision || len(after.Networks[0].Advanced) != 0 || after.APs[0].ConfigRevision != before.APs[0].ConfigRevision {
@@ -450,7 +455,7 @@ func TestEditAPConfigFailureLeavesRecordAndDesiredRevisionUnchanged(t *testing.T
 	before := store.Snapshot()
 	_, desired := control.ConfigSnapshot()
 	response := request(t, handler, http.MethodPut, "/api/aps/ap-a", `{"name":"Would fail"}`)
-	if response.Code != http.StatusBadRequest {
+	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid config accepted: %d %s", response.Code, response.Body.String())
 	}
 	after := store.Snapshot()

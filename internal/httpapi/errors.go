@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"strings"
 
 	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/compile"
+	"github.com/nicko170/dismist/internal/model"
 )
 
 // errNoChange ends a mutation that would change nothing; the handler then
@@ -86,21 +88,76 @@ func writeAPIError(writer http.ResponseWriter, e *apiError) {
 }
 
 // writeError writes any error from a handler or a store mutation in the
-// error contract. Errors that are not *apiError keep the status the API
-// always used for them: 400 with the error text (store validation), and a
-// compile failure is a 400 that names the AP.
+// error contract (design §4.4, §4.8):
+//   - an *apiError as it is;
+//   - a compile failure of any affected AP: 422 naming each AP, with a
+//     field per AP ("aps.<id>");
+//   - a store rule the new state breaks (model.ErrInvalid): 400 with its
+//     message;
+//   - anything else (a bbolt commit error, a full disk) is a server
+//     failure: it is logged and answered 500 without the error text.
 func writeError(writer http.ResponseWriter, err error) {
 	var typed *apiError
 	if errors.As(err, &typed) {
 		writeAPIError(writer, typed)
 		return
 	}
-	var compileErr *compile.APError
-	if errors.As(err, &compileErr) {
-		writeAPIError(writer, invalid(fmt.Sprintf("the change would make AP %s's config invalid: %v", compileErr.APID, compileErr.Err)))
+	if failures := compileFailures(err); len(failures) != 0 {
+		writeAPIError(writer, compileRefused(failures))
 		return
 	}
-	writeAPIError(writer, invalid(err.Error()))
+	if errors.Is(err, model.ErrInvalid) {
+		writeAPIError(writer, invalid(err.Error()))
+		return
+	}
+	log.Printf("API: change failed: %v", err)
+	writeAPIError(writer, internalError("the change could not be saved"))
+}
+
+// compileFailures returns every *compile.APError in err's tree (compile.Apply
+// joins one per failing AP).
+func compileFailures(err error) []*compile.APError {
+	var failures []*compile.APError
+	var walk func(error)
+	walk = func(err error) {
+		if failure, ok := err.(*compile.APError); ok {
+			failures = append(failures, failure)
+			return
+		}
+		switch wrapped := err.(type) {
+		case interface{ Unwrap() []error }:
+			for _, child := range wrapped.Unwrap() {
+				walk(child)
+			}
+		case interface{ Unwrap() error }:
+			walk(wrapped.Unwrap())
+		}
+	}
+	walk(err)
+	return failures
+}
+
+// compileRefused is the 422 for a mutation whose result does not compile
+// for some AP (design §4.4 "One AP never stops another": a mutation is
+// still refused as a whole).
+func compileRefused(failures []*compile.APError) *apiError {
+	message := fmt.Sprintf("the change would make AP %s's config invalid: %v", failures[0].APID, failures[0].Err)
+	if len(failures) > 1 {
+		ids := make([]string, len(failures))
+		for index, failure := range failures {
+			ids[index] = failure.APID
+		}
+		message = "the change would make the config of APs " + strings.Join(ids, ", ") + " invalid"
+	}
+	refused := newError(http.StatusUnprocessableEntity, api.ErrorCodeInvalid, message)
+	for _, failure := range failures {
+		if len(failures) == 1 {
+			refused.withField("aps."+failure.APID, message)
+		} else {
+			refused.withField("aps."+failure.APID, fmt.Sprintf("AP %s: %v", failure.APID, failure.Err))
+		}
+	}
+	return refused
 }
 
 // writeChangeError writes the error of a store mutation.

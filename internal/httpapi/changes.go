@@ -22,8 +22,8 @@ func (s *Server) applyChange(siteID string, change func(*model.State) error) err
 // dismist-side fields (a site name, a timezone, a pin, an AP secret,
 // another AP's name) therefore bumps and disconnects nothing.
 //
-// A compile failure of any affected AP refuses the whole mutation (a 400
-// naming the AP); nothing is stored.
+// A compile failure of any affected AP refuses the whole mutation (a 422
+// naming the AP, see writeError); nothing is stored.
 func (s *Server) mutate(sites []string, change func(*model.State, *model.Tx) error) (compile.Applied, error) {
 	var applied compile.Applied
 	update := func(state *model.State, tx *model.Tx) error {
