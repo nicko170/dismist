@@ -369,10 +369,26 @@ type NormaliserReport struct {
 	Notes      []string `json:"notes"`
 }
 
+// H0View is the AP's phase-0 baseline from meta.h0 (design §4.5, §8.3),
+// without its raw bytes.
+type H0View struct {
+	RecordedAt        time.Time `json:"recorded_at"`
+	ConfigRevision    uint64    `json:"config_revision"`
+	NormaliserVersion int       `json:"normaliser_version"`
+	EffectiveHash     string    `json:"effective_hash"`
+	// Matches is true when EffectiveHash equals the view's effective_hash
+	// and both come from the same normaliser version; null when the
+	// versions differ (recompute both to compare).
+	Matches *bool `json:"matches" tstype:"boolean | null,required"`
+}
+
 // APConfigView is GET /api/aps/$id/config. Config is the redacted config
 // document for the view. EffectiveHash is "e<version>:<hex HMAC>" of the
-// AP's compiled config, keyed with the database's hash key; hashes are
-// compared only when their versions match.
+// view's config (effective and normalised: the config dismist compiles for
+// the AP; applied: the config last delivered), keyed with the database's
+// hash key, "" when the store has no key; hashes are compared only when
+// their versions match. H0 is the phase-0 baseline, null when none is
+// recorded.
 type APConfigView struct {
 	APID              string            `json:"ap_id"`
 	View              ConfigView        `json:"view"`
@@ -383,4 +399,5 @@ type APConfigView struct {
 	Report            *NormaliserReport `json:"report" tstype:"NormaliserReport | null,required"`
 	SitePatch         any               `json:"site_patch" tstype:"{ [key: string]: unknown }"`
 	APPatch           any               `json:"ap_patch" tstype:"{ [key: string]: unknown }"`
+	H0                *H0View           `json:"h0" tstype:"H0View | null,required"`
 }

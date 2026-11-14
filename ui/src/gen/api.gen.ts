@@ -414,10 +414,29 @@ export interface NormaliserReport {
   notes: string[];
 }
 /**
+ * H0View is the AP's phase-0 baseline from meta.h0 (design §4.5, §8.3),
+ * without its raw bytes.
+ */
+export interface H0View {
+  recorded_at: string /* RFC3339 */;
+  config_revision: number /* uint64 */;
+  normaliser_version: number /* int */;
+  effective_hash: string;
+  /**
+   * Matches is true when EffectiveHash equals the view's effective_hash
+   * and both come from the same normaliser version; null when the
+   * versions differ (recompute both to compare).
+   */
+  matches: boolean | null;
+}
+/**
  * APConfigView is GET /api/aps/$id/config. Config is the redacted config
  * document for the view. EffectiveHash is "e<version>:<hex HMAC>" of the
- * AP's compiled config, keyed with the database's hash key; hashes are
- * compared only when their versions match.
+ * view's config (effective and normalised: the config dismist compiles for
+ * the AP; applied: the config last delivered), keyed with the database's
+ * hash key, "" when the store has no key; hashes are compared only when
+ * their versions match. H0 is the phase-0 baseline, null when none is
+ * recorded.
  */
 export interface APConfigView {
   ap_id: string;
@@ -429,6 +448,7 @@ export interface APConfigView {
   report: NormaliserReport | null;
   site_patch: { [key: string]: unknown };
   ap_patch: { [key: string]: unknown };
+  h0: H0View | null;
 }
 
 //////////

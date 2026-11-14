@@ -113,6 +113,8 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		respond(writer, http.StatusOK, map[string]any{"aps": aps})
 	case request.URL.Path == "/api/aps" && request.Method == http.MethodPost:
 		s.registerAP(writer, request)
+	case strings.HasPrefix(request.URL.Path, "/api/aps/") && request.Method == http.MethodGet:
+		s.apResource(writer, request)
 	case strings.HasPrefix(request.URL.Path, "/api/aps/") && request.Method == http.MethodPut:
 		if len(strings.Split(strings.Trim(request.URL.Path, "/"), "/")) == 3 {
 			s.updateAP(writer, request)
