@@ -110,6 +110,14 @@ function leafNames(value: unknown, prefix = ''): string[] {
   return prefix ? [prefix] : []
 }
 
+/** Leaf paths of client-side (resolver) errors. */
+function errorPaths(errors: unknown, prefix = ''): string[] {
+  if (!errors || typeof errors !== 'object') return []
+  const node = errors as { message?: unknown; type?: unknown; ref?: unknown }
+  if (typeof node.message === 'string' && 'type' in node) return node.type === 'server' ? [] : [prefix]
+  return Object.entries(errors as Record<string, unknown>).flatMap(([k, v]) => (k === 'ref' || k === 'root' ? [] : errorPaths(v, prefix ? `${prefix}.${k}` : k)))
+}
+
 /** Maps a server field path ("wlan.radius.auth[0].host") onto the closest form field. */
 export function resolveFieldPath(path: string, scope: string, known: Set<string>, map: Record<string, string> = {}): string | null {
   if (map[path]) return map[path]
@@ -239,6 +247,17 @@ export function useConfigForm<V extends FieldValues, TObject>(options: UseConfig
     },
     [base, toBody],
   )
+
+  // Cross-field rules (passphrase by security mode, band steering by bands…):
+  // when anything changes, re-check the fields that currently show a client
+  // error, so an error caused by another field clears as soon as it is fixed.
+  const valuesKey = JSON.stringify(current)
+  useEffect(() => {
+    const names = errorPaths(form.formState.errors)
+    if (names.length) void form.trigger(names as Path<V>[])
+    // valuesKey stands for every change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valuesKey])
 
   // ---- dry run ----
   const [impact, setImpact] = useState<ImpactState<TObject>>({ status: 'idle' })
