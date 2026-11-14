@@ -507,3 +507,26 @@ func TestFinalise(t *testing.T) {
 	}
 	_ = reopened.Close()
 }
+
+// The same live network patch written out in full (all 16 AKM flags,
+// Pairwise, WEP null, OWE.Transition false), with no field-32 data yet
+// (an upgrade straight from phase 0): the residual is still empty and the
+// BSSID index is predicted.
+func TestLiveMigrationFullAKMPatchNoVAPs(t *testing.T) {
+	sc := scenario{full: false, monitor: true, vaps: map[string][]model.VAPRecord{}, extra: func(state *model.State) {
+		state.Networks[0].Advanced = json.RawMessage(`{"Auth":{"AKM":{"WPA2_PSK":true,"WPA3_PSK":true,"WPA2_PSK_SHA256":false,"WPA2_PSK_FT":false,` +
+			`"WPA2_EAP":false,"WPA2_EAP_SHA256":false,"WPA2_EAP_FT":false,"WPA_PSK":false,"WPA_EAP":false,"WPA3_PSK_FT":false,"WPA3_OWE":false,` +
+			`"WPA3_EAP":false,"WPA3_EAP_FT":false,"WPA3_SUITEB":false,"WPA3_PSK_SAE_EXT":false,"WPA3_PSK_FT_SAE_EXT":false},` +
+			`"Pairwise":{"GCMP256":false,"CCMP":true},"WEP":null},"Dot11w":{"Enabled":true,"Required":false},"OWE":{"Transition":false}}`)
+		state.APs[0].LocalFiles = nil // never checked
+	}}
+	store := liveStore(t, sc)
+	state := expectCommitted(t, store, sc)
+	if len(state.Networks[0].Expert) != 0 || state.Networks[0].Security != model.SecurityWPA2WPA3Personal || state.Networks[0].BSSIDIndex != 1 {
+		t.Fatalf("network %+v residual %s", state.Networks[0], state.Networks[0].Expert)
+	}
+	report, _, _ := ReadReport(store)
+	if report.Networks[0].BSSIDSource != "predicted" || len(report.Warnings) == 0 {
+		t.Fatalf("report %+v", report)
+	}
+}
