@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Band } from '@/gen/api.gen'
 import type { BandAdvanced, BandProfileView, RFProfileInput, RFProfileView } from '@/api/queries/rf'
 import { leafSchema } from '@/features/settings/kit/options'
-import { channelChips, DFS_5, fallbackChoices, POWER_MAX, POWER_MIN } from './channels'
+import { channelChips, DFS_5, fallbackChoices, POWER_MAX, POWER_MIN, remapChannels } from './channels'
 
 // RF profile form (design §3.10): per band enabled, width, Auto channel list,
 // DFS, power policy, preamble, DFS fallback and the advanced radio options.
@@ -29,7 +29,9 @@ function bandForm(view: BandProfileView, band: Band): BandForm {
   return {
     enabled: view.enabled,
     width: view.width,
-    channels: view.channels.toSorted((a, b) => a - b),
+    // The planner keeps one primary per 40/80 MHz block (rfplan.AllowedChannels),
+    // so the form holds block starts, as its chips do: no change on load.
+    channels: remapChannels(band, view.channels, view.width, view.valid_channels),
     dfs: view.dfs,
     dfs_fallback: view.dfs_fallback ?? 0,
     power:

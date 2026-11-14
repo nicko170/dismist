@@ -297,42 +297,12 @@ func (s *Server) siteNameTaken(state model.State, name, except string) bool {
 	return false
 }
 
-// newSiteDefaults are the design's defaults for sites created after
-// schema 2 (§3.10, §3.11, §4.6), used where the registry declares none.
-var newSiteDefaults = map[string]any{
-	"ssh":         map[string]any{"enabled": false},
-	"management":  map[string]any{"vlan_id": 1},
-	"ap_defaults": map[string]any{"led_brightness": 255, "hostname_from_name": true, "poe_constrained": "keep_radios"},
-	"protection":  map[string]any{"proxy_arp": true},
-	"rf": map[string]any{
-		"managed": true,
-		"band_24": map[string]any{"enabled": true, "width": 20, "channels": []any{1, 6, 11},
-			"power": map[string]any{"mode": "auto", "min": 8, "max": 15}, "preamble": "short",
-			"advanced": map[string]any{"taf": "default", "twt": true, "antenna": "default"}},
-		"band_5": map[string]any{"enabled": true, "width": 80, "channels": []any{36, 40, 44, 48, 149, 153, 157, 161},
-			"power": map[string]any{"mode": "auto", "min": 12, "max": 20}, "preamble": "short",
-			"advanced": map[string]any{"taf": "default", "twt": true, "antenna": "default"}},
-	},
-}
-
-// applyNewSiteDefaults writes the registry defaults (falling back to the
-// design's table) into a new site record. Keys the record cannot store are
-// skipped.
+// applyNewSiteDefaults fills a site created after schema 2 with the
+// research defaults (design §4.6 "Default for new objects", workstream A's
+// compile.NewSiteDefaults): RF managed with the country's regulatory table
+// when dismist has one, Auto channels and power, new-object AP defaults.
 func (s *Server) applyNewSiteDefaults(site *model.Site) {
-	defaults := map[string]any{}
-	mergePatch(defaults, cloneJSON(newSiteDefaults))
-	for _, option := range s.registry().All() {
-		if option.Default == nil || (option.Scope != "site" && option.Scope != "site.rf") {
-			continue
-		}
-		path := strings.Split(strings.TrimPrefix(option.Key, "site."), ".")
-		setPath(defaults, path, option.Default)
-	}
-	for key, value := range defaults {
-		if err := patchRecord(site, map[string]any{key: value}); err != nil {
-			continue
-		}
-	}
+	compile.NewSiteDefaults(site)
 }
 
 func setPath(object map[string]any, path []string, value any) {

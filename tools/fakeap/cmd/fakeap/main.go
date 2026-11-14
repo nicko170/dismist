@@ -61,6 +61,7 @@ func run(args []string) error {
 	inactive := flags.String("inactive-vlans", "", "comma-separated VLANs reported inactive on the uplink (field 79)")
 	legacyCloud := flags.Bool("legacy-cloud", false, "send the 0.8/0.14 CloudStats layout (1 LastRTT)")
 	once := flags.Bool("once", false, "authenticate, fetch the config, print it and exit")
+	mirror := flags.Bool("mirror-config", false, "report the served config's channels, widths, powers and WLANs as a real AP would after applying it")
 	reconnect := flags.Duration("reconnect", 2*time.Second, "delay before reconnecting after the session ends (0 exits instead)")
 	duration := flags.Duration("duration", 0, "stop after this long (0 runs until interrupted)")
 	if err := flags.Parse(args); err != nil {
@@ -134,6 +135,7 @@ func run(args []string) error {
 				PingInterval: *ping, EventInterval: *events, RejectConfig: *reject,
 				IgnoreConfigChange: *ignoreChange,
 				OnConfig:           func(body []byte) { log.Printf("fakeap %s fetched a %d-byte config", *id, len(body)) },
+				MirrorConfig:       *mirror,
 				OnCommand: func(command fakeap.Command) {
 					log.Printf("fakeap %s received ap-cmd-rx %s from %s (%s)", *id, command.Cmd, command.Sender, command.Reason)
 				},

@@ -28,6 +28,10 @@ type RunOptions struct {
 	RejectConfig string
 	// OnConfig is called with every config the AP fetches.
 	OnConfig func([]byte)
+	// MirrorConfig makes the reported radios and VAPs follow each applied
+	// config (MirrorConfig), so post-delivery verification and the UI see
+	// what a real AP would report.
+	MirrorConfig bool
 	// IgnoreConfigChange makes the AP ignore ep-config-change (an AP that
 	// does not support it), so the controller must fall back to a
 	// reconnect.
@@ -88,6 +92,9 @@ func (a *AP) Run(ctx context.Context, options RunOptions) error {
 		if options.RejectConfig == "" {
 			applied = metadata.Timestamp
 			snapshot.ConfigTimestamp = metadata.Timestamp
+			if options.MirrorConfig {
+				_ = MirrorConfig(&snapshot, config)
+			}
 		}
 		return nil
 	}

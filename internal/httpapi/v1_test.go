@@ -810,3 +810,21 @@ func TestReconnectPushIsReportedOncePerStream(t *testing.T) {
 		t.Fatal("material fields")
 	}
 }
+
+// A WLAN created with only an SSID and passphrase takes the new-object
+// defaults (WPA2/WPA3) without tripping the security-dependent registry
+// defaults (PMF, per-device passphrases).
+func TestCreateMinimalWLANInTypedMode(t *testing.T) {
+	f := newV1Fixture(t)
+	f.committed()
+	response := f.call(t, http.MethodPost, "/api/sites/home/networks", `{"ssid":"Example-2","psk":"example-passphrase-2"}`)
+	created := decodeInto[api.MutationResponse[api.WLANView]](t, response, http.StatusCreated)
+	if created.Object.Security != api.SecurityWPA2WPA3Personal || created.Object.PMF != nil || created.Object.MPSK != nil || created.Object.VLANID != 1 {
+		t.Fatalf("created %+v", created.Object)
+	}
+	// An explicit WPA2-Personal WLAN keeps the PMF default.
+	response = f.call(t, http.MethodPost, "/api/sites/home/networks", `{"ssid":"Example-3","psk":"example-passphrase-3","security":"wpa2_personal"}`)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("wpa2 personal: %d %s", response.Code, response.Body.String())
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/compile"
 	"github.com/nicko170/dismist/internal/model"
+	"github.com/nicko170/dismist/internal/options"
 )
 
 var (
@@ -424,7 +425,10 @@ func (s *Server) createNetwork(writer http.ResponseWriter, request *http.Request
 	if typedOn {
 		mergePatch(full, cloneJSON(newWLANDefaults))
 		for _, option := range s.registry().ByScope("wlan") {
-			if option.Default != nil {
+			// An experimental option is left absent (the compiler applies
+			// its default) so a new WLAN never needs the site's
+			// experimental switch.
+			if option.Default != nil && !option.Experimental(option.Default) && option.Confidence != options.NeedsLiveTest {
 				setPath(full, strings.Split(strings.TrimPrefix(option.Key, "wlan."), "."), option.Default)
 			}
 		}
@@ -433,6 +437,23 @@ func (s *Server) createNetwork(writer http.ResponseWriter, request *http.Request
 		}
 	}
 	mergePatch(full, patch)
+	if typedOn {
+		// Registry defaults that only apply to some security modes are
+		// dropped for the others unless the request sets them: PMF is a
+		// WPA2-only choice (the other modes fix it) and per-device
+		// passphrases need WPA2-Personal.
+		security, _ := full["security"].(string)
+		if _, asked := patch["pmf"]; !asked && security != "wpa2_personal" && security != "wpa2_enterprise" {
+			delete(full, "pmf")
+		}
+		if _, asked := patch["mpsk"]; !asked {
+			if mpsk, ok := full["mpsk"].(map[string]any); ok {
+				if enabled, _ := mpsk["enabled"].(bool); !enabled {
+					delete(full, "mpsk")
+				}
+			}
+		}
+	}
 	if _, ok := full["enabled"]; !ok {
 		full["enabled"] = true
 	}
