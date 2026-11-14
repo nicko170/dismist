@@ -27,11 +27,14 @@ const (
 	MetaMigrationReport  = "migration_v2_report"
 	MetaMigrationState   = "migration_state"
 	MetaPreMigrationCopy = "pre_migration_copies"
+	// MetaCompatRaisedRevision is the revision whose commit raised compat
+	// to 2 (JSON number): from it on, rolling back needs a restore.
+	MetaCompatRaisedRevision = "compat_raised_revision"
 )
 
 // SupportedSchema is the newest data format this binary understands. An M0
-// binary understands schema 1 only; the phase-2 binary raises it to 2.
-const SupportedSchema uint64 = 1
+// binary understands schema 1 only; this (phase-2) binary understands 2.
+const SupportedSchema uint64 = 2
 
 // ExitCompat is the process exit code when the database needs a newer
 // binary (EX_CONFIG). Exit 78 is used for nothing else (design §9.3 #2).
@@ -215,9 +218,15 @@ func (s *BoltStore) MetaJSON(key string, out any) (bool, error) {
 
 // PutMetaJSON stores value as JSON under a meta key.
 func (s *BoltStore) PutMetaJSON(key string, value any) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	if err := s.db.Update(func(tx *bolt.Tx) error {
 		return (&Tx{bolt: tx}).PutMetaJSON(key, value)
-	})
+	}); err != nil {
+		return err
+	}
+	if key == MetaMigrationState {
+		return s.RefreshSchema()
+	}
+	return nil
 }
 
 func metaBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
@@ -240,4 +249,17 @@ func decodeH0(raw []byte) (map[string]H0Record, error) {
 		document.APs = map[string]H0Record{}
 	}
 	return document.APs, nil
+}
+
+// RecordCounts returns the number of keys in every top-level bucket (the
+// System › Database card's record counts).
+func (s *BoltStore) RecordCounts() (map[string]int, error) {
+	result := map[string]int{}
+	err := s.db.View(func(tx *bolt.Tx) error {
+		return tx.ForEach(func(name []byte, bucket *bolt.Bucket) error {
+			result[string(name)] = bucket.Stats().KeyN
+			return nil
+		})
+	})
+	return result, err
 }

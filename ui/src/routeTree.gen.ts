@@ -11,7 +11,52 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as OnboardRouteRouteImport } from './routes/onboard/route'
+import { Route as SystemRouteRouteImport } from './routes/system/route'
+import { Route as ApsApIdRouteImport } from './routes/aps.$apId'
+import { Route as ClientsMacRouteImport } from './routes/clients.$mac'
+import { Route as DevKitRouteImport } from './routes/dev.kit'
+import { Route as OnboardIndexRouteImport } from './routes/onboard/index'
+import { Route as OnboardRegisterRouteImport } from './routes/onboard/register'
+import { Route as SitesIndexRouteImport } from './routes/sites/index'
 import { Route as SitesSiteIdRouteRouteImport } from './routes/sites/$siteId/route'
+import { Route as SystemIndexRouteImport } from './routes/system/index'
+import { Route as SystemBackupsRouteImport } from './routes/system/backups'
+import { Route as SystemMigrationRouteImport } from './routes/system/migration'
+import { Route as SystemSessionsRouteImport } from './routes/system/sessions'
+import { Route as SystemTokensRouteImport } from './routes/system/tokens'
+import { Route as SitesSiteIdApsRouteRouteImport } from './routes/sites/$siteId/aps/route'
+import { Route as SitesSiteIdClientsRouteRouteImport } from './routes/sites/$siteId/clients/route'
+import { Route as SitesSiteIdSettingsRouteRouteImport } from './routes/sites/$siteId/settings/route'
+import { Route as SitesSiteIdApsIndexRouteImport } from './routes/sites/$siteId/aps/index'
+import { Route as SitesSiteIdApsApIdRouteRouteImport } from './routes/sites/$siteId/aps/$apId/route'
+import { Route as SitesSiteIdChangesIndexRouteImport } from './routes/sites/$siteId/changes/index'
+import { Route as SitesSiteIdChangesRevRouteImport } from './routes/sites/$siteId/changes/$rev'
+import { Route as SitesSiteIdClientsIndexRouteImport } from './routes/sites/$siteId/clients/index'
+import { Route as SitesSiteIdClientsMacRouteImport } from './routes/sites/$siteId/clients/$mac'
+import { Route as SitesSiteIdEventsIndexRouteImport } from './routes/sites/$siteId/events/index'
+import { Route as SitesSiteIdOverviewIndexRouteImport } from './routes/sites/$siteId/overview/index'
+import { Route as SitesSiteIdRfIndexRouteImport } from './routes/sites/$siteId/rf/index'
+import { Route as SitesSiteIdRfNeighboursRouteImport } from './routes/sites/$siteId/rf/neighbours'
+import { Route as SitesSiteIdSettingsIndexRouteImport } from './routes/sites/$siteId/settings/index'
+import { Route as SitesSiteIdSettingsAccessRouteImport } from './routes/sites/$siteId/settings/access'
+import { Route as SitesSiteIdSettingsAdvancedRouteImport } from './routes/sites/$siteId/settings/advanced'
+import { Route as SitesSiteIdSettingsApDefaultsRouteImport } from './routes/sites/$siteId/settings/ap-defaults'
+import { Route as SitesSiteIdSettingsDangerRouteImport } from './routes/sites/$siteId/settings/danger'
+import { Route as SitesSiteIdSettingsGeneralRouteImport } from './routes/sites/$siteId/settings/general'
+import { Route as SitesSiteIdSettingsNetworkRouteImport } from './routes/sites/$siteId/settings/network'
+import { Route as SitesSiteIdSettingsProtectionRouteImport } from './routes/sites/$siteId/settings/protection'
+import { Route as SitesSiteIdWlansIndexRouteImport } from './routes/sites/$siteId/wlans/index'
+import { Route as SitesSiteIdWlansNewRouteImport } from './routes/sites/$siteId/wlans/new'
+import { Route as SitesSiteIdApsApIdIndexRouteImport } from './routes/sites/$siteId/aps/$apId/index'
+import { Route as SitesSiteIdApsApIdClientsRouteImport } from './routes/sites/$siteId/aps/$apId/clients'
+import { Route as SitesSiteIdApsApIdConfigRouteImport } from './routes/sites/$siteId/aps/$apId/config'
+import { Route as SitesSiteIdApsApIdEventsRouteImport } from './routes/sites/$siteId/aps/$apId/events'
+import { Route as SitesSiteIdApsApIdRadiosRouteImport } from './routes/sites/$siteId/aps/$apId/radios'
+import { Route as SitesSiteIdApsApIdSettingsRouteImport } from './routes/sites/$siteId/aps/$apId/settings'
+import { Route as SitesSiteIdApsApIdUplinkRouteImport } from './routes/sites/$siteId/aps/$apId/uplink'
+import { Route as SitesSiteIdWlansWlanIdIndexRouteImport } from './routes/sites/$siteId/wlans/$wlanId/index'
+import { Route as SitesSiteIdWlansWlanIdExpertRouteImport } from './routes/sites/$siteId/wlans/$wlanId/expert'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -23,40 +68,557 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OnboardRouteRoute = OnboardRouteRouteImport.update({
+  id: '/onboard',
+  path: '/onboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SystemRouteRoute = SystemRouteRouteImport.update({
+  id: '/system',
+  path: '/system',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApsApIdRoute = ApsApIdRouteImport.update({
+  id: '/aps/$apId',
+  path: '/aps/$apId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClientsMacRoute = ClientsMacRouteImport.update({
+  id: '/clients/$mac',
+  path: '/clients/$mac',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevKitRoute = DevKitRouteImport.update({
+  id: '/dev/kit',
+  path: '/dev/kit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardIndexRoute = OnboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => OnboardRouteRoute,
+} as any)
+const OnboardRegisterRoute = OnboardRegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => OnboardRouteRoute,
+} as any)
+const SitesIndexRoute = SitesIndexRouteImport.update({
+  id: '/sites/',
+  path: '/sites/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitesSiteIdRouteRoute = SitesSiteIdRouteRouteImport.update({
   id: '/sites/$siteId',
   path: '/sites/$siteId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SystemIndexRoute = SystemIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SystemRouteRoute,
+} as any)
+const SystemBackupsRoute = SystemBackupsRouteImport.update({
+  id: '/backups',
+  path: '/backups',
+  getParentRoute: () => SystemRouteRoute,
+} as any)
+const SystemMigrationRoute = SystemMigrationRouteImport.update({
+  id: '/migration',
+  path: '/migration',
+  getParentRoute: () => SystemRouteRoute,
+} as any)
+const SystemSessionsRoute = SystemSessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
+  getParentRoute: () => SystemRouteRoute,
+} as any)
+const SystemTokensRoute = SystemTokensRouteImport.update({
+  id: '/tokens',
+  path: '/tokens',
+  getParentRoute: () => SystemRouteRoute,
+} as any)
+const SitesSiteIdApsRouteRoute = SitesSiteIdApsRouteRouteImport.update({
+  id: '/aps',
+  path: '/aps',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdClientsRouteRoute = SitesSiteIdClientsRouteRouteImport.update({
+  id: '/clients',
+  path: '/clients',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdSettingsRouteRoute =
+  SitesSiteIdSettingsRouteRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
+const SitesSiteIdApsIndexRoute = SitesSiteIdApsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SitesSiteIdApsRouteRoute,
+} as any)
+const SitesSiteIdApsApIdRouteRoute = SitesSiteIdApsApIdRouteRouteImport.update({
+  id: '/$apId',
+  path: '/$apId',
+  getParentRoute: () => SitesSiteIdApsRouteRoute,
+} as any)
+const SitesSiteIdChangesIndexRoute = SitesSiteIdChangesIndexRouteImport.update({
+  id: '/changes/',
+  path: '/changes/',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdChangesRevRoute = SitesSiteIdChangesRevRouteImport.update({
+  id: '/changes/$rev',
+  path: '/changes/$rev',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdClientsIndexRoute = SitesSiteIdClientsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SitesSiteIdClientsRouteRoute,
+} as any)
+const SitesSiteIdClientsMacRoute = SitesSiteIdClientsMacRouteImport.update({
+  id: '/$mac',
+  path: '/$mac',
+  getParentRoute: () => SitesSiteIdClientsRouteRoute,
+} as any)
+const SitesSiteIdEventsIndexRoute = SitesSiteIdEventsIndexRouteImport.update({
+  id: '/events/',
+  path: '/events/',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdOverviewIndexRoute =
+  SitesSiteIdOverviewIndexRouteImport.update({
+    id: '/overview/',
+    path: '/overview/',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
+const SitesSiteIdRfIndexRoute = SitesSiteIdRfIndexRouteImport.update({
+  id: '/rf/',
+  path: '/rf/',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdRfNeighboursRoute = SitesSiteIdRfNeighboursRouteImport.update({
+  id: '/rf/neighbours',
+  path: '/rf/neighbours',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdSettingsIndexRoute =
+  SitesSiteIdSettingsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsAccessRoute =
+  SitesSiteIdSettingsAccessRouteImport.update({
+    id: '/access',
+    path: '/access',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsAdvancedRoute =
+  SitesSiteIdSettingsAdvancedRouteImport.update({
+    id: '/advanced',
+    path: '/advanced',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsApDefaultsRoute =
+  SitesSiteIdSettingsApDefaultsRouteImport.update({
+    id: '/ap-defaults',
+    path: '/ap-defaults',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsDangerRoute =
+  SitesSiteIdSettingsDangerRouteImport.update({
+    id: '/danger',
+    path: '/danger',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsGeneralRoute =
+  SitesSiteIdSettingsGeneralRouteImport.update({
+    id: '/general',
+    path: '/general',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsNetworkRoute =
+  SitesSiteIdSettingsNetworkRouteImport.update({
+    id: '/network',
+    path: '/network',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdSettingsProtectionRoute =
+  SitesSiteIdSettingsProtectionRouteImport.update({
+    id: '/protection',
+    path: '/protection',
+    getParentRoute: () => SitesSiteIdSettingsRouteRoute,
+  } as any)
+const SitesSiteIdWlansIndexRoute = SitesSiteIdWlansIndexRouteImport.update({
+  id: '/wlans/',
+  path: '/wlans/',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdWlansNewRoute = SitesSiteIdWlansNewRouteImport.update({
+  id: '/wlans/new',
+  path: '/wlans/new',
+  getParentRoute: () => SitesSiteIdRouteRoute,
+} as any)
+const SitesSiteIdApsApIdIndexRoute = SitesSiteIdApsApIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+} as any)
+const SitesSiteIdApsApIdClientsRoute =
+  SitesSiteIdApsApIdClientsRouteImport.update({
+    id: '/clients',
+    path: '/clients',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdConfigRoute =
+  SitesSiteIdApsApIdConfigRouteImport.update({
+    id: '/config',
+    path: '/config',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdEventsRoute =
+  SitesSiteIdApsApIdEventsRouteImport.update({
+    id: '/events',
+    path: '/events',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdRadiosRoute =
+  SitesSiteIdApsApIdRadiosRouteImport.update({
+    id: '/radios',
+    path: '/radios',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdSettingsRoute =
+  SitesSiteIdApsApIdSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
+const SitesSiteIdApsApIdUplinkRoute =
+  SitesSiteIdApsApIdUplinkRouteImport.update({
+    id: '/uplink',
+    path: '/uplink',
+    getParentRoute: () => SitesSiteIdApsApIdRouteRoute,
+  } as any)
+const SitesSiteIdWlansWlanIdIndexRoute =
+  SitesSiteIdWlansWlanIdIndexRouteImport.update({
+    id: '/wlans/$wlanId/',
+    path: '/wlans/$wlanId/',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
+const SitesSiteIdWlansWlanIdExpertRoute =
+  SitesSiteIdWlansWlanIdExpertRouteImport.update({
+    id: '/wlans/$wlanId/expert',
+    path: '/wlans/$wlanId/expert',
+    getParentRoute: () => SitesSiteIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/onboard': typeof OnboardRouteRouteWithChildren
+  '/system': typeof SystemRouteRouteWithChildren
   '/login': typeof LoginRoute
-  '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/aps/$apId': typeof ApsApIdRoute
+  '/clients/$mac': typeof ClientsMacRoute
+  '/dev/kit': typeof DevKitRoute
+  '/onboard/register': typeof OnboardRegisterRoute
+  '/system/backups': typeof SystemBackupsRoute
+  '/system/migration': typeof SystemMigrationRoute
+  '/system/sessions': typeof SystemSessionsRoute
+  '/system/tokens': typeof SystemTokensRoute
+  '/onboard/': typeof OnboardIndexRoute
+  '/sites/': typeof SitesIndexRoute
+  '/system/': typeof SystemIndexRoute
+  '/sites/$siteId/aps': typeof SitesSiteIdApsRouteRouteWithChildren
+  '/sites/$siteId/clients': typeof SitesSiteIdClientsRouteRouteWithChildren
+  '/sites/$siteId/settings': typeof SitesSiteIdSettingsRouteRouteWithChildren
+  '/sites/$siteId/aps/$apId': typeof SitesSiteIdApsApIdRouteRouteWithChildren
+  '/sites/$siteId/changes/$rev': typeof SitesSiteIdChangesRevRoute
+  '/sites/$siteId/clients/$mac': typeof SitesSiteIdClientsMacRoute
+  '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
+  '/sites/$siteId/settings/access': typeof SitesSiteIdSettingsAccessRoute
+  '/sites/$siteId/settings/advanced': typeof SitesSiteIdSettingsAdvancedRoute
+  '/sites/$siteId/settings/ap-defaults': typeof SitesSiteIdSettingsApDefaultsRoute
+  '/sites/$siteId/settings/danger': typeof SitesSiteIdSettingsDangerRoute
+  '/sites/$siteId/settings/general': typeof SitesSiteIdSettingsGeneralRoute
+  '/sites/$siteId/settings/network': typeof SitesSiteIdSettingsNetworkRoute
+  '/sites/$siteId/settings/protection': typeof SitesSiteIdSettingsProtectionRoute
+  '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
+  '/sites/$siteId/aps/': typeof SitesSiteIdApsIndexRoute
+  '/sites/$siteId/changes/': typeof SitesSiteIdChangesIndexRoute
+  '/sites/$siteId/clients/': typeof SitesSiteIdClientsIndexRoute
+  '/sites/$siteId/events/': typeof SitesSiteIdEventsIndexRoute
+  '/sites/$siteId/overview/': typeof SitesSiteIdOverviewIndexRoute
+  '/sites/$siteId/rf/': typeof SitesSiteIdRfIndexRoute
+  '/sites/$siteId/settings/': typeof SitesSiteIdSettingsIndexRoute
+  '/sites/$siteId/wlans/': typeof SitesSiteIdWlansIndexRoute
+  '/sites/$siteId/aps/$apId/clients': typeof SitesSiteIdApsApIdClientsRoute
+  '/sites/$siteId/aps/$apId/config': typeof SitesSiteIdApsApIdConfigRoute
+  '/sites/$siteId/aps/$apId/events': typeof SitesSiteIdApsApIdEventsRoute
+  '/sites/$siteId/aps/$apId/radios': typeof SitesSiteIdApsApIdRadiosRoute
+  '/sites/$siteId/aps/$apId/settings': typeof SitesSiteIdApsApIdSettingsRoute
+  '/sites/$siteId/aps/$apId/uplink': typeof SitesSiteIdApsApIdUplinkRoute
+  '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
+  '/sites/$siteId/aps/$apId/': typeof SitesSiteIdApsApIdIndexRoute
+  '/sites/$siteId/wlans/$wlanId/': typeof SitesSiteIdWlansWlanIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/aps/$apId': typeof ApsApIdRoute
+  '/clients/$mac': typeof ClientsMacRoute
+  '/dev/kit': typeof DevKitRoute
+  '/onboard/register': typeof OnboardRegisterRoute
+  '/system/backups': typeof SystemBackupsRoute
+  '/system/migration': typeof SystemMigrationRoute
+  '/system/sessions': typeof SystemSessionsRoute
+  '/system/tokens': typeof SystemTokensRoute
+  '/onboard': typeof OnboardIndexRoute
+  '/sites': typeof SitesIndexRoute
+  '/system': typeof SystemIndexRoute
+  '/sites/$siteId/changes/$rev': typeof SitesSiteIdChangesRevRoute
+  '/sites/$siteId/clients/$mac': typeof SitesSiteIdClientsMacRoute
+  '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
+  '/sites/$siteId/settings/access': typeof SitesSiteIdSettingsAccessRoute
+  '/sites/$siteId/settings/advanced': typeof SitesSiteIdSettingsAdvancedRoute
+  '/sites/$siteId/settings/ap-defaults': typeof SitesSiteIdSettingsApDefaultsRoute
+  '/sites/$siteId/settings/danger': typeof SitesSiteIdSettingsDangerRoute
+  '/sites/$siteId/settings/general': typeof SitesSiteIdSettingsGeneralRoute
+  '/sites/$siteId/settings/network': typeof SitesSiteIdSettingsNetworkRoute
+  '/sites/$siteId/settings/protection': typeof SitesSiteIdSettingsProtectionRoute
+  '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
+  '/sites/$siteId/aps': typeof SitesSiteIdApsIndexRoute
+  '/sites/$siteId/changes': typeof SitesSiteIdChangesIndexRoute
+  '/sites/$siteId/clients': typeof SitesSiteIdClientsIndexRoute
+  '/sites/$siteId/events': typeof SitesSiteIdEventsIndexRoute
+  '/sites/$siteId/overview': typeof SitesSiteIdOverviewIndexRoute
+  '/sites/$siteId/rf': typeof SitesSiteIdRfIndexRoute
+  '/sites/$siteId/settings': typeof SitesSiteIdSettingsIndexRoute
+  '/sites/$siteId/wlans': typeof SitesSiteIdWlansIndexRoute
+  '/sites/$siteId/aps/$apId/clients': typeof SitesSiteIdApsApIdClientsRoute
+  '/sites/$siteId/aps/$apId/config': typeof SitesSiteIdApsApIdConfigRoute
+  '/sites/$siteId/aps/$apId/events': typeof SitesSiteIdApsApIdEventsRoute
+  '/sites/$siteId/aps/$apId/radios': typeof SitesSiteIdApsApIdRadiosRoute
+  '/sites/$siteId/aps/$apId/settings': typeof SitesSiteIdApsApIdSettingsRoute
+  '/sites/$siteId/aps/$apId/uplink': typeof SitesSiteIdApsApIdUplinkRoute
+  '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
+  '/sites/$siteId/aps/$apId': typeof SitesSiteIdApsApIdIndexRoute
+  '/sites/$siteId/wlans/$wlanId': typeof SitesSiteIdWlansWlanIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/onboard': typeof OnboardRouteRouteWithChildren
+  '/system': typeof SystemRouteRouteWithChildren
   '/login': typeof LoginRoute
-  '/sites/$siteId': typeof SitesSiteIdRouteRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteRouteWithChildren
+  '/aps/$apId': typeof ApsApIdRoute
+  '/clients/$mac': typeof ClientsMacRoute
+  '/dev/kit': typeof DevKitRoute
+  '/onboard/register': typeof OnboardRegisterRoute
+  '/system/backups': typeof SystemBackupsRoute
+  '/system/migration': typeof SystemMigrationRoute
+  '/system/sessions': typeof SystemSessionsRoute
+  '/system/tokens': typeof SystemTokensRoute
+  '/onboard/': typeof OnboardIndexRoute
+  '/sites/': typeof SitesIndexRoute
+  '/system/': typeof SystemIndexRoute
+  '/sites/$siteId/aps': typeof SitesSiteIdApsRouteRouteWithChildren
+  '/sites/$siteId/clients': typeof SitesSiteIdClientsRouteRouteWithChildren
+  '/sites/$siteId/settings': typeof SitesSiteIdSettingsRouteRouteWithChildren
+  '/sites/$siteId/aps/$apId': typeof SitesSiteIdApsApIdRouteRouteWithChildren
+  '/sites/$siteId/changes/$rev': typeof SitesSiteIdChangesRevRoute
+  '/sites/$siteId/clients/$mac': typeof SitesSiteIdClientsMacRoute
+  '/sites/$siteId/rf/neighbours': typeof SitesSiteIdRfNeighboursRoute
+  '/sites/$siteId/settings/access': typeof SitesSiteIdSettingsAccessRoute
+  '/sites/$siteId/settings/advanced': typeof SitesSiteIdSettingsAdvancedRoute
+  '/sites/$siteId/settings/ap-defaults': typeof SitesSiteIdSettingsApDefaultsRoute
+  '/sites/$siteId/settings/danger': typeof SitesSiteIdSettingsDangerRoute
+  '/sites/$siteId/settings/general': typeof SitesSiteIdSettingsGeneralRoute
+  '/sites/$siteId/settings/network': typeof SitesSiteIdSettingsNetworkRoute
+  '/sites/$siteId/settings/protection': typeof SitesSiteIdSettingsProtectionRoute
+  '/sites/$siteId/wlans/new': typeof SitesSiteIdWlansNewRoute
+  '/sites/$siteId/aps/': typeof SitesSiteIdApsIndexRoute
+  '/sites/$siteId/changes/': typeof SitesSiteIdChangesIndexRoute
+  '/sites/$siteId/clients/': typeof SitesSiteIdClientsIndexRoute
+  '/sites/$siteId/events/': typeof SitesSiteIdEventsIndexRoute
+  '/sites/$siteId/overview/': typeof SitesSiteIdOverviewIndexRoute
+  '/sites/$siteId/rf/': typeof SitesSiteIdRfIndexRoute
+  '/sites/$siteId/settings/': typeof SitesSiteIdSettingsIndexRoute
+  '/sites/$siteId/wlans/': typeof SitesSiteIdWlansIndexRoute
+  '/sites/$siteId/aps/$apId/clients': typeof SitesSiteIdApsApIdClientsRoute
+  '/sites/$siteId/aps/$apId/config': typeof SitesSiteIdApsApIdConfigRoute
+  '/sites/$siteId/aps/$apId/events': typeof SitesSiteIdApsApIdEventsRoute
+  '/sites/$siteId/aps/$apId/radios': typeof SitesSiteIdApsApIdRadiosRoute
+  '/sites/$siteId/aps/$apId/settings': typeof SitesSiteIdApsApIdSettingsRoute
+  '/sites/$siteId/aps/$apId/uplink': typeof SitesSiteIdApsApIdUplinkRoute
+  '/sites/$siteId/wlans/$wlanId/expert': typeof SitesSiteIdWlansWlanIdExpertRoute
+  '/sites/$siteId/aps/$apId/': typeof SitesSiteIdApsApIdIndexRoute
+  '/sites/$siteId/wlans/$wlanId/': typeof SitesSiteIdWlansWlanIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/sites/$siteId'
+  fullPaths:
+    | '/'
+    | '/onboard'
+    | '/system'
+    | '/login'
+    | '/sites/$siteId'
+    | '/aps/$apId'
+    | '/clients/$mac'
+    | '/dev/kit'
+    | '/onboard/register'
+    | '/system/backups'
+    | '/system/migration'
+    | '/system/sessions'
+    | '/system/tokens'
+    | '/onboard/'
+    | '/sites/'
+    | '/system/'
+    | '/sites/$siteId/aps'
+    | '/sites/$siteId/clients'
+    | '/sites/$siteId/settings'
+    | '/sites/$siteId/aps/$apId'
+    | '/sites/$siteId/changes/$rev'
+    | '/sites/$siteId/clients/$mac'
+    | '/sites/$siteId/rf/neighbours'
+    | '/sites/$siteId/settings/access'
+    | '/sites/$siteId/settings/advanced'
+    | '/sites/$siteId/settings/ap-defaults'
+    | '/sites/$siteId/settings/danger'
+    | '/sites/$siteId/settings/general'
+    | '/sites/$siteId/settings/network'
+    | '/sites/$siteId/settings/protection'
+    | '/sites/$siteId/wlans/new'
+    | '/sites/$siteId/aps/'
+    | '/sites/$siteId/changes/'
+    | '/sites/$siteId/clients/'
+    | '/sites/$siteId/events/'
+    | '/sites/$siteId/overview/'
+    | '/sites/$siteId/rf/'
+    | '/sites/$siteId/settings/'
+    | '/sites/$siteId/wlans/'
+    | '/sites/$siteId/aps/$apId/clients'
+    | '/sites/$siteId/aps/$apId/config'
+    | '/sites/$siteId/aps/$apId/events'
+    | '/sites/$siteId/aps/$apId/radios'
+    | '/sites/$siteId/aps/$apId/settings'
+    | '/sites/$siteId/aps/$apId/uplink'
+    | '/sites/$siteId/wlans/$wlanId/expert'
+    | '/sites/$siteId/aps/$apId/'
+    | '/sites/$siteId/wlans/$wlanId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/sites/$siteId'
-  id: '__root__' | '/' | '/login' | '/sites/$siteId'
+  to:
+    | '/'
+    | '/login'
+    | '/sites/$siteId'
+    | '/aps/$apId'
+    | '/clients/$mac'
+    | '/dev/kit'
+    | '/onboard/register'
+    | '/system/backups'
+    | '/system/migration'
+    | '/system/sessions'
+    | '/system/tokens'
+    | '/onboard'
+    | '/sites'
+    | '/system'
+    | '/sites/$siteId/changes/$rev'
+    | '/sites/$siteId/clients/$mac'
+    | '/sites/$siteId/rf/neighbours'
+    | '/sites/$siteId/settings/access'
+    | '/sites/$siteId/settings/advanced'
+    | '/sites/$siteId/settings/ap-defaults'
+    | '/sites/$siteId/settings/danger'
+    | '/sites/$siteId/settings/general'
+    | '/sites/$siteId/settings/network'
+    | '/sites/$siteId/settings/protection'
+    | '/sites/$siteId/wlans/new'
+    | '/sites/$siteId/aps'
+    | '/sites/$siteId/changes'
+    | '/sites/$siteId/clients'
+    | '/sites/$siteId/events'
+    | '/sites/$siteId/overview'
+    | '/sites/$siteId/rf'
+    | '/sites/$siteId/settings'
+    | '/sites/$siteId/wlans'
+    | '/sites/$siteId/aps/$apId/clients'
+    | '/sites/$siteId/aps/$apId/config'
+    | '/sites/$siteId/aps/$apId/events'
+    | '/sites/$siteId/aps/$apId/radios'
+    | '/sites/$siteId/aps/$apId/settings'
+    | '/sites/$siteId/aps/$apId/uplink'
+    | '/sites/$siteId/wlans/$wlanId/expert'
+    | '/sites/$siteId/aps/$apId'
+    | '/sites/$siteId/wlans/$wlanId'
+  id:
+    | '__root__'
+    | '/'
+    | '/onboard'
+    | '/system'
+    | '/login'
+    | '/sites/$siteId'
+    | '/aps/$apId'
+    | '/clients/$mac'
+    | '/dev/kit'
+    | '/onboard/register'
+    | '/system/backups'
+    | '/system/migration'
+    | '/system/sessions'
+    | '/system/tokens'
+    | '/onboard/'
+    | '/sites/'
+    | '/system/'
+    | '/sites/$siteId/aps'
+    | '/sites/$siteId/clients'
+    | '/sites/$siteId/settings'
+    | '/sites/$siteId/aps/$apId'
+    | '/sites/$siteId/changes/$rev'
+    | '/sites/$siteId/clients/$mac'
+    | '/sites/$siteId/rf/neighbours'
+    | '/sites/$siteId/settings/access'
+    | '/sites/$siteId/settings/advanced'
+    | '/sites/$siteId/settings/ap-defaults'
+    | '/sites/$siteId/settings/danger'
+    | '/sites/$siteId/settings/general'
+    | '/sites/$siteId/settings/network'
+    | '/sites/$siteId/settings/protection'
+    | '/sites/$siteId/wlans/new'
+    | '/sites/$siteId/aps/'
+    | '/sites/$siteId/changes/'
+    | '/sites/$siteId/clients/'
+    | '/sites/$siteId/events/'
+    | '/sites/$siteId/overview/'
+    | '/sites/$siteId/rf/'
+    | '/sites/$siteId/settings/'
+    | '/sites/$siteId/wlans/'
+    | '/sites/$siteId/aps/$apId/clients'
+    | '/sites/$siteId/aps/$apId/config'
+    | '/sites/$siteId/aps/$apId/events'
+    | '/sites/$siteId/aps/$apId/radios'
+    | '/sites/$siteId/aps/$apId/settings'
+    | '/sites/$siteId/aps/$apId/uplink'
+    | '/sites/$siteId/wlans/$wlanId/expert'
+    | '/sites/$siteId/aps/$apId/'
+    | '/sites/$siteId/wlans/$wlanId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  OnboardRouteRoute: typeof OnboardRouteRouteWithChildren
+  SystemRouteRoute: typeof SystemRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
-  SitesSiteIdRouteRoute: typeof SitesSiteIdRouteRoute
+  SitesSiteIdRouteRoute: typeof SitesSiteIdRouteRouteWithChildren
+  ApsApIdRoute: typeof ApsApIdRoute
+  ClientsMacRoute: typeof ClientsMacRoute
+  DevKitRoute: typeof DevKitRoute
+  SitesIndexRoute: typeof SitesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -75,6 +637,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/onboard': {
+      id: '/onboard'
+      path: '/onboard'
+      fullPath: '/onboard'
+      preLoaderRoute: typeof OnboardRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/system': {
+      id: '/system'
+      path: '/system'
+      fullPath: '/system'
+      preLoaderRoute: typeof SystemRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/aps/$apId': {
+      id: '/aps/$apId'
+      path: '/aps/$apId'
+      fullPath: '/aps/$apId'
+      preLoaderRoute: typeof ApsApIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clients/$mac': {
+      id: '/clients/$mac'
+      path: '/clients/$mac'
+      fullPath: '/clients/$mac'
+      preLoaderRoute: typeof ClientsMacRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/kit': {
+      id: '/dev/kit'
+      path: '/dev/kit'
+      fullPath: '/dev/kit'
+      preLoaderRoute: typeof DevKitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboard/': {
+      id: '/onboard/'
+      path: '/'
+      fullPath: '/onboard/'
+      preLoaderRoute: typeof OnboardIndexRouteImport
+      parentRoute: typeof OnboardRouteRoute
+    }
+    '/onboard/register': {
+      id: '/onboard/register'
+      path: '/register'
+      fullPath: '/onboard/register'
+      preLoaderRoute: typeof OnboardRegisterRouteImport
+      parentRoute: typeof OnboardRouteRoute
+    }
+    '/sites/': {
+      id: '/sites/'
+      path: '/sites'
+      fullPath: '/sites/'
+      preLoaderRoute: typeof SitesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sites/$siteId': {
       id: '/sites/$siteId'
       path: '/sites/$siteId'
@@ -82,13 +700,430 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/system/': {
+      id: '/system/'
+      path: '/'
+      fullPath: '/system/'
+      preLoaderRoute: typeof SystemIndexRouteImport
+      parentRoute: typeof SystemRouteRoute
+    }
+    '/system/backups': {
+      id: '/system/backups'
+      path: '/backups'
+      fullPath: '/system/backups'
+      preLoaderRoute: typeof SystemBackupsRouteImport
+      parentRoute: typeof SystemRouteRoute
+    }
+    '/system/migration': {
+      id: '/system/migration'
+      path: '/migration'
+      fullPath: '/system/migration'
+      preLoaderRoute: typeof SystemMigrationRouteImport
+      parentRoute: typeof SystemRouteRoute
+    }
+    '/system/sessions': {
+      id: '/system/sessions'
+      path: '/sessions'
+      fullPath: '/system/sessions'
+      preLoaderRoute: typeof SystemSessionsRouteImport
+      parentRoute: typeof SystemRouteRoute
+    }
+    '/system/tokens': {
+      id: '/system/tokens'
+      path: '/tokens'
+      fullPath: '/system/tokens'
+      preLoaderRoute: typeof SystemTokensRouteImport
+      parentRoute: typeof SystemRouteRoute
+    }
+    '/sites/$siteId/aps': {
+      id: '/sites/$siteId/aps'
+      path: '/aps'
+      fullPath: '/sites/$siteId/aps'
+      preLoaderRoute: typeof SitesSiteIdApsRouteRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/clients': {
+      id: '/sites/$siteId/clients'
+      path: '/clients'
+      fullPath: '/sites/$siteId/clients'
+      preLoaderRoute: typeof SitesSiteIdClientsRouteRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/settings': {
+      id: '/sites/$siteId/settings'
+      path: '/settings'
+      fullPath: '/sites/$siteId/settings'
+      preLoaderRoute: typeof SitesSiteIdSettingsRouteRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/aps/': {
+      id: '/sites/$siteId/aps/'
+      path: '/'
+      fullPath: '/sites/$siteId/aps/'
+      preLoaderRoute: typeof SitesSiteIdApsIndexRouteImport
+      parentRoute: typeof SitesSiteIdApsRouteRoute
+    }
+    '/sites/$siteId/aps/$apId': {
+      id: '/sites/$siteId/aps/$apId'
+      path: '/$apId'
+      fullPath: '/sites/$siteId/aps/$apId'
+      preLoaderRoute: typeof SitesSiteIdApsApIdRouteRouteImport
+      parentRoute: typeof SitesSiteIdApsRouteRoute
+    }
+    '/sites/$siteId/changes/': {
+      id: '/sites/$siteId/changes/'
+      path: '/changes'
+      fullPath: '/sites/$siteId/changes/'
+      preLoaderRoute: typeof SitesSiteIdChangesIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/changes/$rev': {
+      id: '/sites/$siteId/changes/$rev'
+      path: '/changes/$rev'
+      fullPath: '/sites/$siteId/changes/$rev'
+      preLoaderRoute: typeof SitesSiteIdChangesRevRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/clients/': {
+      id: '/sites/$siteId/clients/'
+      path: '/'
+      fullPath: '/sites/$siteId/clients/'
+      preLoaderRoute: typeof SitesSiteIdClientsIndexRouteImport
+      parentRoute: typeof SitesSiteIdClientsRouteRoute
+    }
+    '/sites/$siteId/clients/$mac': {
+      id: '/sites/$siteId/clients/$mac'
+      path: '/$mac'
+      fullPath: '/sites/$siteId/clients/$mac'
+      preLoaderRoute: typeof SitesSiteIdClientsMacRouteImport
+      parentRoute: typeof SitesSiteIdClientsRouteRoute
+    }
+    '/sites/$siteId/events/': {
+      id: '/sites/$siteId/events/'
+      path: '/events'
+      fullPath: '/sites/$siteId/events/'
+      preLoaderRoute: typeof SitesSiteIdEventsIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/overview/': {
+      id: '/sites/$siteId/overview/'
+      path: '/overview'
+      fullPath: '/sites/$siteId/overview/'
+      preLoaderRoute: typeof SitesSiteIdOverviewIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/rf/': {
+      id: '/sites/$siteId/rf/'
+      path: '/rf'
+      fullPath: '/sites/$siteId/rf/'
+      preLoaderRoute: typeof SitesSiteIdRfIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/rf/neighbours': {
+      id: '/sites/$siteId/rf/neighbours'
+      path: '/rf/neighbours'
+      fullPath: '/sites/$siteId/rf/neighbours'
+      preLoaderRoute: typeof SitesSiteIdRfNeighboursRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/settings/': {
+      id: '/sites/$siteId/settings/'
+      path: '/'
+      fullPath: '/sites/$siteId/settings/'
+      preLoaderRoute: typeof SitesSiteIdSettingsIndexRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/access': {
+      id: '/sites/$siteId/settings/access'
+      path: '/access'
+      fullPath: '/sites/$siteId/settings/access'
+      preLoaderRoute: typeof SitesSiteIdSettingsAccessRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/advanced': {
+      id: '/sites/$siteId/settings/advanced'
+      path: '/advanced'
+      fullPath: '/sites/$siteId/settings/advanced'
+      preLoaderRoute: typeof SitesSiteIdSettingsAdvancedRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/ap-defaults': {
+      id: '/sites/$siteId/settings/ap-defaults'
+      path: '/ap-defaults'
+      fullPath: '/sites/$siteId/settings/ap-defaults'
+      preLoaderRoute: typeof SitesSiteIdSettingsApDefaultsRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/danger': {
+      id: '/sites/$siteId/settings/danger'
+      path: '/danger'
+      fullPath: '/sites/$siteId/settings/danger'
+      preLoaderRoute: typeof SitesSiteIdSettingsDangerRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/general': {
+      id: '/sites/$siteId/settings/general'
+      path: '/general'
+      fullPath: '/sites/$siteId/settings/general'
+      preLoaderRoute: typeof SitesSiteIdSettingsGeneralRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/network': {
+      id: '/sites/$siteId/settings/network'
+      path: '/network'
+      fullPath: '/sites/$siteId/settings/network'
+      preLoaderRoute: typeof SitesSiteIdSettingsNetworkRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/settings/protection': {
+      id: '/sites/$siteId/settings/protection'
+      path: '/protection'
+      fullPath: '/sites/$siteId/settings/protection'
+      preLoaderRoute: typeof SitesSiteIdSettingsProtectionRouteImport
+      parentRoute: typeof SitesSiteIdSettingsRouteRoute
+    }
+    '/sites/$siteId/wlans/': {
+      id: '/sites/$siteId/wlans/'
+      path: '/wlans'
+      fullPath: '/sites/$siteId/wlans/'
+      preLoaderRoute: typeof SitesSiteIdWlansIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/wlans/new': {
+      id: '/sites/$siteId/wlans/new'
+      path: '/wlans/new'
+      fullPath: '/sites/$siteId/wlans/new'
+      preLoaderRoute: typeof SitesSiteIdWlansNewRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/': {
+      id: '/sites/$siteId/aps/$apId/'
+      path: '/'
+      fullPath: '/sites/$siteId/aps/$apId/'
+      preLoaderRoute: typeof SitesSiteIdApsApIdIndexRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/clients': {
+      id: '/sites/$siteId/aps/$apId/clients'
+      path: '/clients'
+      fullPath: '/sites/$siteId/aps/$apId/clients'
+      preLoaderRoute: typeof SitesSiteIdApsApIdClientsRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/config': {
+      id: '/sites/$siteId/aps/$apId/config'
+      path: '/config'
+      fullPath: '/sites/$siteId/aps/$apId/config'
+      preLoaderRoute: typeof SitesSiteIdApsApIdConfigRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/events': {
+      id: '/sites/$siteId/aps/$apId/events'
+      path: '/events'
+      fullPath: '/sites/$siteId/aps/$apId/events'
+      preLoaderRoute: typeof SitesSiteIdApsApIdEventsRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/radios': {
+      id: '/sites/$siteId/aps/$apId/radios'
+      path: '/radios'
+      fullPath: '/sites/$siteId/aps/$apId/radios'
+      preLoaderRoute: typeof SitesSiteIdApsApIdRadiosRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/settings': {
+      id: '/sites/$siteId/aps/$apId/settings'
+      path: '/settings'
+      fullPath: '/sites/$siteId/aps/$apId/settings'
+      preLoaderRoute: typeof SitesSiteIdApsApIdSettingsRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/aps/$apId/uplink': {
+      id: '/sites/$siteId/aps/$apId/uplink'
+      path: '/uplink'
+      fullPath: '/sites/$siteId/aps/$apId/uplink'
+      preLoaderRoute: typeof SitesSiteIdApsApIdUplinkRouteImport
+      parentRoute: typeof SitesSiteIdApsApIdRouteRoute
+    }
+    '/sites/$siteId/wlans/$wlanId/': {
+      id: '/sites/$siteId/wlans/$wlanId/'
+      path: '/wlans/$wlanId'
+      fullPath: '/sites/$siteId/wlans/$wlanId/'
+      preLoaderRoute: typeof SitesSiteIdWlansWlanIdIndexRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
+    '/sites/$siteId/wlans/$wlanId/expert': {
+      id: '/sites/$siteId/wlans/$wlanId/expert'
+      path: '/wlans/$wlanId/expert'
+      fullPath: '/sites/$siteId/wlans/$wlanId/expert'
+      preLoaderRoute: typeof SitesSiteIdWlansWlanIdExpertRouteImport
+      parentRoute: typeof SitesSiteIdRouteRoute
+    }
   }
 }
 
+interface OnboardRouteRouteChildren {
+  OnboardRegisterRoute: typeof OnboardRegisterRoute
+  OnboardIndexRoute: typeof OnboardIndexRoute
+}
+
+const OnboardRouteRouteChildren: OnboardRouteRouteChildren = {
+  OnboardRegisterRoute: OnboardRegisterRoute,
+  OnboardIndexRoute: OnboardIndexRoute,
+}
+
+const OnboardRouteRouteWithChildren = OnboardRouteRoute._addFileChildren(
+  OnboardRouteRouteChildren,
+)
+
+interface SystemRouteRouteChildren {
+  SystemBackupsRoute: typeof SystemBackupsRoute
+  SystemMigrationRoute: typeof SystemMigrationRoute
+  SystemSessionsRoute: typeof SystemSessionsRoute
+  SystemTokensRoute: typeof SystemTokensRoute
+  SystemIndexRoute: typeof SystemIndexRoute
+}
+
+const SystemRouteRouteChildren: SystemRouteRouteChildren = {
+  SystemBackupsRoute: SystemBackupsRoute,
+  SystemMigrationRoute: SystemMigrationRoute,
+  SystemSessionsRoute: SystemSessionsRoute,
+  SystemTokensRoute: SystemTokensRoute,
+  SystemIndexRoute: SystemIndexRoute,
+}
+
+const SystemRouteRouteWithChildren = SystemRouteRoute._addFileChildren(
+  SystemRouteRouteChildren,
+)
+
+interface SitesSiteIdApsApIdRouteRouteChildren {
+  SitesSiteIdApsApIdClientsRoute: typeof SitesSiteIdApsApIdClientsRoute
+  SitesSiteIdApsApIdConfigRoute: typeof SitesSiteIdApsApIdConfigRoute
+  SitesSiteIdApsApIdEventsRoute: typeof SitesSiteIdApsApIdEventsRoute
+  SitesSiteIdApsApIdRadiosRoute: typeof SitesSiteIdApsApIdRadiosRoute
+  SitesSiteIdApsApIdSettingsRoute: typeof SitesSiteIdApsApIdSettingsRoute
+  SitesSiteIdApsApIdUplinkRoute: typeof SitesSiteIdApsApIdUplinkRoute
+  SitesSiteIdApsApIdIndexRoute: typeof SitesSiteIdApsApIdIndexRoute
+}
+
+const SitesSiteIdApsApIdRouteRouteChildren: SitesSiteIdApsApIdRouteRouteChildren =
+  {
+    SitesSiteIdApsApIdClientsRoute: SitesSiteIdApsApIdClientsRoute,
+    SitesSiteIdApsApIdConfigRoute: SitesSiteIdApsApIdConfigRoute,
+    SitesSiteIdApsApIdEventsRoute: SitesSiteIdApsApIdEventsRoute,
+    SitesSiteIdApsApIdRadiosRoute: SitesSiteIdApsApIdRadiosRoute,
+    SitesSiteIdApsApIdSettingsRoute: SitesSiteIdApsApIdSettingsRoute,
+    SitesSiteIdApsApIdUplinkRoute: SitesSiteIdApsApIdUplinkRoute,
+    SitesSiteIdApsApIdIndexRoute: SitesSiteIdApsApIdIndexRoute,
+  }
+
+const SitesSiteIdApsApIdRouteRouteWithChildren =
+  SitesSiteIdApsApIdRouteRoute._addFileChildren(
+    SitesSiteIdApsApIdRouteRouteChildren,
+  )
+
+interface SitesSiteIdApsRouteRouteChildren {
+  SitesSiteIdApsApIdRouteRoute: typeof SitesSiteIdApsApIdRouteRouteWithChildren
+  SitesSiteIdApsIndexRoute: typeof SitesSiteIdApsIndexRoute
+}
+
+const SitesSiteIdApsRouteRouteChildren: SitesSiteIdApsRouteRouteChildren = {
+  SitesSiteIdApsApIdRouteRoute: SitesSiteIdApsApIdRouteRouteWithChildren,
+  SitesSiteIdApsIndexRoute: SitesSiteIdApsIndexRoute,
+}
+
+const SitesSiteIdApsRouteRouteWithChildren =
+  SitesSiteIdApsRouteRoute._addFileChildren(SitesSiteIdApsRouteRouteChildren)
+
+interface SitesSiteIdClientsRouteRouteChildren {
+  SitesSiteIdClientsMacRoute: typeof SitesSiteIdClientsMacRoute
+  SitesSiteIdClientsIndexRoute: typeof SitesSiteIdClientsIndexRoute
+}
+
+const SitesSiteIdClientsRouteRouteChildren: SitesSiteIdClientsRouteRouteChildren =
+  {
+    SitesSiteIdClientsMacRoute: SitesSiteIdClientsMacRoute,
+    SitesSiteIdClientsIndexRoute: SitesSiteIdClientsIndexRoute,
+  }
+
+const SitesSiteIdClientsRouteRouteWithChildren =
+  SitesSiteIdClientsRouteRoute._addFileChildren(
+    SitesSiteIdClientsRouteRouteChildren,
+  )
+
+interface SitesSiteIdSettingsRouteRouteChildren {
+  SitesSiteIdSettingsAccessRoute: typeof SitesSiteIdSettingsAccessRoute
+  SitesSiteIdSettingsAdvancedRoute: typeof SitesSiteIdSettingsAdvancedRoute
+  SitesSiteIdSettingsApDefaultsRoute: typeof SitesSiteIdSettingsApDefaultsRoute
+  SitesSiteIdSettingsDangerRoute: typeof SitesSiteIdSettingsDangerRoute
+  SitesSiteIdSettingsGeneralRoute: typeof SitesSiteIdSettingsGeneralRoute
+  SitesSiteIdSettingsNetworkRoute: typeof SitesSiteIdSettingsNetworkRoute
+  SitesSiteIdSettingsProtectionRoute: typeof SitesSiteIdSettingsProtectionRoute
+  SitesSiteIdSettingsIndexRoute: typeof SitesSiteIdSettingsIndexRoute
+}
+
+const SitesSiteIdSettingsRouteRouteChildren: SitesSiteIdSettingsRouteRouteChildren =
+  {
+    SitesSiteIdSettingsAccessRoute: SitesSiteIdSettingsAccessRoute,
+    SitesSiteIdSettingsAdvancedRoute: SitesSiteIdSettingsAdvancedRoute,
+    SitesSiteIdSettingsApDefaultsRoute: SitesSiteIdSettingsApDefaultsRoute,
+    SitesSiteIdSettingsDangerRoute: SitesSiteIdSettingsDangerRoute,
+    SitesSiteIdSettingsGeneralRoute: SitesSiteIdSettingsGeneralRoute,
+    SitesSiteIdSettingsNetworkRoute: SitesSiteIdSettingsNetworkRoute,
+    SitesSiteIdSettingsProtectionRoute: SitesSiteIdSettingsProtectionRoute,
+    SitesSiteIdSettingsIndexRoute: SitesSiteIdSettingsIndexRoute,
+  }
+
+const SitesSiteIdSettingsRouteRouteWithChildren =
+  SitesSiteIdSettingsRouteRoute._addFileChildren(
+    SitesSiteIdSettingsRouteRouteChildren,
+  )
+
+interface SitesSiteIdRouteRouteChildren {
+  SitesSiteIdApsRouteRoute: typeof SitesSiteIdApsRouteRouteWithChildren
+  SitesSiteIdClientsRouteRoute: typeof SitesSiteIdClientsRouteRouteWithChildren
+  SitesSiteIdSettingsRouteRoute: typeof SitesSiteIdSettingsRouteRouteWithChildren
+  SitesSiteIdChangesRevRoute: typeof SitesSiteIdChangesRevRoute
+  SitesSiteIdRfNeighboursRoute: typeof SitesSiteIdRfNeighboursRoute
+  SitesSiteIdWlansNewRoute: typeof SitesSiteIdWlansNewRoute
+  SitesSiteIdChangesIndexRoute: typeof SitesSiteIdChangesIndexRoute
+  SitesSiteIdEventsIndexRoute: typeof SitesSiteIdEventsIndexRoute
+  SitesSiteIdOverviewIndexRoute: typeof SitesSiteIdOverviewIndexRoute
+  SitesSiteIdRfIndexRoute: typeof SitesSiteIdRfIndexRoute
+  SitesSiteIdWlansIndexRoute: typeof SitesSiteIdWlansIndexRoute
+  SitesSiteIdWlansWlanIdExpertRoute: typeof SitesSiteIdWlansWlanIdExpertRoute
+  SitesSiteIdWlansWlanIdIndexRoute: typeof SitesSiteIdWlansWlanIdIndexRoute
+}
+
+const SitesSiteIdRouteRouteChildren: SitesSiteIdRouteRouteChildren = {
+  SitesSiteIdApsRouteRoute: SitesSiteIdApsRouteRouteWithChildren,
+  SitesSiteIdClientsRouteRoute: SitesSiteIdClientsRouteRouteWithChildren,
+  SitesSiteIdSettingsRouteRoute: SitesSiteIdSettingsRouteRouteWithChildren,
+  SitesSiteIdChangesRevRoute: SitesSiteIdChangesRevRoute,
+  SitesSiteIdRfNeighboursRoute: SitesSiteIdRfNeighboursRoute,
+  SitesSiteIdWlansNewRoute: SitesSiteIdWlansNewRoute,
+  SitesSiteIdChangesIndexRoute: SitesSiteIdChangesIndexRoute,
+  SitesSiteIdEventsIndexRoute: SitesSiteIdEventsIndexRoute,
+  SitesSiteIdOverviewIndexRoute: SitesSiteIdOverviewIndexRoute,
+  SitesSiteIdRfIndexRoute: SitesSiteIdRfIndexRoute,
+  SitesSiteIdWlansIndexRoute: SitesSiteIdWlansIndexRoute,
+  SitesSiteIdWlansWlanIdExpertRoute: SitesSiteIdWlansWlanIdExpertRoute,
+  SitesSiteIdWlansWlanIdIndexRoute: SitesSiteIdWlansWlanIdIndexRoute,
+}
+
+const SitesSiteIdRouteRouteWithChildren =
+  SitesSiteIdRouteRoute._addFileChildren(SitesSiteIdRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  OnboardRouteRoute: OnboardRouteRouteWithChildren,
+  SystemRouteRoute: SystemRouteRouteWithChildren,
   LoginRoute: LoginRoute,
-  SitesSiteIdRouteRoute: SitesSiteIdRouteRoute,
+  SitesSiteIdRouteRoute: SitesSiteIdRouteRouteWithChildren,
+  ApsApIdRoute: ApsApIdRoute,
+  ClientsMacRoute: ClientsMacRoute,
+  DevKitRoute: DevKitRoute,
+  SitesIndexRoute: SitesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

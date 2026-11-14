@@ -289,3 +289,25 @@
     transform: translateX(250%);
   }
 }
+
+/*
+ * The sticky save bar (components/app/StickyActionBar): fixed above the
+ * phone tab bar, above the on-screen keyboard while it is open (the shell
+ * sets data-keyboard-open and --kb-inset on <html>), and sticky at the
+ * bottom of the form from md.
+ */
+.action-bar-dock {
+  position: fixed;
+  inset-inline: 0;
+  bottom: calc(var(--shell-tabs) + env(safe-area-inset-bottom));
+}
+html[data-keyboard-open] .action-bar-dock {
+  bottom: var(--kb-inset, 0px);
+}
+@media (min-width: 48rem) {
+  .action-bar-dock,
+  html[data-keyboard-open] .action-bar-dock {
+    position: sticky;
+    bottom: 1rem;
+  }
+}

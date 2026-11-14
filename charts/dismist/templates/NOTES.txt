@@ -21,3 +21,12 @@ controller.metricsListen is ignored while metrics are exposed.
 
 Metrics: pod loopback only (kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ include "dismist.fullname" . }} {{ .Values.metrics.port }}, then http://127.0.0.1:{{ .Values.metrics.port }}/metrics). Set monitoring.enabled=true (Prometheus Operator) or metrics.service.enabled=true for Prometheus to scrape them.
 {{- end }}
+{{- if include "dismist.monitoringPart" (dict "value" .Values.metrics.prometheusRule.enabled "root" .) }}
+Alerts: PrometheusRule {{ include "dismist.fullname" . }} (warning and info only). Make sure Alertmanager routes namespace {{ .Release.Namespace }} where you want it.
+{{- end }}
+{{- if include "dismist.monitoringPart" (dict "value" .Values.metrics.dashboards.enabled "root" .) }}
+Dashboards: ConfigMap {{ include "dismist.fullname" . }}-dashboards (Dismist / Overview, Access point, Clients & RF) in Grafana folder {{ .Values.metrics.dashboards.folder }}{{ if not .Values.metrics.includeNames }}; set metrics.includeNames=true to show names instead of IDs{{ end }}.
+{{- end }}
+{{- if and .Values.metrics.enabled (eq (toString .Values.metrics.clients) "per-client") }}
+Per-client metrics are on: client MACs{{ if .Values.metrics.includeNames }} and host names{{ end }} go to Prometheus (at most {{ .Values.metrics.clientLimit }} clients).
+{{- end }}

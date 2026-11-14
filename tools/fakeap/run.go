@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/nicko170/dismist/internal/protocol"
 )
 
 // RunOptions control an AP's steady-state behaviour.
@@ -26,7 +28,26 @@ type RunOptions struct {
 	RejectConfig string
 	// OnConfig is called with every config the AP fetches.
 	OnConfig func([]byte)
+	// MirrorConfig makes the reported radios and VAPs follow each applied
+	// config (MirrorConfig), so post-delivery verification and the UI see
+	// what a real AP would report.
+	MirrorConfig bool
+	// IgnoreConfigChange makes the AP ignore ep-config-change (an AP that
+	// does not support it), so the controller must fall back to a
+	// reconnect.
+	IgnoreConfigChange bool
+	// OnConfigChange is called with every ep-config-change frame.
+	OnConfigChange func(protocol.Message)
+	// OnCommand is called with every ap-cmd-rx command. A ping, traceroute
+	// or arp command is answered on ap-cmd-output- with synthetic output;
+	// a reboot ends Run with ErrRebooted (the caller reconnects with a
+	// higher boot count and a reset uptime).
+	OnCommand func(Command)
 }
+
+// ErrRebooted is returned by Run when the controller sent a reboot
+// command.
+var ErrRebooted = errors.New("fakeap: rebooted by command")
 
 func (o RunOptions) withDefaults() RunOptions {
 	if o.FastInterval == 0 {
@@ -71,6 +92,9 @@ func (a *AP) Run(ctx context.Context, options RunOptions) error {
 		if options.RejectConfig == "" {
 			applied = metadata.Timestamp
 			snapshot.ConfigTimestamp = metadata.Timestamp
+			if options.MirrorConfig {
+				_ = MirrorConfig(&snapshot, config)
+			}
 		}
 		return nil
 	}
@@ -130,8 +154,31 @@ func (a *AP) Run(ctx context.Context, options RunOptions) error {
 				err = a.SendPaceEvent(PaceEvent{Type: 3, Title: "DNS query succeeded", Text: fmt.Sprintf("Synthetic event %d", eventNumber)})
 			}
 		case message := <-a.inbox:
-			if message.Subject == "ep-config-change" {
-				err = tryFetch()
+			switch message.Subject {
+			case "ep-config-change":
+				if options.OnConfigChange != nil {
+					options.OnConfigChange(message)
+				}
+				if !options.IgnoreConfigChange {
+					err = tryFetch()
+				}
+			case "ap-cmd-rx":
+				command, parseErr := ParseCommand(message)
+				if parseErr != nil {
+					continue
+				}
+				if options.OnCommand != nil {
+					options.OnCommand(command)
+				}
+				switch command.Cmd {
+				case "reboot":
+					_ = a.Drop()
+					return ErrRebooted
+				case "ping", "traceroute", "arp":
+					var params struct{ Session, Host string }
+					_ = json.Unmarshal(command.Params, &params)
+					err = a.SendCommandOutput(params.Session, fmt.Sprintf("fakeap %s %s: ok\n", command.Cmd, params.Host))
+				}
 			}
 		}
 		if err != nil {

@@ -59,11 +59,28 @@ func main() {
 	apCAFile := flag.String("ap-ca-file", "", "PEM bundle of CA certificates APs need to trust the WSS endpoint besides the served chain (default: ca.crt next to -tls-cert, if present)")
 	apFeatures := flag.String("ap-features", "", "comma-separated protocol features on by default for every AP (design §5.7); each AP's protocol_features override it (empty: all off)")
 	backups := registerBackupFlags(flag.CommandLine)
+	notify := registerNotifyFlags(flag.CommandLine)
+	acceptLocalFiles := flag.String("migrate-accept-local-files", "", "comma-separated AP IDs whose /rw/etc/mist/ep-control/local_* files the operator accepts, so the schema-2 migration may claim equivalence for them (design §4.7 step 5)")
+	legacyUI := flag.Bool("legacy-ui", true, "serve the legacy web app at /legacy/ while the schema-2 migration has not committed (it is never served once typed settings are on)")
+	configPush := flag.String("config-push", controller.PushModeReconnect, "how a changed config reaches an AP by default: reconnect (the AP is disconnected and refetches) or notify (ep-config-change, experimental); each AP's protocol_features override it (design §5.6)")
+	retainSamples := flag.Duration("retain-samples", model.DefaultRetainSamples, "how long minute samples are kept (hourly rollups are kept 400 days)")
+	retainSessions := flag.Duration("retain-sessions", model.DefaultRetainSessions, "how long ended client sessions are kept")
+	retainEvents := flag.Duration("retain-events", model.DefaultRetainEvents, "how long AP and client events are kept")
 	flag.Parse()
+	instruments := metrics.NewInstruments()
+	if err := notify.validate(); err != nil {
+		log.Fatal(err)
+	}
 	defaultFeatures, err := controller.ParseFeatures(*apFeatures)
 	if err != nil {
 		log.Fatalf("-ap-features: %v", err)
 	}
+	defaultFeatures, err = configPushFeatures(defaultFeatures, *configPush)
+	if err != nil {
+		log.Fatalf("-config-push: %v", err)
+	}
+	retention := model.DefaultRetention()
+	retention.Samples, retention.Sessions, retention.Events = *retainSamples, *retainSessions, *retainEvents
 	startedAt := time.Now().UTC()
 	if *apURL != "" {
 		if err := httpapi.CheckAPURL(*apURL); err != nil {
@@ -164,7 +181,7 @@ func main() {
 		log.Fatal(err)
 	}
 	uiServer := &http.Server{
-		Handler:           proxytrust.Middleware(proxyPrefixes, startup),
+		Handler:           instruments.HTTP(proxytrust.Middleware(proxyPrefixes, startup)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
@@ -178,7 +195,7 @@ func main() {
 	if err := importSecretFiles(store); err != nil {
 		log.Fatalf("import AP secret files into the database: %v", err)
 	}
-	migrated, err := migrate.Run(store, migrate.Steps(), migrate.Options{Context: migrate.Context{Template: base, Logf: log.Printf}})
+	migrated, err := migrate.Run(store, migrate.Steps(), migrate.Options{Context: migrate.Context{Template: base, Logf: log.Printf, AcceptLocalFiles: splitList(*acceptLocalFiles)}})
 	if err != nil {
 		log.Fatalf("database migration: %v", err)
 	}
@@ -206,6 +223,17 @@ func main() {
 		state.UpdatedAt = time.Now().UTC()
 	}
 	mutationLock := new(sync.Mutex)
+	// The API is built before the registry so the controller's push
+	// lifecycle can publish its states on the site streams (design §4.10).
+	var operatorAPI *httpapi.Server
+	siteOf := siteOfAP(store)
+	events := newEventSink(store.Events2(), siteOf, nil)
+	eventsCtx, stopEvents := context.WithCancel(context.Background())
+	eventsDone := make(chan struct{})
+	go func() {
+		defer close(eventsDone)
+		events.Run(eventsCtx)
+	}()
 	registryConfig := registryOptions{
 		DefaultID: *apID, DefaultIP: *apIP, Base: base,
 		CertDER: certificate.Certificate[0], ServerName: *serverName,
@@ -217,6 +245,34 @@ func main() {
 		UDPProbeRekeyDelay: *udpProbeRekeyDelay,
 		APConfig:           store.APConfig(),
 		Features:           defaultFeatures,
+		Events:             events.Event,
+		Status:             newAPStatusSink(store.APStatus()),
+		LastKnownVAPs:      lastKnownVAPs(store.APStatus()),
+		OnPush: func(event controller.PushEvent) {
+			if operatorAPI != nil {
+				operatorAPI.PublishPush(api.PushEvent{APID: event.APID, Revision: event.Revision,
+					State: api.PushState(event.State), Error: event.Error, Mode: event.Mode})
+				switch event.State {
+				case controller.PushStateApplied, controller.PushStateRejected, controller.PushStateTimeout:
+					at := event.At.UTC()
+					operatorAPI.RecordResult(event.APID, event.Revision, api.APState{State: event.State, At: &at, Error: event.Error})
+				}
+			}
+		},
+		OnPushModeLearned: func(apID, mode string) {
+			if err := store.Update(func(state *model.State) error {
+				for index := range state.APs {
+					if state.APs[index].ID == apID {
+						state.APs[index].PushMode = mode
+					}
+				}
+				return nil
+			}); err != nil {
+				log.Printf("AP %s: cannot store the learned push mode %q: %v", apID, mode, err)
+			}
+		},
+		PushMode: func(ap model.APRecord) string { return ap.PushMode },
+		OnScan:   storeScan(store, siteOf),
 	}
 	manager, addresses, err := prepareAPs(withSecrets(state), registryConfig)
 	if err != nil {
@@ -235,7 +291,7 @@ func main() {
 		log.Fatal(err)
 	}
 	registry := newAPRegistry(manager, resolver, registryConfig, state)
-	service, err := dnsserver.Start(*dnsListen, resolver)
+	service, err := dnsserver.Start(*dnsListen, instruments.DNS(resolver))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -248,6 +304,7 @@ func main() {
 	httpServer := &http.Server{
 		Handler: manager, ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}},
+		ErrorLog:  instruments.TLSErrorLog(log.Writer()),
 	}
 	go func() {
 		err := httpServer.Serve(tls.NewListener(listener, httpServer.TLSConfig))
@@ -260,15 +317,18 @@ func main() {
 
 	backupScheduler := newBackupScheduler(store, *backups, backupWarning(store))
 	builtVersion, builtCommit := buildVersion()
-	operatorAPI := httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock).UseSystem(httpapi.SystemInfo{
+	migrations := newMigrationRunner(store, base, os.TempDir(), splitList(*acceptLocalFiles))
+	operatorAPI = httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock).UseSystem(httpapi.SystemInfo{
 		Version: builtVersion, Commit: builtCommit, StartedAt: startedAt, Ready: ready.Ready,
 		APURL: *apURL, WSSListen: listener.Addr().String(), Chain: certificate.Certificate, ExtraCAs: apCAs,
 		TrustedProxies: splitList(*trustedProxies), DBPath: *dbPath, BackupTempMax: int64(backups.tmpMax),
 		Metrics:   systemMetricsView(metricsFlags),
 		Backups:   backupScheduler,
 		Migration: func() api.MigrationView { return migrationView(store) },
-	})
-	uiHandler, err := operatorHandler(*adminTokenFile, operatorAPI, store.Tokens())
+		Retention: retention.Describe(),
+	}).UseConfig(withRegistry(apiBackends(store, migrations))).UseCommands(apCommands{manager: manager}).
+		UsePushEvents().UseDefaultFeatures(defaultFeatures).UseLegacyUI(*legacyUI)
+	uiHandler, err := operatorGate(*adminTokenFile, operatorAPI, gateOptions{tokens: store.Tokens(), sessions: store.Sessions()})
 	if err != nil {
 		log.Fatalf("initialize administrator access: %v", err)
 	}
@@ -276,6 +336,7 @@ func main() {
 	log.Printf("UI API listening on %s", uiListener.Addr())
 	metricsServer, err := startMetrics(metricsFlags, metrics.Options{
 		Store: store, Manager: manager, StoreSchema: storeSchema(store), CompileStatus: compileStatus(manager),
+		Instruments: instruments, Backups: backupMetrics(backupScheduler),
 	})
 	if err != nil {
 		log.Fatalf("start metrics listener: %v", err)
@@ -290,6 +351,19 @@ func main() {
 		log.Printf("Scheduled backups every %s into %s (keep %d)", backups.interval, backups.dir, backups.keep)
 	}
 	log.Printf("Administrator token file: %s", *adminTokenFile)
+	backgroundCtx, stopBackground := context.WithCancel(context.Background())
+	defer stopBackground()
+	go operatorAPI.RunLocateExpiry(backgroundCtx, 15*time.Second)
+	go operatorAPI.RunSchedules(backgroundCtx, time.Minute)
+	go store.RunRetention(backgroundCtx, retention, model.DefaultRetentionInterval, func(result model.PruneResult, err error) {
+		if err != nil {
+			log.Printf("history retention: %v", err)
+		}
+	})
+	if notify.url != "" {
+		go newNotifier(*notify, store).run(backgroundCtx)
+		log.Printf("Webhook notifier posts %s and worse events every %s", notify.minSeverity, notify.interval)
+	}
 	registryCtx, stopRegistry := context.WithCancel(context.Background())
 	registryDone := make(chan struct{})
 	go func() {
@@ -302,15 +376,29 @@ func main() {
 		defer close(recordDone)
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
+		appliedSeen := map[string]uint64{}
 		record := func() {
 			current := store.Snapshot()
 			for id, control := range manager.Servers() {
+				// An AP that applied a revision outside a push (its first
+				// fetch after registration or a reconnect) settles that
+				// revision's history result too.
+				if status := control.Status(); status.Connected && status.AppliedRevision != 0 && status.LastError == "" &&
+					appliedSeen[id] != status.AppliedRevision {
+					appliedSeen[id] = status.AppliedRevision
+					at := status.Applied.At
+					if at.IsZero() {
+						at = time.Now().UTC()
+					}
+					operatorAPI.RecordResult(id, status.AppliedRevision, api.APState{State: "applied", At: &at})
+				}
 				for _, ap := range current.APs {
 					if ap.ID != id {
 						continue
 					}
 					observation := makeObservation(ap.SiteID, ap.ID, control.Status(), control.TelemetrySnapshot(), time.Now().UTC())
 					if err := store.RecordObservation(observation); err != nil {
+						instruments.ObservationError()
 						log.Printf("cannot save AP observation: %v", err)
 					}
 					break
@@ -345,6 +433,8 @@ func main() {
 	<-backupsDone
 	stopRegistry()
 	<-registryDone
+	stopEvents()
+	<-eventsDone
 	close(recordStop)
 	<-recordDone
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

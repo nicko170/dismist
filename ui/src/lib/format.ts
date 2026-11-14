@@ -43,3 +43,44 @@ export function formatDuration(seconds: number | null | undefined): string {
 export function utf8Length(value: string): number {
   return new TextEncoder().encode(value).length
 }
+
+/** Typographic minus for negative numbers on screen ("−54"). */
+export function formatSigned(value: number, digits = 0): string {
+  const text = Math.abs(value).toFixed(digits)
+  return value < 0 ? `\u2212${text}` : text
+}
+
+export function formatDbm(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '–'
+  return `${formatSigned(Math.round(value))} dBm`
+}
+
+/** 0–100 as "31 %"; values under 10 keep one decimal ("4.5 %"). */
+export function formatPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '–'
+  const digits = value !== 0 && Math.abs(value) < 10 && !Number.isInteger(value) ? 1 : 0
+  return `${value.toFixed(digits)} %`
+}
+
+/**
+ * Channel utilisation as the API reports it (a fraction from 0 to 1:
+ * RadioView.util, util_parts, PlanActual.util, Neighbour.util,
+ * SampleRadio.util) as "31 %".
+ */
+export function formatUtil(fraction: number | null | undefined): string {
+  if (fraction == null || !Number.isFinite(fraction)) return '–'
+  return `${Math.round(fraction * 100)} %`
+}
+
+/** Bits per second in SI steps: "18.1 Mbit/s". */
+export function formatRate(bps: number | null | undefined): string {
+  if (bps == null || !Number.isFinite(bps)) return '–'
+  const units = ['bit/s', 'kbit/s', 'Mbit/s', 'Gbit/s']
+  let value = Math.abs(bps)
+  let unit = 0
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000
+    unit++
+  }
+  return `${value.toFixed(unit === 0 || value >= 100 ? 0 : 1)} ${units[unit]}`
+}

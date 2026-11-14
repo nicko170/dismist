@@ -9,15 +9,21 @@ import { defineConfig, devices } from '@playwright/test'
 
 const port = Number(process.env.E2E_PORT ?? 4319)
 const external = process.env.E2E_BASE_URL
+// E2E_LIVE=1: dismistd from this checkout plus tools/fakeap (e2e/live/).
+// The global setup builds and starts both and sets E2E_BASE_URL itself.
+const live = process.env.E2E_LIVE === '1'
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  testIgnore: live ? undefined : ['live/**'],
+  testMatch: live ? ['live/**/*.spec.ts'] : undefined,
+  globalSetup: live ? './e2e/live/global-setup.ts' : undefined,
+  fullyParallel: !live,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: external ?? `http://127.0.0.1:${port}`,
+    baseURL: external ?? (live ? undefined : `http://127.0.0.1:${port}`),
     trace: 'retain-on-failure',
     serviceWorkers: 'allow',
   },
@@ -29,7 +35,7 @@ export default defineConfig({
     { name: 'tablet-1024-touch', use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 768 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } },
     { name: 'desktop-1440', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
   ],
-  webServer: external
+  webServer: external || live
     ? undefined
     : {
         command: `npm run build:mock && npm run preview:mock -- --port ${port} --strictPort --host 127.0.0.1`,

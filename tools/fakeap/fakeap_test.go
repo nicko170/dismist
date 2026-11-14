@@ -62,7 +62,7 @@ func TestHandshakeConfigAndTelemetryAgainstController(t *testing.T) {
 		if status.AppliedRevision == 3 && stats.FullFrames >= 2 && stats.FastFrames >= 2 && len(stats.RecentClients) != 0 {
 			if len(stats.VAPs) != 2 || stats.VAPs[1].SSID != "Example" || stats.VAPs[1].Interface != "wl1.1" ||
 				len(stats.AssociatedClients) != 2 || stats.AssociatedClients[0].IP != "192.0.2.100" ||
-				len(stats.Interfaces) != 2 || stats.Interfaces[0].Addresses[0] != "192.0.2.10/24" {
+				len(stats.Interfaces) != 1 || stats.Interfaces[0].Addresses[0] != "192.0.2.10/24" || len(stats.Ports) != 2 {
 				t.Fatalf("telemetry %+v", stats)
 			}
 			if status.Hello.SerialNo != "EXAMPLE000001" || status.Model != fakeap.DefaultModel {

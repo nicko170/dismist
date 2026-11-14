@@ -29,6 +29,10 @@ RUN npm run build && \
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS go-build
 ARG TARGETOS
 ARG TARGETARCH
+# Reported by dismist_build_info and the System page; the release workflow
+# sets them from the tag and commit.
+ARG VERSION=dev
+ARG REVISION=
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -37,7 +41,7 @@ COPY internal ./internal
 COPY webassets.go ./
 COPY --from=web /src/web/dist ./web/dist
 COPY --from=ui /src/ui/dist ./ui/dist
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -ldflags='-s -w -buildid=' -o /out/dismistd ./cmd/dismistd && \
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.version=${VERSION} -X main.commit=${REVISION}" -o /out/dismistd ./cmd/dismistd && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -ldflags='-s -w -buildid=' -o /out/dismist ./cmd/dismist
 
 FROM gcr.io/distroless/static-debian12:nonroot

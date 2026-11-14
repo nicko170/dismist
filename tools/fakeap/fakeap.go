@@ -555,3 +555,93 @@ func (a *AP) SendJSON(value any) error {
 // SendTelemetry sends a binary ep-telemetry body (class 0, handle 0), as
 // the AP sends protobuf stats.
 func (a *AP) SendTelemetry(body []byte) error { return a.write(0, "ep-telemetry", 0, body) }
+
+// Ping2 sends ping2 with a protobuf Ping2 {1 Sent µs} and returns the
+// reply body (an echo, or Pong2 with the controller's pong2 feature).
+func (a *AP) Ping2(ctx context.Context, sent time.Time) ([]byte, error) {
+	body := binary.AppendUvarint([]byte{1 << 3}, uint64(sent.UnixMicro()))
+	reply, err := a.Request(ctx, 2, "ping2", body)
+	if err != nil {
+		return nil, err
+	}
+	return reply.Body, nil
+}
+
+// Subscribe sends ep-subscribe (msgs.SubscribeRequest) and waits for a
+// reply; without the controller's subscribe_reply feature it times out,
+// as the real AP's request does.
+func (a *AP) Subscribe(ctx context.Context, topic string) ([]byte, error) {
+	body, err := json.Marshal(map[string]any{
+		"ID": time.Now().UnixNano() & 0xffffffffff, "Topic": topic, "Partition": -1,
+		"Key": a.config.ID, "Offset": -1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	reply, err := a.Request(ctx, 2, "ep-subscribe", body)
+	if err != nil {
+		return nil, err
+	}
+	return reply.Body, nil
+}
+
+// OfferFile sends ep-file (msgs.FileUploadOffer) for a crash report and
+// waits for the controller's FileUploadReply.
+func (a *AP) OfferFile(ctx context.Context, name string, size int64) ([]byte, error) {
+	body, err := json.Marshal(map[string]any{
+		"Version": 1, "Name": name, "Timestamp": time.Now().Unix(), "When": time.Now().UTC(),
+		"Size": size, "Type": "error-log", "Summary": "", "Compress": "flate",
+		"Topic": "ep-file-upload-", "HashKey": a.config.ID, "S3": map[string]any{},
+	})
+	if err != nil {
+		return nil, err
+	}
+	reply, err := a.Request(ctx, 2, "ep-file", body)
+	if err != nil {
+		return nil, err
+	}
+	return reply.Body, nil
+}
+
+// SiteRest sends the wlc-site-rest GET get_assoc_bf the AP sends every
+// five minutes and waits for the reply.
+func (a *AP) SiteRest(ctx context.Context) ([]byte, error) {
+	body := []byte(`{"Method":"GET","Path":"get_assoc_bf","Headers":{"Accept":["application/json","text/plain"],"ContentType":""},"Body":null,"Timeout":10000000000}`)
+	reply, err := a.Request(ctx, 2, "wlc-site-rest", body)
+	if err != nil {
+		return nil, err
+	}
+	return reply.Body, nil
+}
+
+// RegisterIP sends ep-ip-register with the AP's tunnel IPv6 (16 bytes; no
+// reply).
+func (a *AP) RegisterIP(address [16]byte) error {
+	_, err := a.Send(2, "ep-ip-register", address[:])
+	return err
+}
+
+// Command is an ap-cmd-rx command the controller sent (the 0.15 body).
+type Command struct {
+	Cmd     string
+	Params  json.RawMessage
+	Clients []string
+	Sender  string
+	Reason  string
+	// Handle and Class are the frame's.
+	Handle uint64
+	Class  byte
+}
+
+// ParseCommand decodes an ap-cmd-rx frame.
+func ParseCommand(message protocol.Message) (Command, error) {
+	var command Command
+	if message.Subject != "ap-cmd-rx" {
+		return command, fmt.Errorf("fakeap: subject %q is not ap-cmd-rx", message.Subject)
+	}
+	if err := json.Unmarshal(message.Body, &command); err != nil {
+		return command, err
+	}
+	command.Handle, command.Class = message.Handle, message.ServiceClass
+	return command, nil
+}

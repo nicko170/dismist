@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/nicko170/dismist/internal/api"
+	"github.com/nicko170/dismist/internal/model"
 )
 
 // lockedLog collects the daemon's log lines for failure messages.
@@ -190,7 +191,7 @@ func TestDaemonStartsHealthzFirstAndServesTheAPI(t *testing.T) {
 		t.Fatalf("/api/system: %d %s", status, body)
 	}
 	if !system.Ready || system.WSS.URL != "wss://ap.example.test/ws" || system.WSS.Cert.Subject != "CN=ap.example.test" ||
-		system.DB.Schema != 1 || system.DB.Compat != 1 || system.Migration.State != api.MigrationStateNotRun {
+		system.DB.Schema != model.SupportedSchema || system.DB.Compat != 1 || system.Migration.State != api.MigrationStateCommitted {
 		t.Fatalf("system view %+v", system)
 	}
 	status, body = get("/api/system/backup", map[string]string{"Cookie": cookie.Name + "=" + cookie.Value})

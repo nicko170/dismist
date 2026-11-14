@@ -215,7 +215,7 @@ func (m *Manager) route(conn *websocket.Conn, remoteAddr string) (routedConn, er
 				m.countRoute(RouteUnknownAP)
 				reason := PendingUnregistered
 				if server != nil {
-					server.countSourceMismatch()
+					server.countSourceMismatch(remoteAddr)
 					reason = PendingSourceMismatch
 				}
 				m.logUnknown(hello, remoteAddr, server != nil)

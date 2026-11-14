@@ -134,8 +134,9 @@ func (r *apRegistry) reconcile(state model.State) error {
 	return errors.Join(failures...)
 }
 
-// syncFeatures applies each registered AP's protocol features: the daemon
-// default overridden by the AP's stored protocol_features.
+// syncFeatures applies each registered AP's protocol features (the daemon
+// default overridden by the AP's stored protocol_features) and its locate
+// expiry, which take effect without a reconnect.
 func (r *apRegistry) syncFeatures(state model.State) {
 	for _, ap := range state.APs {
 		if _, active := r.active[ap.ID]; !active {
@@ -143,6 +144,9 @@ func (r *apRegistry) syncFeatures(state model.State) {
 		}
 		if server, ok := r.manager.Server(ap.ID); ok {
 			server.SetFeatures(controller.ResolveFeatures(r.options.Features, ap.Features))
+			if r.options.LocateUntil != nil {
+				server.SetLocateUntil(r.options.LocateUntil(ap))
+			}
 		}
 	}
 }

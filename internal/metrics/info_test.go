@@ -31,7 +31,7 @@ dismist_site_info{site="x\"\\\ny"} 1
 		t.Fatalf("promlint: %v %v", lint, err)
 	}
 	out := gather(t, c)
-	if !strings.Contains(out, `dismist_ap_info{ap="02-aa-00-00-00-01",firmware="apfw-0.15.0",model="AP33",site="11111111-1111-4111-8111-111111111111"} 1`) {
+	if !strings.Contains(out, `dismist_ap_info{ap="02-aa-00-00-00-01",clm="apfw_clm_v15_53",firmware="apfw-0.15.0",model="AP33",site="11111111-1111-4111-8111-111111111111"} 1`) {
 		t.Fatalf("connected AP info does not use its reported model and firmware:\n%s", grep(out, "dismist_ap_info"))
 	}
 	for _, name := range []string{"Example Home", "Example Lab", "Lounge AP", "Office AP", `name="`} {
@@ -41,7 +41,7 @@ dismist_site_info{site="x\"\\\ny"} 1
 	}
 }
 
-// TestInfoSeriesWithNames: -metrics-names adds a name label to both info
+// TestInfoSeriesWithNames: -metrics-names adds a name label to the info
 // series and nowhere else.
 func TestInfoSeriesWithNames(t *testing.T) {
 	store, sessions := fixture(t)
@@ -49,15 +49,16 @@ func TestInfoSeriesWithNames(t *testing.T) {
 	out := gather(t, c)
 	for _, line := range []string{
 		`dismist_site_info{name="Example Home",site="11111111-1111-4111-8111-111111111111"} 1`,
-		`dismist_ap_info{ap="02-aa-00-00-00-01",firmware="apfw-0.15.0",model="AP33",name="Lounge AP",site="11111111-1111-4111-8111-111111111111"} 1`,
-		`dismist_ap_info{ap="02-aa-00-00-00-03",firmware="",model="",name="",site="11111111-1111-4111-8111-111111111111"} 1`,
+		`dismist_ap_info{ap="02-aa-00-00-00-01",clm="apfw_clm_v15_53",firmware="apfw-0.15.0",model="AP33",name="Lounge AP",site="11111111-1111-4111-8111-111111111111"} 1`,
+		`dismist_ap_info{ap="02-aa-00-00-00-03",clm="",firmware="",model="",name="",site="11111111-1111-4111-8111-111111111111"} 1`,
+		`dismist_wlan_info{name="Example",site="11111111-1111-4111-8111-111111111111",wlan="net-1"} 1`,
 	} {
 		if !strings.Contains(out, line) {
 			t.Fatalf("missing %s in:\n%s", line, grep(out, "_info"))
 		}
 	}
 	for _, l := range strings.Split(out, "\n") {
-		if strings.Contains(l, `name="`) && !strings.HasPrefix(l, "dismist_site_info{") && !strings.HasPrefix(l, "dismist_ap_info{") {
+		if strings.Contains(l, `name="`) && !strings.HasPrefix(l, "dismist_site_info{") && !strings.HasPrefix(l, "dismist_ap_info{") && !strings.HasPrefix(l, "dismist_wlan_info{") {
 			t.Fatalf("name label outside the info series: %s", l)
 		}
 	}
@@ -66,7 +67,7 @@ func TestInfoSeriesWithNames(t *testing.T) {
 func gather(t *testing.T, c *collector) string {
 	t.Helper()
 	var b strings.Builder
-	for _, name := range []string{"dismist_ap_info", "dismist_site_info"} {
+	for _, name := range []string{"dismist_ap_info", "dismist_site_info", "dismist_wlan_info"} {
 		got, err := testutil.CollectAndFormat(c, expfmt.TypeTextPlain, name)
 		if err != nil {
 			t.Fatal(err)

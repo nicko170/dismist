@@ -5,12 +5,8 @@ import { expect, test as base, type Page } from '@playwright/test'
 // Feature workstreams import { test, expect, checkPage } from './harness'
 // and add their routes to e2e/routes.ts.
 
-declare global {
-  interface Window {
-    /** Mock controls installed by src/api/mocks/browser.ts in `--mode mock`. */
-    __dismistMock?: { signIn(): void; signOut(): void; dropStreams(): void }
-  }
-}
+// window.__dismistMock (the mock controls) is declared by
+// src/api/mocks/browser.ts, which installs it in `--mode mock` builds.
 
 export const MOCK_ADMIN_TOKEN = 'a1'.repeat(32)
 
@@ -83,6 +79,8 @@ export async function expectTapTargets(page: Page, selector = 'main a, main butt
       .filter((el) => {
         const r = el.getBoundingClientRect()
         if (r.width === 0 || r.height === 0) return false
+        // A stretched row link's hit area is its whole row or card (ResponsiveList).
+        if (el.hasAttribute('data-row-link')) return false
         if (el.closest('p, li > span, [data-inline-link]') && el.tagName === 'A' && getComputedStyle(el).display === 'inline') return false
         return r.width < 44 || r.height < 44
       })

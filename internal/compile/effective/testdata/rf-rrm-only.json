@@ -1,7 +1,7 @@
 {
- "version": 1,
+ "version": 2,
  "report": {
-  "version": 1,
+  "version": 2,
   "ignored": [
    "RootAuthorizedSSHKeys",
    "SVIs[].dhcp_enabled",

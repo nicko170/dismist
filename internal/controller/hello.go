@@ -35,6 +35,37 @@ type HelloExtras struct {
 	// IP address.
 	LocalIP    string `json:"local_ip,omitempty"`
 	TimeoutSec int64  `json:"timeout_sec,omitempty"`
+	// LastRebootTimeEstimated is true when the AP's LastRebootTime was not
+	// a reboot time (0.15 sends the time of the hello itself when its
+	// last_reboot_info.txt is missing) and LastRebootTime was replaced by
+	// the boot time derived from Uptime.
+	LastRebootTimeEstimated bool `json:"last_reboot_time_estimated,omitempty"`
+}
+
+// rebootTimeSlack is how far after the boot a reported LastRebootTime may
+// be (clock steps at boot, the time ep-control takes to start).
+const rebootTimeSlack = 5 * time.Minute
+
+// normaliseRebootTime fixes the known 0.15 behaviour where LastRebootTime
+// is the hello's own time ("now") rather than the reboot's: a reboot time
+// later than the boot (now minus Uptime, plus slack) cannot be the last
+// reboot, so it is replaced by the boot time derived from Uptime and
+// flagged as estimated. Without an uptime it is cleared.
+func (e *HelloExtras) normaliseRebootTime(now time.Time) {
+	if e.LastRebootTime.IsZero() {
+		return
+	}
+	if e.Uptime <= 0 {
+		if e.LastRebootTime.After(now.Add(-rebootTimeSlack)) {
+			e.LastRebootTime = time.Time{}
+		}
+		return
+	}
+	booted := now.Add(-time.Duration(e.Uptime) * time.Second)
+	if e.LastRebootTime.After(booted.Add(rebootTimeSlack)) {
+		e.LastRebootTime = booted.UTC().Truncate(time.Second)
+		e.LastRebootTimeEstimated = true
+	}
 }
 
 // HelloDecodeErrors lists the hello fields the tolerant pass skipped
@@ -192,6 +223,20 @@ func cleanHelloString(value string, limit int) string {
 	return strings.TrimSpace(builder.String())
 }
 
+// rebootEvidence is rebootDetected with the evidence that decided it.
+func rebootEvidence(previous HelloExtras, previousAt time.Time, current HelloExtras, now time.Time) (bool, string) {
+	if previousAt.IsZero() {
+		return false, ""
+	}
+	if previous.BootCount > 0 && current.BootCount > previous.BootCount {
+		return true, RebootEvidenceBootCount
+	}
+	if rebooted, _ := rebootDetected(previous, previousAt, current, now); rebooted {
+		return true, RebootEvidenceUptime
+	}
+	return false, ""
+}
+
 // rebootDetected compares two hellos of the same AP (design §5.4 "Reboot vs
 // reconnect"): the AP rebooted when its boot count went up, or when its
 // uptime is below the previous uptime plus the time since (with slack for
@@ -238,6 +283,9 @@ func (e HelloExtras) summary() string {
 		reboot := "last reboot"
 		if !e.LastRebootTime.IsZero() {
 			reboot += " " + e.LastRebootTime.UTC().Format(time.RFC3339)
+			if e.LastRebootTimeEstimated {
+				reboot += " (from uptime)"
+			}
 		}
 		var why []string
 		if e.LastRebootReason != "" {

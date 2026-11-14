@@ -1,6 +1,9 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -8,11 +11,13 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,6 +41,7 @@ type fakeAP struct {
 	files      map[string]string
 	commands   []string
 	rebooted   int
+	writes     []string // files written through the onboard write helper
 	authAlgos  []string // negotiated "kex/hostkey" per authenticated connection
 	authorized []ssh.PublicKey
 }
@@ -181,7 +187,13 @@ func (ap *fakeAP) session(server *ssh.ServerConn, channel ssh.Channel, requests 
 			return
 		}
 		_ = request.Reply(true, nil)
-		stdout, stderr, status, reboot := ap.exec(payload.Command)
+		var stdin []byte
+		if fakeWriteCommand.MatchString(payload.Command) {
+			// Only the write helper sends input; the client always ends
+			// stdin with EOF, so this cannot block.
+			stdin, _ = io.ReadAll(channel)
+		}
+		stdout, stderr, status, reboot := ap.exec(payload.Command, stdin)
 		_, _ = channel.Write([]byte(stdout))
 		_, _ = channel.Stderr().Write([]byte(stderr))
 		if reboot {
@@ -194,11 +206,45 @@ func (ap *fakeAP) session(server *ssh.ServerConn, channel ssh.Channel, requests 
 	}
 }
 
+// The compound commands onboard and restore send (onboard_remote.go).
+var (
+	fakeWriteCommand = regexp.MustCompile(`^umask 077 && mkdir -p '([^']*)' && cat > '([^']*)' && chmod 600 '([^']*)' && mv '([^']*)' '([^']*)'$`)
+	fakeMoveCommand  = regexp.MustCompile(`^mkdir -p '([^']*)' && mv '([^']*)' '([^']*)'$`)
+)
+
 // exec runs one command against the in-memory filesystem.
-func (ap *fakeAP) exec(command string) (stdout, stderr string, status int, reboot bool) {
+func (ap *fakeAP) exec(command string, stdin []byte) (stdout, stderr string, status int, reboot bool) {
 	ap.mu.Lock()
 	ap.commands = append(ap.commands, command)
 	ap.mu.Unlock()
+
+	if match := fakeWriteCommand.FindStringSubmatch(command); match != nil {
+		temp, dest := match[2], match[5]
+		if match[3] != temp || match[4] != temp || path.Dir(dest) != match[1] {
+			return "", "fake AP: inconsistent write command", 1, false
+		}
+		ap.mu.Lock()
+		ap.files[dest] = string(stdin)
+		ap.writes = append(ap.writes, dest)
+		ap.mu.Unlock()
+		return "", "", 0, false
+	}
+	if match := fakeMoveCommand.FindStringSubmatch(command); match != nil {
+		src, dst := match[2], match[3]
+		ap.mu.Lock()
+		defer ap.mu.Unlock()
+		content, ok := ap.files[src]
+		if !ok {
+			return "", fmt.Sprintf("mv: can't rename '%s': No such file or directory\n", src), 1, false
+		}
+		delete(ap.files, src)
+		ap.files[dst] = content
+		ap.writes = append(ap.writes, dst)
+		return "", "", 0, false
+	}
+	if command == "tar -C /rw -czf - ." {
+		return ap.tarRW(), "", 0, false
+	}
 
 	if command == "reboot" || strings.HasSuffix(command, "; reboot") {
 		if command != "reboot" {
@@ -290,6 +336,14 @@ func (ap *fakeAP) exec(command string) (stdout, stderr string, status int, reboo
 			sort.Strings(matches)
 			return strings.Join(matches, "\n") + "\n", "", 0, false
 		}
+	case "sha256sum":
+		if len(words) == 2 {
+			content, ok := ap.files[words[1]]
+			if !ok {
+				return "", fmt.Sprintf("sha256sum: %s: No such file or directory\n", words[1]), 1, false
+			}
+			return fmt.Sprintf("%s  %s\n", sha256Hex([]byte(content)), words[1]), "", 0, false
+		}
 	case "wc":
 		if len(words) == 3 && words[1] == "-c" {
 			content, ok := ap.files[words[2]]
@@ -313,6 +367,44 @@ func (ap *fakeAP) exec(command string) (stdout, stderr string, status int, reboo
 		}
 	}
 	return "", "fake AP: unsupported command: " + command, 127, false
+}
+
+// tarRW is `tar -C /rw -czf - .` over the in-memory files under /rw.
+func (ap *fakeAP) tarRW() string {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	var names []string
+	for name := range ap.files {
+		if strings.HasPrefix(name, "/rw/") {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	writer := tar.NewWriter(gz)
+	_ = writer.WriteHeader(&tar.Header{Name: "./", Typeflag: tar.TypeDir, Mode: 0o755})
+	for _, name := range names {
+		content := ap.files[name]
+		_ = writer.WriteHeader(&tar.Header{Name: "." + strings.TrimPrefix(name, "/rw"), Typeflag: tar.TypeReg, Mode: 0o600, Size: int64(len(content))})
+		_, _ = writer.Write([]byte(content))
+	}
+	_ = writer.Close()
+	_ = gz.Close()
+	return buf.String()
+}
+
+// written returns the files written or moved into place, in order.
+func (ap *fakeAP) written() []string {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	return append([]string(nil), ap.writes...)
+}
+
+func (ap *fakeAP) rebootCount() int {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	return ap.rebooted
 }
 
 // children lists the direct children of dir, or nil when it does not exist.

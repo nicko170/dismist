@@ -31,6 +31,13 @@ type DesiredConfig struct {
 	// bytes contain PSKs; it is still for internal comparison only.
 	SHA   string `json:"sha"`
 	Bytes []byte `json:"bytes"`
+	// Pinned, when set, is the exact config to serve instead of Bytes for
+	// as long as the AP's ConfigRevision equals Revision. The schema-2
+	// migration stores the legacy compile here (the bytes the previous
+	// release served at this revision and Timestamp), so an upgrade sends
+	// the AP byte-identical config; the first change that touches the AP
+	// stores a new desired config without a pin (design §4.7).
+	Pinned []byte `json:"pinned,omitempty"`
 }
 
 // DeliveredConfig is the config last sent in an ep-config reply.
@@ -108,6 +115,9 @@ func (b *APConfigBucket) PutDesired(apID string, desired DesiredConfig) error {
 		return err
 	}
 	desired.Bytes = append([]byte(nil), desired.Bytes...)
+	if desired.Pinned != nil {
+		desired.Pinned = append([]byte(nil), desired.Pinned...)
+	}
 	if desired.SHA == "" {
 		desired.SHA = b.Digest(desired.Bytes)
 	}

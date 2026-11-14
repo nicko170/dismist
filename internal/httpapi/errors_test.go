@@ -93,7 +93,7 @@ func TestErrorFormatOnEveryHandler(t *testing.T) {
 		{http.MethodGet, "/api/sites/a/aps/ap-a/nothing", "", "", 404, api.ErrorCodeNotFound, ""},
 		{http.MethodGet, "/api/sites/a/networks/missing/advanced", "", "", 404, api.ErrorCodeNotFound, ""},
 		{http.MethodDelete, "/api/sites/zzz/networks/wlan-a", "", "", 404, api.ErrorCodeNotFound, ""},
-		{http.MethodDelete, "/api/sites/a", "", "", 404, api.ErrorCodeNotFound, ""},
+		{http.MethodDelete, "/api/sites/a", "", "", 409, api.ErrorCodeConflict, "aps"},
 		{http.MethodPost, "/api/sites/a/other", `{}`, "", 404, api.ErrorCodeNotFound, ""},
 		{http.MethodPost, "/api/sites/zzz/networks", `{}`, "", 404, api.ErrorCodeNotFound, ""},
 		// Networks (networks.go)

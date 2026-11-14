@@ -126,8 +126,38 @@ them off.
 dismistd serves Prometheus metrics at `/metrics` on its own port (9090). By
 default it listens on the pod's loopback only, so nothing outside the pod can
 read it (`kubectl port-forward deploy/<release> 9090` still can). Labels
-carry site and AP IDs only: no names, addresses, SSIDs, client MACs or
-secrets.
+carry site, AP and network IDs only: no names, addresses, SSIDs, host names,
+client MACs or secrets, unless you opt in (below).
+
+What it exports (the full catalogue is in the design, §6.3):
+
+- **Controller:** build (`dismist_build_info`), the AP certificate's expiry,
+  database size, free space, schema and migration state, backups, AP
+  connection routing (including unknown APs), TLS handshake failures, AP DNS
+  answers, operator UI requests and event streams, and Go and process
+  metrics.
+- **Per AP, always:** registered, connected and since when, last message,
+  config revisions and timestamps, config errors and compile errors,
+  protocol features, boots, disconnects, config deliveries and pushes,
+  authentication failures, frames by subject, telemetry decode errors.
+- **Per AP, while it reports:** CPU, load, memory, `/rw`, temperature,
+  round trip to dismist, the telemetry agent's memory; uplink link, speed,
+  duplex, traffic and errors; PoE (LLDP and the power manager); inactive
+  VLANs; per radio its channel, width, noise, power, utilisation by type,
+  DFS, clients and counters; per WLAN its clients, multicast and wrong
+  passphrase attempts; per radio the clients by signal and protocol, the
+  weakest and mean signal and the current throughput. These series stop as
+  soon as the AP disconnects or misses three telemetry intervals, so a gap
+  means no data rather than a stale value.
+
+A fully reporting AP is about 150 to 250 series. `metrics.clients` controls
+client data: `off` (counts only), `aggregate` (the default, no MACs) or
+`per-client` (about 8 more series per client, labelled with its MAC, capped
+by `metrics.clientLimit`). `metrics.includeNames` adds site, AP and WLAN
+names (the SSID) to the `*_info` series, which the dashboards join to show
+names instead of IDs, plus LLDP neighbours, the served certificate's name
+and, in per-client mode, client host names. Prometheus keeps all of it for
+its retention period.
 
 `monitoring.enabled: true` ships everything for a cluster running the
 Prometheus Operator and the Grafana dashboard sidecar:
@@ -137,10 +167,19 @@ Prometheus Operator and the Grafana dashboard sidecar:
 - a ServiceMonitor scraping it every 30 s, with `instance` set to the
   release name so AP series continue across pod restarts;
 - a PrometheusRule with the alerts in
-  [monitoring/rules.yaml](../charts/dismist/monitoring/rules.yaml)
-  (warning and info only);
+  [monitoring/rules.yaml](../charts/dismist/monitoring/rules.yaml):
+  warning and info only, covering disconnected, silent, flapping and
+  rebooting APs, config not applied, drifting, rejected, failing to compile
+  or not verifying, push fall-backs, authentication failures, unknown APs,
+  TLS rejections, temperature, memory, `/rw`, uplink speed and errors, PoE,
+  inactive VLANs, round trip, clock skew, missing or silent radios,
+  congested or noisy channels, radar, radios off their planned channel,
+  wrong passphrases, the AP certificate, decode errors, database write
+  errors, stale backups and a migration left in legacy mode;
 - a ConfigMap of Grafana dashboards, labelled `grafana_dashboard: "1"` with
-  a `grafana_folder` annotation (from the release that adds the dashboards).
+  a `grafana_folder` annotation: **Dismist / Overview**, **Dismist / Access
+  point** (one row per radio) and **Dismist / Clients & RF** (channel plan,
+  interference, client quality, and a per-client row for per-client mode).
 
 Each part has its own `enabled` under `metrics.*`: `null` follows
 `monitoring.enabled`, `true` or `false` overrides it. For example, to scrape
@@ -160,14 +199,20 @@ metrics:
     folder: Wi-Fi
 ```
 
+Turn the rules on only once Alertmanager routes `namespace="dismist"`
+somewhere you want (a personal receiver, or `null`): an AP that reboots on
+its own fires `DismistAPRebooted` and `DismistAPFlapping` straight away.
+Alerts can be dropped or re-graded per install with
+`metrics.prometheusRule.disabledAlerts` and `severityOverrides`.
+
 A Prometheus that selects every ServiceMonitor and PrometheusRule (the
 kube-prometheus-stack `*SelectorNilUsesHelmValues: false` setting) needs no
 labels. If yours selects by label, add it under
 `metrics.serviceMonitor.labels` and `metrics.prometheusRule.labels`, for
 example `release: <kube-prometheus-stack release>`. The Grafana sidecar must
 watch the ConfigMap's namespace (`metrics.dashboards.namespace`, default the
-release namespace). Alerts can be dropped or re-graded per install with
-`metrics.prometheusRule.disabledAlerts` and `severityOverrides`.
+release namespace). The dashboards use a `datasource` variable, so they work
+with any Prometheus data source.
 
 Once exposed, any pod in the cluster can read `/metrics`. To limit that,
 either require a bearer token:
@@ -192,7 +237,19 @@ refuses unless `metrics.allowHostNetwork` is set. For a Prometheus without
 the Operator, `metrics.service.enabled` gives it a Service to scrape and
 `metrics.scrapeAnnotations` adds `prometheus.io/*` pod annotations.
 `controller.metricsListen` is deprecated: it still overrides the loopback
-address while metrics are not exposed.
+address while metrics are not exposed. No sidecar is needed for any of this.
+
+Checks after enabling monitoring:
+
+```sh
+kubectl -n dismist get servicemonitor,configmap -l grafana_dashboard=1
+kubectl -n dismist port-forward deploy/dismist 9090 &
+curl -s 127.0.0.1:9090/metrics | grep -c '^dismist_'   # well under 1000 for a home
+```
+
+In Prometheus, `up{namespace="dismist"}` is 1 and the target
+`serviceMonitor/dismist/dismist/0` is up; Grafana shows the three dashboards
+in the folder you chose.
 
 ## Operations
 
@@ -214,8 +271,29 @@ not fit, because going over it evicts the pod.
 
 Scheduled snapshots go to `/state/backups` on the database volume:
 `backup.interval` (`24h`; `""` turns them off), `backup.keep` (7) and
-`backup.maxBytes` (`""`: 30 % of the volume). `apFeatures` lists protocol
-features on by default for every AP (`-ap-features`; empty: all off).
+`backup.maxBytes` (`""`: 30 % of the volume). A snapshot is skipped, with a
+warning event and `dismist_backup_failures_total{reason="space"}`, when it
+would leave less than a quarter of the volume free; `DismistBackupStale`
+fires after two days without one.
+
+Other controller settings:
+
+- `apFeatures` lists protocol features on by default for every AP
+  (`-ap-features`; empty: all off). Each feature makes dismist send the AP a
+  frame it has not had before, so switch them on per AP first (AP settings,
+  Diagnostics), one at a time, and watch reconnects and boots.
+- `controller.configPush` (`-config-push`): `reconnect` drops an AP's
+  session so it fetches a changed config; `notify` sends `ep-config-change`
+  and falls back to a reconnect when the AP does not fetch within 15
+  seconds. Empty keeps dismistd's default. Only APs whose compiled config
+  changed are pushed either way.
+- `retention.samples`, `retention.sessions` and `retention.events`
+  (`-retain-*`, Go durations such as `720h`) override how long history is
+  kept (30, 180 and 90 days by default).
+- `migration.acceptLocalFiles` (`-migrate-accept-local-files`) lists AP IDs
+  whose `local_*` files on the AP you have reviewed, so the schema 2
+  migration may claim equivalence for them. Leave it empty unless the
+  migration report names an AP.
 
 Before upgrades, restores or file-level backups, stop the pod and wait for it
 to exit. Copy the volume only after the process has stopped. Back up the
@@ -224,3 +302,70 @@ database holds WLAN PSKs and history, and the private files allow AP control.
 The PVC carries `helm.sh/resource-policy: keep`, so uninstalling the release
 leaves it in place. Admin sessions are held in memory and are lost on
 restart.
+
+## Rollback
+
+dismist's database carries two numbers in `meta`: `schema`, the format the
+newest writer used, and `compat`, the oldest schema a binary must support to
+run it safely. Every release from 0.3.0 refuses to start, with exit 78 and
+the message "controller.db needs dismist schema N; restore
+controller.db.pre-v2-* to run this version", when `compat` is newer than it
+supports. While the database refuses to start, the APs keep running their
+last config.
+
+The schema 2 migration runs at the first start of a release that has it. It
+writes a copy of the database first (`/state/controller.db.pre-v2-<UTC
+time>`), adds typed settings next to the old fields and keeps `compat` at 1,
+so the previous release still runs the migrated database and compiles exactly
+the config it compiled before. If the migration cannot prove that every AP's
+effective config is unchanged, nothing is written: dismist keeps running in
+legacy mode (System, Migration shows why; `DismistMigrationPending` fires)
+and nothing changes for the APs.
+
+Before any upgrade, download a backup (System, or `GET /api/system/backup`)
+and note the AP's effective hash (`GET /api/aps/<id>/config?view=normalised`).
+Then, depending on what went wrong:
+
+1. **A protocol feature misbehaves:** switch it off for the AP (AP settings,
+   Diagnostics). No deploy needed.
+2. **A config change misbehaves:** restore the previous revision from the
+   site's Changes page.
+3. **The release misbehaves and `compat` is 1** (`dismist_store_compat` is 1,
+   or System shows it): roll the image back. With Helm,
+   `helm -n dismist history dismist` and `helm -n dismist rollback dismist
+   <revision>`; with Flux, revert the chart or image tag in Git. The older
+   release compiles the untouched legacy fields. Rolling forward again
+   re-migrates anything the older release wrote.
+4. **`compat` is 2** (after storing something a schema 1 release cannot
+   compile, or after finalising the migration): restore the pre-migration
+   copy **first**, then roll the image back. Never roll back the image alone,
+   and never to a release older than 0.3.0, which has no `compat` check.
+
+Restoring the pre-migration copy (changes made since the migration are
+lost; the release and PVC names below are the defaults):
+
+```sh
+# Stop the controller. With Flux, suspend the HelmRelease first so it does
+# not scale it back up.
+flux -n dismist suspend helmrelease dismist        # Flux only
+kubectl -n dismist scale deployment/dismist --replicas=0
+kubectl -n dismist wait --for=delete pod -l app.kubernetes.io/instance=dismist --timeout=120s
+
+# List the copies, keep the current database aside, and put the copy back
+# as the daemon user with mode 0600.
+kubectl -n dismist run dismist-restore -i --rm --restart=Never --image=busybox:1.37.0 \
+  --overrides='{"spec":{"securityContext":{"runAsUser":65532,"runAsGroup":65532,"runAsNonRoot":true},
+    "containers":[{"name":"restore","image":"busybox:1.37.0","stdin":true,
+      "command":["sh","-ec","ls -l /state; cp -p /state/controller.db /state/controller.db.before-restore; cp /state/controller.db.pre-v2-<UTC time> /state/controller.db; chmod 0600 /state/controller.db; ls -l /state"],
+      "volumeMounts":[{"name":"state","mountPath":"/state"}]}],
+    "volumes":[{"name":"state","persistentVolumeClaim":{"claimName":"dismist-state"}}]}}'
+
+# Roll the image back (Helm), or revert the tag in Git and resume (Flux).
+helm -n dismist rollback dismist <revision>
+flux -n dismist resume helmrelease dismist         # Flux only
+kubectl -n dismist scale deployment/dismist --replicas=1
+```
+
+After any rollback, check that the AP reconnects within two minutes, its
+applied revision matches the desired one, its effective hash matches the
+value you noted, and the client count recovers.

@@ -12,6 +12,15 @@ apService:
 controller:
   uiHost: dismist.example.com
   trustedProxies: [198.51.100.0/24]
+  # The -config-push, -retain-* and -migrate-accept-local-files flags, so CI
+  # checks dismistd defines them.
+  configPush: reconnect
+retention:
+  samples: 720h
+  sessions: 4320h
+  events: 2160h
+migration:
+  acceptLocalFiles: [02-aa-00-00-00-01]
 # Every -backup-* flag and -ap-features, so CI checks dismistd defines them.
 backup:
   interval: 12h

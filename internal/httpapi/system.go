@@ -3,7 +3,6 @@ package httpapi
 import (
 	"bytes"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
@@ -63,6 +62,9 @@ type SystemInfo struct {
 	// which statfs does not report and which evicts the pod when
 	// exceeded). 0 means only the free-space check applies.
 	BackupTempMax int64
+	// Retention is how long history is kept, by kind ("samples",
+	// "samples_hourly", "sessions", "events", "config_history").
+	Retention map[string]string
 }
 
 // UseSystem sets the daemon facts /api/system and /api/onboarding report.
@@ -96,16 +98,9 @@ type backupStore interface {
 	WriteBackup(path string) (int64, error)
 }
 
-// systemResource serves /api/system and /api/system/backup.
-func (s *Server) systemResource(writer http.ResponseWriter, request *http.Request) {
-	switch {
-	case request.URL.Path == "/api/system" && request.Method == http.MethodGet:
-		respond(writer, http.StatusOK, s.systemView())
-	case request.URL.Path == "/api/system/backup" && request.Method == http.MethodGet:
-		s.downloadBackup(writer, request)
-	default:
-		routeNotFound(writer)
-	}
+// systemHandler serves GET /api/system.
+func (s *Server) systemHandler(writer http.ResponseWriter, _ *http.Request, _ params) {
+	respond(writer, http.StatusOK, s.systemView())
 }
 
 func (s *Server) systemView() api.SystemView {
@@ -114,12 +109,15 @@ func (s *Server) systemView() api.SystemView {
 		Version: info.Version, Commit: info.Commit, Go: runtime.Version(), StartedAt: info.StartedAt,
 		DNSMode: info.DNSMode(), TrustedProxies: nonNil(info.TrustedProxies), Metrics: info.Metrics,
 		WSS:       api.WSSView{URL: info.APURL, Listen: info.WSSListen, Chain: []api.ChainCert{}, Cert: api.CertView{SANs: []string{}}},
-		DB:        api.DBView{Path: info.DBPath, Schema: 1, Compat: 1, Retention: map[string]string{}},
+		DB:        api.DBView{Path: info.DBPath, Schema: 1, Compat: 1, Retention: map[string]string{}, Records: map[string]int{}},
 		Backup:    api.BackupView{PreMigration: []api.PreMigrationCopy{}},
 		Migration: api.MigrationView{State: api.MigrationStateNotRun},
 	}
 	if info.Ready != nil {
 		view.Ready = info.Ready()
+	}
+	for kind, keep := range info.Retention {
+		view.DB.Retention[kind] = keep
 	}
 	if view.Metrics.Clients == "" {
 		view.Metrics.Clients = api.MetricsClientsAggregate
@@ -158,15 +156,28 @@ func (s *Server) systemView() api.SystemView {
 		}
 	}
 	view.DB.RollbackWithoutRestore = view.DB.Compat <= 1
+	if counted, ok := s.store.(recordCounter); ok {
+		if counts, err := counted.RecordCounts(); err == nil {
+			view.DB.Records = counts
+		}
+		var raised uint64
+		if found, err := counted.MetaJSON(model.MetaCompatRaisedRevision, &raised); err == nil && found && view.DB.Compat >= 2 {
+			view.DB.CompatRaisedAtRevision = &raised
+		}
+	}
 	if info.Backups != nil {
 		preMigration := view.Backup.PreMigration
 		view.Backup = info.Backups.Status()
 		view.Backup.PreMigration = preMigration
 	}
-	if info.Migration != nil {
-		view.Migration = info.Migration()
-	}
+	view.Migration = s.migrationView()
 	return view
+}
+
+// recordCounter is the bbolt store's per-bucket record count and meta read.
+type recordCounter interface {
+	RecordCounts() (map[string]int, error)
+	MetaJSON(key string, out any) (bool, error)
 }
 
 func certSANs(cert *x509.Certificate) []string {
@@ -224,29 +235,6 @@ func (s *Server) connectedAPs() int {
 		count++
 	}
 	return count
-}
-
-// onboarding serves GET /api/onboarding (design §3.15): what an AP needs to
-// reach this controller.
-func (s *Server) onboarding(writer http.ResponseWriter, request *http.Request) {
-	if request.URL.Path != "/api/onboarding" || request.Method != http.MethodGet {
-		routeNotFound(writer)
-		return
-	}
-	view := api.OnboardingView{WSSURL: s.system.wssURL(), DNSMode: s.system.DNSMode(), CAPems: []api.CAPem{}}
-	for _, ca := range s.caCertificates() {
-		name := ca.Subject.CommonName
-		if name == "" {
-			name = ca.Subject.String()
-		}
-		view.CAPems = append(view.CAPems, api.CAPem{Name: name, PEM: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.Raw}))})
-	}
-	if ini, err := RenderCloudINI(view.WSSURL); err == nil {
-		view.CloudINI = ini
-	} else {
-		log.Printf("onboarding: cannot render cloud.ini for %q: %v", view.WSSURL, err)
-	}
-	respond(writer, http.StatusOK, view)
 }
 
 // RWRootCerts is the CA bundle path cloud.ini points at: the stock bundle
@@ -315,7 +303,7 @@ func CheckAPURL(raw string) error {
 // database is copied with tx.WriteTo into a private temporary file first
 // and only then streamed, so no bbolt read transaction is open while a slow
 // client downloads. One download runs at a time; admin scope only.
-func (s *Server) downloadBackup(writer http.ResponseWriter, request *http.Request) {
+func (s *Server) downloadBackup(writer http.ResponseWriter, request *http.Request, _ params) {
 	if !requireAdmin(writer, request) {
 		return
 	}
@@ -384,5 +372,9 @@ func (s *Server) downloadBackup(writer http.ResponseWriter, request *http.Reques
 	log.Printf("audit: database backup %s (%d bytes) downloaded by %s from %s", name, info.Size(), principal(request), request.RemoteAddr)
 	if _, err := io.Copy(writer, file); err != nil {
 		log.Printf("backup download %s: %v", name, err)
+		return
 	}
+	// The file holds every PSK and AP secret: the download is a history
+	// action (design §4.11), not only a log line.
+	s.recordAction(request, "", fmt.Sprintf("Downloaded a database backup (%s, %d bytes)", name, info.Size()))
 }

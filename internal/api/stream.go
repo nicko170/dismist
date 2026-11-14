@@ -83,6 +83,12 @@ type ConfigEvent struct {
 type PushState string
 
 const (
+	// PushStateReconnecting: the AP was disconnected so it fetches the new
+	// config when it reconnects (reconnect mode).
+	PushStateReconnecting PushState = "reconnecting"
+	// PushStateOffline: the AP is not connected; it gets the config when
+	// it connects.
+	PushStateOffline           PushState = "offline"
 	PushStateNotified          PushState = "notified"
 	PushStateFetched           PushState = "fetched"
 	PushStateApplied           PushState = "applied"
@@ -97,6 +103,9 @@ type PushEvent struct {
 	Revision uint64    `json:"revision"`
 	State    PushState `json:"state"`
 	Error    string    `json:"error"`
+	// Mode is how the config is delivered: "notify" or "reconnect" (empty
+	// when the API inferred the state from the AP's view).
+	Mode string `json:"mode,omitempty"`
 }
 
 // PendingEvent is the `pending` event: the pending-AP count changed.

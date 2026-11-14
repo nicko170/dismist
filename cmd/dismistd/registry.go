@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/nicko170/dismist/internal/compile"
+	"github.com/nicko170/dismist/internal/compile/effective"
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
 	"github.com/nicko170/dismist/internal/protocol"
+	"github.com/nicko170/dismist/internal/telemetry"
 )
 
 type registryOptions struct {
@@ -33,7 +35,45 @@ type registryOptions struct {
 	APConfig apConfigStore
 	// Features are the daemon's -ap-features defaults; each AP's stored
 	// protocol_features override them (design §5.7). Zero: all off.
+	// -config-push=notify adds config_change_notify to them.
 	Features controller.Features
+
+	// Phase 1 to 4 protocol hooks (design §5). Each is optional.
+
+	// Events receives every AP's typed events (eventSink.Event).
+	Events func(controller.Event)
+	// Status persists hellos, reboots, the VAP list, the tunnel address
+	// and the ep-config request in ap_status (newAPStatusSink once the
+	// model's APStatusStore is merged).
+	Status controller.StatusSink
+	// LastKnownVAPs returns an AP's persisted VAP list (ap_status), the
+	// unchanged-config verification's baseline after a restart.
+	LastKnownVAPs func(apID string) []telemetry.VAP
+	// OnPush receives push lifecycle states (SSE "push").
+	OnPush func(controller.PushEvent)
+	// OnPushModeLearned stores a learned push mode (APRecord.PushMode).
+	OnPushModeLearned func(apID, mode string)
+	// PushMode returns an AP's stored push mode (APRecord.PushMode).
+	PushMode func(ap model.APRecord) string
+	// LocateUntil returns an AP's locate expiry (APRecord.LocateUntil);
+	// OnLocateExpired clears it and pushes LED.Locator=false.
+	LocateUntil     func(ap model.APRecord) time.Time
+	OnLocateExpired func(apID string)
+	// OnVerified stores verification results; nil stores them in
+	// ap_config.delivered.verified through APConfig.
+	OnVerified func(apID string, result controller.Verification)
+	// OnScan stores neighbour scans (scans bucket, phase 3).
+	OnScan func(apID string, at time.Time, scan telemetry.Scan)
+	// OnCommandOutput receives ap-cmd-output- messages (phase 4).
+	OnCommandOutput func(apID string, output telemetry.CommandOutput)
+	// Timings overrides the protocol timers (tests).
+	Timings controller.Timings
+}
+
+// verifiedStore is the optional part of the ap_config store that records
+// verification results (*model.APConfigStore implements it).
+type verifiedStore interface {
+	SetVerified(apID string, verification model.Verification) error
 }
 
 // apConfigStore is the part of *model.APConfigStore the registry uses.
@@ -122,7 +162,14 @@ func newAPServer(ap model.APRecord, served compile.Served, options registryOptio
 	}
 	if options.APConfig != nil {
 		serverOptions.OnConfigDelivered = recordDelivered(options.APConfig)
+		if delivered, ok, err := options.APConfig.Delivered(ap.ID); err == nil && ok {
+			serverOptions.LastDelivered = delivered.Bytes
+		}
+		if store, ok := options.APConfig.(verifiedStore); ok && options.OnVerified == nil {
+			serverOptions.OnVerified = verificationRecorder(store)
+		}
 	}
+	applyProtocolOptions(&serverOptions, ap, options)
 	switch served.Source {
 	case compile.SourceCompiled:
 	case compile.SourceDelivered:
@@ -140,6 +187,34 @@ func newAPServer(ap model.APRecord, served compile.Served, options registryOptio
 		return nil, fmt.Errorf("control session: %w", err)
 	}
 	return server, nil
+}
+
+// applyProtocolOptions sets an AP's phase 1 to 4 protocol hooks.
+func applyProtocolOptions(serverOptions *controller.Options, ap model.APRecord, options registryOptions) {
+	serverOptions.OnEvent = options.Events
+	serverOptions.Status = options.Status
+	serverOptions.OnPush = options.OnPush
+	serverOptions.OnPushModeLearned = options.OnPushModeLearned
+	serverOptions.OnScan = options.OnScan
+	serverOptions.OnCommandOutput = options.OnCommandOutput
+	serverOptions.OnLocateExpired = options.OnLocateExpired
+	serverOptions.Timings = options.Timings
+	serverOptions.LocalFiles = effective.LocalFilesState(ap.LocalFiles)
+	if options.OnVerified != nil {
+		serverOptions.OnVerified = options.OnVerified
+	}
+	if options.LastKnownVAPs != nil {
+		serverOptions.LastKnownVAPs = options.LastKnownVAPs(ap.ID)
+	}
+	if options.PushMode != nil {
+		switch mode := options.PushMode(ap); mode {
+		case controller.PushModeNotify, controller.PushModeReconnect:
+			serverOptions.PushMode = mode
+		}
+	}
+	if options.LocateUntil != nil {
+		serverOptions.LocateUntil = options.LocateUntil(ap)
+	}
 }
 
 func errorText(err error) string {

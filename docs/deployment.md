@@ -32,9 +32,9 @@ default. The endpoint is read-only. These flags control it:
 | `-metrics-listen` | `127.0.0.1:9090` | listen address; empty disables metrics |
 | `-metrics-allow-remote` | off | allow a non-loopback `-metrics-listen`: `:9090` (all addresses, IPv4 and IPv6), `0.0.0.0`, `[::]` or any numeric IP. Without it only a numeric loopback address is accepted. Hostnames, including `localhost`, are always refused |
 | `-metrics-token-file` | none | require `Authorization: Bearer <token>` on every scrape. The file must be private (mode `0600` or `0400`) and hold one token of at least 16 characters; it is read at startup |
-| `-metrics-names` | off | add site, AP and WLAN names as a `name` label on `*_info` series |
-| `-metrics-clients` | `aggregate` | client series: `off`, `aggregate` or `per-client` (per-client series carry client MACs) |
-| `-metrics-client-limit` | 100 | most clients exported in per-client mode |
+| `-metrics-names` | off | add site, AP and WLAN names as a `name` label on `*_info` series (plus LLDP neighbours, the served certificate's name and, per-client, client host names) |
+| `-metrics-clients` | `aggregate` | client series: `off` (counts only), `aggregate` (per radio: clients by signal and protocol, weakest and mean signal, throughput; no MACs) or `per-client` (also about 8 series per client, labelled with its MAC) |
+| `-metrics-client-limit` | 100 | most clients exported in per-client mode, in MAC order; `dismist_metrics_clients_omitted` counts the rest |
 
 dismistd logs a warning when it listens beyond loopback without a token. A
 local Prometheus agent can scrape the default address:
@@ -49,11 +49,34 @@ scrape_configs:
 For a remote Prometheus, listen on a reachable address with
 `-metrics-allow-remote`, set `-metrics-token-file`, and give the scraper the
 same token (`authorization: {credentials_file: ...}`), or keep the loopback
-default and use a tunnel or a local agent. Metrics cover site and AP counts,
-connections, associated clients, decoded telemetry frames, uptime,
-configuration revisions, last-seen time, and the controller's Go runtime and
-process. Labels are limited to site and AP IDs; names, client MACs, IP
-addresses, SSIDs, passphrases and credentials are excluded.
+default and use a tunnel or a local agent.
+
+Metrics cover the controller (build, AP certificate expiry, database size and
+free space, schema and migration state, backups, AP connection routing, TLS
+handshake failures, AP DNS answers, UI requests, Go runtime and process),
+each AP's status and protocol counters (connected, revisions, config errors,
+boots, disconnects, pushes, authentication failures), and, while the AP
+reports, its health (CPU, memory, temperature, `/rw`, round trip), uplink and
+PoE, radios (channel, width, noise, power, utilisation, counters), WLANs and
+client aggregates. Telemetry series disappear when an AP disconnects or
+misses three telemetry intervals, so a gap means no data, never a stale
+value. A fully reporting AP is about 150 to 250 series. By default, labels
+carry site, AP and network IDs only; names, client MACs, IP addresses, host
+names, SSIDs, passphrases and credentials are excluded. The Helm chart ships
+alert rules and three Grafana dashboards for these metrics; outside
+Kubernetes, load `charts/dismist/monitoring/rules.yaml` into Prometheus and
+import the JSON files in `charts/dismist/monitoring/dashboards` into Grafana
+(they take a `namespace` label, which a static scrape config can add with
+`labels: {namespace: dismist}`).
+
+Other daemon options:
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `-backup-interval`, `-backup-keep`, `-backup-max-bytes`, `-backup-dir` | `24h`, 7, 30 % of the volume, `backups/` next to `-db` | scheduled database snapshots (see Backup and restore) |
+| `-ap-features` | none | protocol features on by default for every AP; switch them on per AP first |
+| `-config-push` | `reconnect` | how a changed config reaches a connected AP: `reconnect`, or `notify` (sends `ep-config-change`, falls back to a reconnect) |
+| `-retain-samples`, `-retain-sessions`, `-retain-events` | 30, 180, 90 days | how long history is kept |
 
 The default private data paths are relative to the working directory:
 
@@ -184,9 +207,18 @@ name for a known firmware requirement.
 
 ## Backup and restore
 
-Stop the service before copying `controller.db`. Back up that file together
-with the CA key and certificate, TLS key and certificate, AP config template,
-admin token, and the initial import file if used. Keep copies encrypted and
+dismistd takes a consistent snapshot of the database every
+`-backup-interval` (24 hours) into `-backup-dir`, keeps `-backup-keep` (7) of
+them, and skips one (with a warning event) when it would leave less than a
+quarter of the volume free. System, Backup downloads a consistent copy at
+any time without stopping the service (`GET /api/system/backup`). Before a
+schema migration, dismistd also writes `controller.db.pre-v<N>-<UTC time>`
+next to the database; see [Kubernetes, Rollback](kubernetes.md#rollback) for
+when and how to restore it.
+
+To copy the database file itself, stop the service first. Back up the
+database together with the CA key and certificate, TLS key and certificate,
+AP config template, admin token, and the initial import file if used. Keep copies encrypted and
 access limited: the database stores the AP secrets, WLAN PSKs and history,
 and the secrets permit AP control.
 To restore, stop the service, replace the files with owner `dismist` and

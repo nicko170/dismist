@@ -18,6 +18,7 @@ __pycache__/
 /ui/blob-report/
 /ui/playwright/.cache/
 /ui/coverage/
+/ui/dist-mock/
 /.worktrees/
 .env
 .env.*
@@ -31,4 +32,7 @@ __pycache__/
 # Locally built binaries
 /cmd/dismistd/dismistd
 /cmd/dismist/dismist
+/dismistd
+/dismist
 /fakeap
+/migrationcompat

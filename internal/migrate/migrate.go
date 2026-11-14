@@ -9,11 +9,13 @@
 // records meta.migration_state {state: "legacy", …} and returns, and
 // dismistd keeps running the legacy compiler.
 //
-// Phase 0 registers no steps; the schema-2 migration (v2.go) arrives in
-// phase 2.
+// Steps registers the schema-2 migration (v2.go); Run also re-runs it when
+// an older binary wrote after it committed (design §4.1 rule 3).
 package migrate
 
 import (
+	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -23,6 +25,7 @@ import (
 	"time"
 
 	"github.com/nicko170/dismist/internal/model"
+	bolt "go.etcd.io/bbolt"
 )
 
 // FreeSpaceMargin is the space a migration needs beyond the database size.
@@ -38,6 +41,13 @@ type Context struct {
 	AcceptLocalFiles []string
 	// Logf receives progress lines; nil discards them.
 	Logf func(format string, args ...any)
+
+	// remigration is set by Run when an older binary wrote after the
+	// schema-2 migration (design §4.1 rule 3).
+	remigration *Remigration
+	// lastReport is the report of the last schema-2 plan (kept for the
+	// legacy-mode record).
+	lastReport json.RawMessage
 }
 
 func (c *Context) logf(format string, args ...any) {
@@ -83,6 +93,9 @@ type MigrationState struct {
 	Schema uint64 `json:"schema"`
 	// Copy is the pre-migration copy written for this run.
 	Copy string `json:"copy,omitempty"`
+	// Report is the (redacted) schema-2 lift report of the run, kept with
+	// a refusal so /system/migration can show why.
+	Report json.RawMessage `json:"report,omitempty"`
 }
 
 // Options configures Run.
@@ -131,8 +144,15 @@ func CopyName(dbPath string, toSchema uint64, at time.Time) string {
 // database (tx.WriteTo into a temporary file, fsync, rename).
 func WritePreMigrationCopy(store *model.BoltStore, toSchema uint64, at time.Time) (string, error) {
 	path := filepath.Join(filepath.Dir(store.Path()), CopyName(store.Path(), toSchema, at))
-	if _, err := os.Stat(path); err == nil {
-		return "", fmt.Errorf("pre-migration copy %s already exists", path)
+	// A re-migration in the same second keeps the earlier copy.
+	for n := 2; ; n++ {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if n > 99 {
+			return "", fmt.Errorf("pre-migration copy %s already exists", path)
+		}
+		path = filepath.Join(filepath.Dir(store.Path()), fmt.Sprintf("%s-%d", CopyName(store.Path(), toSchema, at), n))
 	}
 	if _, err := store.WriteBackup(path); err != nil {
 		return "", err
@@ -186,6 +206,20 @@ func Run(store *model.BoltStore, steps []Step, opts Options) (Result, error) {
 	}
 	result := Result{State: MigrationState{State: StateNotRun, At: opts.Now, Schema: info.Schema}}
 	current := info.Schema
+	if status := store.SchemaStatus(); status.Meta >= 2 && status.OlderWriter {
+		// An older binary wrote after the schema-2 migration and dropped
+		// the typed keys: migrate again from the legacy keys.
+		current = 1
+		var v2Revision uint64
+		_ = store.View(func(tx *bolt.Tx) error {
+			if raw := tx.Bucket([]byte(model.BucketMeta)).Get([]byte(model.MetaV2Revision)); len(raw) == 8 {
+				v2Revision = binary.BigEndian.Uint64(raw)
+			}
+			return nil
+		})
+		opts.Context.remigration = &Remigration{FromRevision: v2Revision, ToRevision: store.Snapshot().Revision}
+		opts.Context.logf("migrate: an older release wrote after the schema-2 migration (rev %d to %d); migrating again", v2Revision, store.Snapshot().Revision)
+	}
 	for {
 		step, ok := next(steps, current)
 		if !ok {
@@ -217,6 +251,7 @@ func Run(store *model.BoltStore, steps []Step, opts Options) (Result, error) {
 			}
 			return tx.SetSchema(step.To)
 		})
+		result.State.Report = opts.Context.lastReport
 		var refused *RefusedError
 		if errors.As(err, &refused) {
 			return legacy(store, result, refused.Reason, refused.Paths, opts.Now)
@@ -227,6 +262,7 @@ func Run(store *model.BoltStore, steps []Step, opts Options) (Result, error) {
 		result.Ran = append(result.Ran, step.Name)
 		current = step.To
 		result.State = MigrationState{State: StateCommitted, At: opts.Now, Schema: current, Copy: result.State.Copy}
+		opts.Context.remigration = nil
 	}
 	if len(result.Ran) > 0 {
 		if err := store.PutMetaJSON(model.MetaMigrationState, result.State); err != nil {
@@ -276,5 +312,5 @@ func ReadState(store *model.BoltStore) (MigrationState, error) {
 	return state, nil
 }
 
-// Steps returns the registered migration steps. Phase 0 has none.
-func Steps() []Step { return nil }
+// Steps returns the registered migration steps: the schema-2 migration.
+func Steps() []Step { return []Step{V2Step()} }

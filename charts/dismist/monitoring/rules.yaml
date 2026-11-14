@@ -3,18 +3,32 @@
 # checks and tests it as is (tests/dismist.test.yml), and the chart never
 # passes it through tpl, so the {{ $labels }} templates reach Prometheus.
 #
-# Conventions: one group per area; `max by (namespace, site, ap)` so
+# Conventions: one group per area; `max by (namespace, site, ap[, radio])` so
 # Alertmanager inhibition on [namespace, alertname, target] works and volatile
 # target labels drop out; only warning and info severities until alert
 # routing is decided; summaries name the AP and site, descriptions say what to
-# check. Severities can be overridden and alerts dropped per install
-# (metrics.prometheusRule.severityOverrides, disabledAlerts).
+# check. Radio alerts consider access radios only (dismist_radio_info
+# role="access"), so the scan radio never fires them. Severities can be
+# overridden and alerts dropped per install (metrics.prometheusRule
+# .severityOverrides, disabledAlerts).
 #
-# Phase 0 ships the alerts the current exporter can back. Disconnection,
-# reboot, radio, uplink and certificate alerts follow with their metrics.
+# Telemetry series (health, radios, ports, WLANs) exist only while an AP is
+# connected and reporting, so those alerts go quiet when an AP disconnects;
+# DismistAPDisconnected covers that case.
 groups:
   - name: dismist.aps
     rules:
+      - alert: DismistAPDisconnected
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_connected) == 0
+          and on (namespace, site, ap)
+          max by (namespace, site, ap) (dismist_ap_registered) == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) is disconnected from dismist"
+          description: "The AP has not had a session for 5 minutes. Its clients keep working on its last config, but dismist cannot see or change it. Check the AP's PoE and uplink, then the dismist logs for this AP (authentication or TLS errors)."
       - alert: DismistAPSilent
         expr: |
           (time() - max by (namespace, site, ap) (dismist_ap_last_seen_timestamp_seconds)) > 60
@@ -34,7 +48,23 @@ groups:
           severity: warning
         annotations:
           summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) reconnected more than 4 times in the last hour"
-          description: "Check whether the AP is rebooting (uptime in the dismist UI), its uplink and PoE, and the dismist logs for the disconnect reasons. Config saves that change this AP's config also reconnect it."
+          description: "Check whether the AP is rebooting (DismistAPRebooted, uptime in the dismist UI), its uplink and PoE, and the dismist logs for the disconnect reasons. Config pushes in reconnect mode also reconnect the APs they change."
+      - alert: DismistAPRebooted
+        expr: |
+          max by (namespace, site, ap) (increase(dismist_ap_boots_total[15m])) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) rebooted"
+          description: "The AP's boot count went up. The AP detail page shows its last reboot reason; repeated reboots fire DismistAPRebootLoop."
+      - alert: DismistAPRebootLoop
+        expr: |
+          max by (namespace, site, ap) (increase(dismist_ap_boots_total[6h])) >= 3
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) rebooted {{ printf `%.0f` $value }} times in 6 hours"
+          description: "Check the AP's reboot reasons (AP detail, or `dismist ap33 inspect` from the LAN), its PoE budget (DismistAPPoEConstrained) and temperature. Roll back the last config or protocol-feature change if the reboots started with it."
       - alert: DismistAPConfigNotApplied
         expr: |
           (
@@ -50,6 +80,30 @@ groups:
         annotations:
           summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) has not applied config revision {{ $value }}"
           description: "The AP is connected but has not reported the current config revision as applied for 10 minutes. Check the AP's last config error in the dismist UI; the AP may have rejected the config."
+      - alert: DismistAPConfigDrift
+        expr: |
+          abs(
+            max by (namespace, site, ap) (dismist_ap_reported_config_timestamp_seconds)
+            - on (namespace, site, ap)
+            max by (namespace, site, ap) (dismist_ap_desired_config_timestamp_seconds)
+          ) > 0.001
+          and on (namespace, site, ap)
+          max by (namespace, site, ap) (dismist_ap_connected) == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) runs a different config than dismist serves"
+          description: "The config timestamp the AP reports has differed from the one dismist serves for 15 minutes. The AP may have rejected the new config or recovered to an older one; check its config page and events in dismist."
+      - alert: DismistAPConfigRejected
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_config_error) == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) rejected its config"
+          description: "The AP reported an error applying its config and kept its previous one. Open the AP in dismist for the error, then restore the previous revision from Changes or fix the expert patch that caused it."
       - alert: DismistAPConfigCompileError
         expr: |
           max by (namespace, site, ap) (dismist_ap_config_compile_error) == 1
@@ -59,3 +113,266 @@ groups:
         annotations:
           summary: "dismist cannot compile the config for AP {{ $labels.ap }} (site {{ $labels.site }})"
           description: "The AP keeps the last config it was delivered, so recent changes do not reach it. Open the AP's config page in dismist for the compile error, usually an expert patch, and fix or remove it."
+      - alert: DismistAPVerifyMismatch
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_config_verify_mismatch) == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) does not run what dismist delivered"
+          description: "The post-delivery verification found a WLAN, BSSID, channel, power or country that differs from the delivered config. The AP detail page lists the differences; if the change introduced an experimental value, restore the previous revision from Changes."
+      - alert: DismistAPPushFallingBack
+        expr: |
+          sum by (namespace, site, ap) (increase(dismist_ap_config_pushes_total{result=~"fallback|timeout"}[1h])) > 1
+        labels:
+          severity: info
+        annotations:
+          summary: "Config pushes to AP {{ $labels.ap }} (site {{ $labels.site }}) fall back to reconnecting"
+          description: "The AP did not fetch its config after ep-config-change, so dismist reconnected it instead. Switch the AP's config_change_notify protocol feature off (AP settings, Diagnostics) and check the AP's ep-control log over SSH."
+      - alert: DismistAPAuthFailing
+        expr: |
+          sum by (namespace, site, ap) (increase(dismist_ap_auth_failures_total[15m])) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) fails to authenticate"
+          description: "The AP's proof does not match the secret dismist holds for it, usually after a factory reset or with a wrong secret. Re-enter the AP's EEPROM secret in dismist (AP settings) or re-run `dismist ap33 onboard`."
+      - alert: DismistUnknownAPConnecting
+        expr: |
+          sum by (namespace) (increase(dismist_ap_ws_routes_total{result="unknown_ap"}[30m])) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: "An access point dismist does not know is trying to connect"
+          description: "An AP that is not registered sent a hello. It is listed under pending APs in the dismist UI (Onboard); adopt or dismiss it."
+      - alert: DismistAPTLSFailures
+        expr: |
+          sum by (namespace) (increase(dismist_ap_tls_handshake_errors_total{reason="client_rejected"}[15m])) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "Clients reject dismist's AP certificate ({{ $value | humanize }} in 15 minutes)"
+          description: "Connections to the AP WSS endpoint end with a TLS alert from the client, usually an AP that does not trust the served chain (for example after a factory reset removed the CA roots added during onboarding). Check the dismist logs for the source address and re-run `dismist ap33 onboard` on that AP."
+      - alert: DismistAPHot
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_temperature_celsius{sensor="cpu"}) > 80
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) CPU is at {{ $value | humanize }} °C"
+          description: "The AP has run above 80 °C for 15 minutes (50 to 55 °C is normal). Check its ventilation and mounting."
+      - alert: DismistAPMemoryLow
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_memory_available_bytes)
+          / on (namespace, site, ap)
+          max by (namespace, site, ap) (dismist_ap_memory_total_bytes)
+          < 0.10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) has less than 10% memory available"
+          description: "Check the AP's agent memory (Access point dashboard) for a leak; a reboot clears it."
+      - alert: DismistAPRWFull
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_rw_filesystem_available_bytes)
+          / on (namespace, site, ap)
+          max by (namespace, site, ap) (dismist_ap_rw_filesystem_size_bytes)
+          < 0.10
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) /rw is over 90% full"
+          description: "The AP's small writable filesystem holds its config and logs; when it fills, config writes fail. Inspect it with `dismist ap33 inspect` from the LAN."
+      - alert: DismistAPUplinkDegraded
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_port_up{port="eth0"}) == 1
+          and on (namespace, site, ap)
+          (
+            max by (namespace, site, ap) (dismist_ap_port_speed_bits_per_second{port="eth0"}) < 1e9
+            or
+            max by (namespace, site, ap) (dismist_ap_port_full_duplex{port="eth0"}) == 0
+          )
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) uplink is below 1 Gb/s full duplex"
+          description: "A bad cable or pair, or a forced port speed on the switch. Check the cable and the switch port settings."
+      - alert: DismistAPUplinkErrors
+        expr: |
+          max by (namespace, site, ap, port) (rate(dismist_ap_port_receive_fcs_errors_total[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) receives frames with bad checksums on {{ $labels.port }}"
+          description: "More than one corrupted frame a second for 10 minutes usually means a damaged cable or connector. Replace the patch lead first."
+      - alert: DismistAPPoEConstrained
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_power_budget_watts) < 0
+          or
+          max by (namespace, site, ap) (dismist_ap_power_constrained) == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) is short of PoE power"
+          description: "The switch allocates less power than the AP needs, so it limits its radios or disables them. Check the switch's PoE budget and the port's power class (Access point dashboard, PoE panel)."
+      - alert: DismistAPInactiveVLAN
+        expr: |
+          max by (namespace, site, ap, vlan) (dismist_ap_inactive_vlan) == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) sees no traffic on VLAN {{ $labels.vlan }}"
+          description: "A WLAN uses this VLAN but the AP's switch port does not carry it, so clients on that WLAN get no network. Add the VLAN to the switch port's trunk."
+      - alert: DismistAPControllerRTTHigh
+        expr: |
+          max by (namespace, site, ap) (dismist_ap_controller_rtt_seconds{socket="tcp"}) > 0.1
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) round trip to dismist is {{ $value | humanizeDuration }}"
+          description: "The AP measures more than 100 ms to the controller (3 to 10 ms is normal). Check the path between the AP and the cluster."
+      - alert: DismistAPClockSkew
+        expr: |
+          max by (namespace, site, ap) (abs(dismist_ap_clock_skew_seconds)) > 30
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) clock is {{ $value | humanizeDuration }} off"
+          description: "The AP's clock differs from the controller's by more than 30 seconds. Check the site's NTP setting and that the AP can reach an NTP server."
+
+  - name: dismist.radios
+    rules:
+      - alert: DismistRadioMissing
+        expr: |
+          max by (namespace, site, ap, radio) (dismist_radio_missing) == 1
+          and on (namespace, site, ap, radio)
+          max by (namespace, site, ap, radio) (dismist_radio_info{role="access"}) == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) reports radio {{ $labels.radio }} missing"
+          description: "The AP cannot find one of its radios, usually a hardware or driver fault. Reboot the AP; if the radio stays missing, replace it."
+      - alert: DismistRadioNotBeaconing
+        expr: |
+          max by (namespace, site, ap, radio) (rate(dismist_radio_beacons_total[5m])) == 0
+          and on (namespace, site, ap, radio)
+          max by (namespace, site, ap, radio) (dismist_radio_info{role="access"}) == 1
+          and on (namespace, site, ap, radio)
+          count by (namespace, site, ap, radio) (dismist_wlan_clients) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) radio {{ $labels.radio }} sends no beacons"
+          description: "The radio has WLANs but has not beaconed for 5 minutes, so clients cannot see them. Check the AP's events for radio errors and its PoE budget; reboot the AP if it persists."
+      - alert: DismistRadioChannelCongested
+        expr: |
+          max by (namespace, site, ap, radio) (dismist_radio_channel_utilization_ratio{type="all"}) > 0.7
+          and on (namespace, site, ap, radio)
+          max by (namespace, site, ap, radio) (dismist_radio_info{role="access"}) == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) radio {{ $labels.radio }} channel is {{ $value | humanizePercentage }} busy"
+          description: "The channel has been over 70% utilised for 30 minutes. The Clients & RF dashboard shows whether it is this network's traffic or neighbours; plan a different channel in dismist (Site, RF)."
+      - alert: DismistRadioNoiseHigh
+        expr: |
+          max by (namespace, site, ap, radio) (dismist_radio_noise_floor_dbm) > -80
+          and on (namespace, site, ap, radio)
+          max by (namespace, site, ap, radio) (dismist_radio_info{role="access"}) == 1
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) radio {{ $labels.radio }} noise floor is {{ $value }} dBm"
+          description: "A noise floor above -80 dBm cuts the usable signal-to-noise for every client. Look for non-Wi-Fi interference (microwaves, video senders) or move the radio to another channel."
+      - alert: DismistRadarDetected
+        expr: |
+          (
+            max by (namespace, site, ap, radio) (dismist_radio_dfs_radar_detected) == 1
+            or
+            max by (namespace, site, ap, radio) (changes(dismist_radio_channel{band="5"}[1h])) > 2
+          )
+          and on (namespace, site, ap, radio)
+          max by (namespace, site, ap, radio) (dismist_radio_info{role="access"}) == 1
+        labels:
+          severity: info
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) radio {{ $labels.radio }} detected radar or keeps changing channel"
+          description: "On a DFS channel the radio must leave when it detects radar. If it happens often, keep the 5 GHz plan on non-DFS channels (36 to 48, 149 to 161)."
+      - alert: DismistRadioPlanMismatch
+        expr: |
+          max by (namespace, site, ap, band) (dismist_radio_channel{band=~"2.4|5|6"})
+          != on (namespace, site, ap, band)
+          max by (namespace, site, ap, band) (dismist_radio_planned_channel)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AP {{ $labels.ap }} (site {{ $labels.site }}) {{ $labels.band }} GHz radio is not on its planned channel"
+          description: "The radio has been on another channel than dismist planned for 10 minutes: a DFS move after radar, or a config the AP did not apply. Check the AP's events and the post-delivery verification on its detail page."
+      - alert: DismistWLANWrongPassphrase
+        expr: |
+          sum by (namespace, site, ap, wlan) (increase(dismist_wlan_eapol_invalid_mic_total[15m])) > 10
+        labels:
+          severity: info
+        annotations:
+          summary: "Repeated wrong passphrases on WLAN {{ $labels.wlan }} at AP {{ $labels.ap }} (site {{ $labels.site }})"
+          description: "More than 10 WPA handshakes failed the passphrase check in 15 minutes: a device with an old passphrase, or someone guessing it. The site's events list the client."
+
+  - name: dismist.controller
+    rules:
+      - alert: DismistServedCertificateExpiring
+        expr: |
+          min by (namespace) (dismist_tls_certificate_not_after_timestamp_seconds{listener="ap-wss"}) - time() < 14 * 86400
+        labels:
+          severity: warning
+        annotations:
+          summary: "The certificate dismist serves to APs expires in {{ $value | humanizeDuration }}"
+          description: "Renewal normally happens 30 days before expiry and dismist restarts within a minute to serve it. Check the cert-manager Certificate and that the dismist pod restarted after the renewal."
+      - alert: DismistTelemetryDecodeErrors
+        expr: |
+          sum by (namespace, site, ap) (rate(dismist_ap_telemetry_decode_errors_total[15m])) > 0
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "dismist cannot decode part of AP {{ $labels.ap }}'s telemetry"
+          description: "Some telemetry sections keep failing to decode, most likely after a firmware change. The AP still works; the affected dashboard panels go empty. Report the AP's firmware version."
+      - alert: DismistStoreWriteErrors
+        expr: |
+          sum by (namespace) (increase(dismist_store_observation_errors_total[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "dismist cannot write history to its database"
+          description: "Observations (samples, events, client sessions) failed to save. Check the dismist logs and the database volume's free space."
+      - alert: DismistBackupStale
+        expr: |
+          time() - max by (namespace) (dismist_backup_last_success_timestamp_seconds) > 2 * 86400
+        labels:
+          severity: warning
+        annotations:
+          summary: "No dismist database backup for {{ $value | humanizeDuration }}"
+          description: "Scheduled snapshots have not succeeded for two days. The System page shows the last error (usually free space); download a backup from System until it is fixed."
+      - alert: DismistMigrationPending
+        expr: |
+          max by (namespace) (dismist_schema_migration_state{state="legacy"}) == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "dismist runs in legacy mode: the schema 2 migration did not verify"
+          description: "Nothing changed for the APs, but typed settings are paused. Open System, Migration for the reason, fix the record it names and Retry."

@@ -405,3 +405,48 @@ func TestNetworksForSiteIsInBucketKeyOrder(t *testing.T) {
 		t.Fatalf("legacy networks %v, want %v", got, want)
 	}
 }
+
+// A desired config pinned at the AP's revision (the schema-2 migration's
+// legacy compile) is served as is; once the AP's revision moves on, or
+// without a pin, the compile is served.
+func TestPrepareServesPinnedBytesAtTheirRevision(t *testing.T) {
+	store := newStore(t)
+	state := store.Snapshot()
+	ap := findAPRecord(t, state, apOne)
+	revision := compile.ConfigRevision(state, ap)
+	pinned := []byte(`{"pinned":true}`)
+	if err := store.APConfig().PutDesired(apOne, model.DesiredConfig{Revision: revision, Bytes: []byte(`{}`), Pinned: pinned}); err != nil {
+		t.Fatal(err)
+	}
+	servedOne := func(state model.State) compile.Served {
+		for _, one := range compile.Prepare(aptemplate.Default(), state, store.APConfig()) {
+			if one.APID == apOne {
+				return one
+			}
+		}
+		t.Fatal("AP not prepared")
+		return compile.Served{}
+	}
+	if one := servedOne(state); !one.Pinned || !bytes.Equal(one.Config, pinned) || one.Revision != revision || one.Source != compile.SourceCompiled {
+		t.Fatalf("pinned AP: %+v", one)
+	}
+	for index := range state.APs {
+		if state.APs[index].ID == apOne {
+			state.APs[index].ConfigRevision = revision + 1
+		}
+	}
+	if one := servedOne(state); one.Pinned || bytes.Equal(one.Config, pinned) || len(one.Config) == 0 {
+		t.Fatalf("an AP past its pinned revision: %+v", one)
+	}
+}
+
+func findAPRecord(t *testing.T, state model.State, id string) model.APRecord {
+	t.Helper()
+	for _, ap := range state.APs {
+		if ap.ID == id {
+			return ap
+		}
+	}
+	t.Fatalf("no AP %s", id)
+	return model.APRecord{}
+}

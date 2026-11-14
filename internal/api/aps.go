@@ -307,6 +307,11 @@ type APDetail struct {
 	RFPlan           map[Band]*PlannedRadio `json:"rf_plan" tstype:"{ [band in Band]: PlannedRadio | null }"`
 	LocateUntil      *time.Time             `json:"locate_until" tstype:"string | null,required"`
 	Capabilities     APCapabilities         `json:"capabilities"`
+	// Commands says which actions dismist can send this AP (phase 3).
+	Commands CommandSupport `json:"commands"`
+	// RebootsDetected is how often dismist saw the AP reboot (hello boot
+	// count or uptime), newest first, at most 10.
+	RebootsDetected []time.Time `json:"reboots_detected"`
 }
 
 // PendingReason is why an AP is in the pending-adoption list.
@@ -332,6 +337,88 @@ type PendingAP struct {
 	LastSeen      time.Time     `json:"last_seen"`
 	Attempts      int           `json:"attempts"`
 	Reason        PendingReason `json:"reason"`
+	// Dismissed is true for rows listed with ?dismissed=1 that are hidden
+	// until DismissedUntil.
+	Dismissed      bool       `json:"dismissed"`
+	DismissedUntil *time.Time `json:"dismissed_until" tstype:"string | null,required"`
+}
+
+// PendingList is GET /api/aps/pending (the response is the bare array).
+type PendingList = []PendingAP
+
+// APList is GET /api/aps?site= (the response is the bare array).
+type APList = []APView
+
+// APPatch is PATCH /api/aps/$id (If-Match required): a JSON merge patch.
+// Absent means unchanged. Secret is write-only (hex or base64); null or ""
+// keeps it. ProtocolFeatures switches features per AP; a null value resets
+// one to the daemon default. The overrides (phase 2) take null for
+// "inherit the site value".
+type APPatch struct {
+	Name             *string                 `json:"name,omitempty"`
+	SiteID           *string                 `json:"site_id,omitempty"`
+	ManagementIP     *string                 `json:"management_ip,omitempty"`
+	Secret           *string                 `json:"secret,omitempty"`
+	LocalFiles       []LocalFileView         `json:"local_files,omitempty"`
+	ProtocolFeatures map[string]*bool        `json:"protocol_features,omitempty" tstype:"{ [feature: string]: boolean | null }"`
+	LEDBrightness    *int                    `json:"led_brightness,omitempty" tstype:"number | null"`
+	SSHEnabled       *bool                   `json:"ssh_enabled,omitempty" tstype:"boolean | null"`
+	RF               map[Band]*RadioOverride `json:"rf,omitempty" tstype:"{ [band in Band]?: Partial<RadioOverride> | null }"`
+	Management       any                     `json:"management,omitempty" tstype:"unknown"`
+	Eth1             any                     `json:"eth1,omitempty" tstype:"unknown"`
+	WiredClientStats *bool                   `json:"wired_client_stats,omitempty" tstype:"boolean | null"`
+}
+
+// APDeleted is DELETE /api/aps/$id.
+type APDeleted struct {
+	ID            string `json:"id"`
+	Revision      uint64 `json:"revision"`
+	PurgedHistory bool   `json:"purged_history"`
+}
+
+// APTelemetry is GET /api/aps/$id/telemetry (phase 1): the AP's decoded
+// telemetry, empty while it is offline or before its first frame.
+type APTelemetry struct {
+	APID             string      `json:"ap_id"`
+	LastFull         *time.Time  `json:"last_full" tstype:"string | null,required"`
+	LastFast         *time.Time  `json:"last_fast" tstype:"string | null,required"`
+	FullFrames       uint64      `json:"full_frames"`
+	FastFrames       uint64      `json:"fast_frames"`
+	UptimeSeconds    uint64      `json:"uptime_seconds"`
+	ClockSkewSeconds *float64    `json:"clock_skew_s" tstype:"number | null,required"`
+	ConfigTimestamp  float64     `json:"config_timestamp"`
+	Country          string      `json:"country"`
+	Health           APHealth    `json:"health"`
+	Uplink           APUplink    `json:"uplink"`
+	IP               APIP        `json:"ip"`
+	Radios           []RadioView `json:"radios"`
+	WLANs            []WLANLive  `json:"wlans"`
+	// BLE is the AP's BLE radio (field 38, phase 4); null when the AP
+	// reports none.
+	BLE *APBLE `json:"ble" tstype:"APBLE | null,required"`
+}
+
+// APBLE is the BLE indicator: whether the AP reports a BLE radio and
+// whether its counters show activity (advertising, scanning or events).
+type APBLE struct {
+	Alive      bool   `json:"alive"`
+	TxAdverts  uint64 `json:"tx_adverts"`
+	RxAdverts  uint64 `json:"rx_adverts"`
+	Scans      uint64 `json:"scans"`
+	Errors     uint64 `json:"errors"`
+	ResetsHung uint64 `json:"resets_hung"`
+}
+
+// APLogLine is one kernel log line (24.1, phase 4).
+type APLogLine struct {
+	At   *time.Time `json:"at" tstype:"string | null,required"`
+	Text string     `json:"text"`
+}
+
+// APLog is GET /api/aps/$id/log: the bounded kernel-log ring.
+type APLog struct {
+	APID  string      `json:"ap_id"`
+	Lines []APLogLine `json:"lines"`
 }
 
 // APInput is POST /api/aps. Secret is the AP's 32-byte EEPROM secret as hex
@@ -400,4 +487,10 @@ type APConfigView struct {
 	SitePatch         any               `json:"site_patch" tstype:"{ [key: string]: unknown }"`
 	APPatch           any               `json:"ap_patch" tstype:"{ [key: string]: unknown }"`
 	H0                *H0View           `json:"h0" tstype:"H0View | null,required"`
+	// Compile is the compile trace and shadowing (phase 2; null for the
+	// applied view).
+	Compile *CompileReport `json:"compile" tstype:"CompileReport | null,required"`
+	// Legacy is true when the config came from the frozen v0 compiler
+	// (legacy mode, design §4.7).
+	Legacy bool `json:"legacy"`
 }

@@ -14,7 +14,7 @@ import (
 // switch to client_golang (internal/metrics/handler.go on ap-identity), kept
 // verbatim apart from taking its inputs as arguments. It is the oracle for
 // "same metric names, types, labels and values".
-func legacyExposition(state model.State, servers map[string]session) string {
+func legacyExposition(state model.State, servers map[string]Session) string {
 	sort.Slice(state.Sites, func(i, j int) bool { return state.Sites[i].ID < state.Sites[j].ID })
 	sort.Slice(state.APs, func(i, j int) bool { return state.APs[i].ID < state.APs[j].ID })
 

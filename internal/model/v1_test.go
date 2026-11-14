@@ -128,17 +128,17 @@ func TestCompatGuardRefusesNewerDatabaseWithoutWriting(t *testing.T) {
 	}
 	seedSite(t, store)
 	_ = store.Close()
-	writeMetaUint(t, path, MetaCompat, 2)
+	writeMetaUint(t, path, MetaCompat, SupportedSchema+1)
 	before, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = OpenBolt(path, "")
 	var compat *CompatError
-	if !errors.As(err, &compat) || compat.Compat != 2 || compat.ExitCode() != 78 {
-		t.Fatalf("compat 2 accepted or wrong error: %v", err)
+	if !errors.As(err, &compat) || compat.Compat != SupportedSchema+1 || compat.ExitCode() != 78 {
+		t.Fatalf("compat %d accepted or wrong error: %v", SupportedSchema+1, err)
 	}
-	want := "controller.db needs dismist schema 2; restore controller.db.pre-v2-* to run this version (docs/kubernetes.md#rollback)"
+	want := "controller.db needs dismist schema 3; restore controller.db.pre-v3-* to run this version (docs/kubernetes.md#rollback)"
 	if err.Error() != want {
 		t.Fatalf("message %q", err.Error())
 	}
@@ -170,7 +170,7 @@ func TestCompatGuardExits78(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = store.Close()
-	writeMetaUint(t, path, MetaCompat, 2)
+	writeMetaUint(t, path, MetaCompat, SupportedSchema+1)
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCompatGuardExits78$")
 	cmd.Env = append(os.Environ(), "DISMIST_COMPAT_CHILD_DB="+path)
 	var stderr bytes.Buffer
@@ -180,7 +180,7 @@ func TestCompatGuardExits78(t *testing.T) {
 	if !errors.As(err, &exit) || exit.ExitCode() != 78 {
 		t.Fatalf("child exit %v, stderr %s", err, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "controller.db needs dismist schema 2; restore controller.db.pre-v2-*") {
+	if !strings.Contains(stderr.String(), "controller.db needs dismist schema 3; restore controller.db.pre-v3-*") {
 		t.Fatalf("missing message: %s", stderr.String())
 	}
 }
