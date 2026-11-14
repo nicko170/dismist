@@ -654,7 +654,11 @@ func (s *Server) apTypedPatch(state model.State, ap model.APRecord, typed map[st
 	if site := findSite(state, ap.SiteID); site != nil {
 		experimental = siteExperimental(*site)
 	}
-	if keys := experimentalKeys(s.registry(), changed); len(keys) > 0 && !experimental {
+	currentValues := map[string]any{}
+	if object, err := recordMap(ap); err == nil {
+		currentValues = optionValues("ap", object)
+	}
+	if keys := experimentalKeys(s.registry(), changed, currentValues); len(keys) > 0 && !experimental {
 		return nil, experimentalDisabled(keys)
 	}
 	return result, nil

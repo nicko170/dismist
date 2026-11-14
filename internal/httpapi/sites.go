@@ -211,7 +211,7 @@ func (s *Server) experimentalInUse(root string, record any, keys []string) []str
 			typed[key] = value
 		}
 	}
-	result = append(result, experimentalKeys(s.registry(), optionValues(root, typed))...)
+	result = append(result, experimentalKeys(s.registry(), optionValues(root, typed), nil)...)
 	return result
 }
 
@@ -584,7 +584,11 @@ func (s *Server) parseSitePatch(state model.State, site model.Site, patch map[st
 	if value, ok := typed["experimental"].(bool); ok {
 		experimental = value
 	}
-	if keys := experimentalKeys(s.registry(), changed); len(keys) > 0 && !experimental {
+	currentValues := map[string]any{}
+	if object, err := recordMap(site); err == nil {
+		currentValues = optionValues("site", object)
+	}
+	if keys := experimentalKeys(s.registry(), changed, currentValues); len(keys) > 0 && !experimental {
 		return edit, experimentalDisabled(keys)
 	}
 	for key := range typed {

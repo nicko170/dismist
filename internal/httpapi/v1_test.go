@@ -827,4 +827,14 @@ func TestCreateMinimalWLANInTypedMode(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("wpa2 personal: %d %s", response.Code, response.Body.String())
 	}
+	// The WLAN form sends whole sections: experimental options at their
+	// default or off need no experimental switch; a real experimental value
+	// still does.
+	response = f.call(t, http.MethodPost, "/api/sites/home/networks", `{"ssid":"Example-4","psk":"example-passphrase-4","qos_class":"none","owe_ssid":"",`+
+		`"roaming":{"fast":"none","ap_key_cache":false},"broadcast":{"mcast_to_ucast":false}}`)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("form defaults: %d %s", response.Code, response.Body.String())
+	}
+	errorOf(t, f.call(t, http.MethodPost, "/api/sites/home/networks", `{"ssid":"Example-5","psk":"example-passphrase-5","qos_class":"video"}`),
+		http.StatusUnprocessableEntity, api.ErrorCodeExperimentalDisabled)
 }

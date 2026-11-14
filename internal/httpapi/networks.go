@@ -891,7 +891,13 @@ func (s *Server) parseWLANPatch(state model.State, siteID string, current *model
 	}
 	site := findSite(state, siteID)
 	experimental := site != nil && siteExperimental(*site)
-	if keys := experimentalKeys(s.registry(), changed); len(keys) > 0 && !experimental {
+	var currentValues map[string]any
+	if current != nil {
+		if object, err := recordMap(*current); err == nil {
+			currentValues = optionValues("wlan", object)
+		}
+	}
+	if keys := experimentalKeys(s.registry(), changed, currentValues); len(keys) > 0 && !experimental {
 		return edit, experimentalDisabled(keys)
 	}
 	if len(typed) > 0 {
