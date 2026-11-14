@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +23,7 @@ func apiFixture(t *testing.T, allowedHosts ...string) (http.Handler, *model.Stor
 		t.Fatal(err)
 	}
 	err = store.Update(func(state *model.State) error {
-		state.APs = []model.APRecord{{ID: "ap-1", Name: "bench", SiteID: "lab", SecretFile: "private/secret.bin"}}
+		state.APs = []model.APRecord{{ID: "ap-1", Name: "bench", SiteID: "lab", SecretFile: "private/secret.bin", Secret: testSecret}}
 		state.Networks = []model.Network{{ID: "wlan-1", SSID: "TestSSID", PSK: "example-passphrase-11", VLANID: 123, Enabled: true}}
 		return nil
 	})
@@ -51,12 +53,18 @@ func request(t *testing.T, handler http.Handler, method, path, body string) *htt
 	return response
 }
 
+// testSecret is a recognisable AP secret for leak checks.
+var testSecret = bytes.Repeat([]byte("Sekrit!!"), 4)
+
 func TestListsRedactPasswordsAndSecretFiles(t *testing.T) {
 	handler, _, _ := apiFixture(t)
-	for _, path := range []string{"/api/networks", "/api/aps"} {
+	for _, path := range []string{"/api/networks", "/api/aps", "/api/status", "/api/sites"} {
 		response := request(t, handler, http.MethodGet, path, "")
-		if response.Code != http.StatusOK || bytes.Contains(response.Body.Bytes(), []byte("example-passphrase-11")) ||
-			bytes.Contains(response.Body.Bytes(), []byte("private/secret.bin")) {
+		body := response.Body.Bytes()
+		if response.Code != http.StatusOK || bytes.Contains(body, []byte("example-passphrase-11")) ||
+			bytes.Contains(body, []byte("private/secret.bin")) || bytes.Contains(body, testSecret) ||
+			bytes.Contains(body, []byte(base64.StdEncoding.EncodeToString(testSecret))) ||
+			bytes.Contains(body, []byte(hex.EncodeToString(testSecret))) {
 			t.Fatalf("secret leaked from %s: %s", path, response.Body.String())
 		}
 	}

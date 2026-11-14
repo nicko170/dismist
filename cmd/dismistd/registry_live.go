@@ -14,8 +14,8 @@ import (
 )
 
 type apBinding struct {
-	address    string
-	secretFile string
+	address string
+	secret  string
 }
 
 type apRegistry struct {
@@ -56,7 +56,7 @@ func bindingForAP(ap model.APRecord, options registryOptions) apBinding {
 	if address == "" && ap.ID == options.DefaultID {
 		address = options.DefaultIP
 	}
-	return apBinding{address: address, secretFile: ap.SecretFile}
+	return apBinding{address: address, secret: string(ap.Secret)}
 }
 
 // reconcile applies registration changes only. The HTTP API updates existing

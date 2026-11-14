@@ -124,6 +124,9 @@ func main() {
 		log.Fatalf("open controller database %q (-db): %v", *dbPath, err)
 	}
 	defer store.Close()
+	if err := importSecretFiles(store); err != nil {
+		log.Fatalf("import AP secret files into the database: %v", err)
+	}
 	state := store.Snapshot()
 	if state.UpdatedAt.IsZero() {
 		state.UpdatedAt = time.Now().UTC()
@@ -139,7 +142,7 @@ func main() {
 		UDPProbeSendTest:   *udpProbeSendTest,
 		UDPProbeRekeyDelay: *udpProbeRekeyDelay,
 	}
-	manager, addresses, err := prepareAPs(state, registryConfig)
+	manager, addresses, err := prepareAPs(withSecrets(state), registryConfig)
 	if err != nil {
 		log.Fatal(err)
 	}

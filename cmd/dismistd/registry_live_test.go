@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -24,10 +23,6 @@ import (
 
 func TestRegistryActivationAndSiteMoveKeepNewestSiteConfig(t *testing.T) {
 	dir := t.TempDir()
-	secretPath := filepath.Join(dir, "delayed-secret.bin")
-	if err := syscall.Mkfifo(secretPath, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	store, err := model.OpenBolt(filepath.Join(dir, "controller.db"), "")
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +30,7 @@ func TestRegistryActivationAndSiteMoveKeepNewestSiteConfig(t *testing.T) {
 	defer store.Close()
 	if err := store.Update(func(state *model.State) error {
 		state.Sites = []model.Site{{ID: "site-a", Name: "A"}, {ID: "site-b", Name: "B"}}
-		state.APs = []model.APRecord{{ID: "ap-a", SiteID: "site-a", ManagementIP: "127.0.0.2", SecretFile: secretPath}}
+		state.APs = []model.APRecord{{ID: "ap-a", SiteID: "site-a", ManagementIP: "127.0.0.2", Secret: bytes.Repeat([]byte{7}, 32)}}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -52,53 +47,18 @@ func TestRegistryActivationAndSiteMoveKeepNewestSiteConfig(t *testing.T) {
 		Base: base, CertDER: []byte{1}, MutationLock: mutationLock,
 	}, model.State{})
 	handler := httpapi.NewWithManager(store, manager, base, "ap-a", "*").UseMutationLock(mutationLock)
-	registered := make(chan error, 1)
-	go func() { registered <- registry.reconcileCurrent(store) }()
-	var writer *os.File
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		fd, openErr := syscall.Open(secretPath, syscall.O_WRONLY|syscall.O_NONBLOCK, 0)
-		if openErr == nil {
-			writer = os.NewFile(uintptr(fd), secretPath)
-			break
-		}
-		if openErr != syscall.ENXIO {
-			t.Fatal(openErr)
-		}
-		time.Sleep(time.Millisecond)
-	}
-	if writer == nil {
-		t.Fatal("registry did not begin preparing the AP")
-	}
-	moved := make(chan *httptest.ResponseRecorder, 1)
-	go func() {
-		request := httptest.NewRequest(http.MethodPut, "/api/aps/ap-a/site", strings.NewReader(`{"site_id":"site-b"}`))
-		request.Header.Set("Content-Type", "application/json")
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		moved <- response
-	}()
-	earlyMove := false
-	select {
-	case <-moved:
-		earlyMove = true
-	case <-time.After(30 * time.Millisecond):
-	}
-	if _, err := writer.Write(bytes.Repeat([]byte{7}, 32)); err != nil {
+	if err := registry.reconcileCurrent(store); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-registered; err != nil {
-		t.Fatal(err)
-	}
-	if earlyMove {
-		t.Fatal("site move committed while stale AP registration was in progress")
-	}
-	response := <-moved
+	request := httptest.NewRequest(http.MethodPut, "/api/aps/ap-a/site", strings.NewReader(`{"site_id":"site-b"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("site move: %d %s", response.Code, response.Body.String())
+	}
+	if err := registry.reconcileCurrent(store); err != nil {
+		t.Fatal(err)
 	}
 	server, ok := manager.Server("ap-a")
 	if !ok {
@@ -138,7 +98,7 @@ func TestReconcileActivatesPersistedAPAndWithdrawsOldIP(t *testing.T) {
 	}, store.Snapshot())
 	if err := store.Update(func(state *model.State) error {
 		state.Sites = []model.Site{{ID: "office", Name: "Office"}}
-		state.APs = []model.APRecord{{ID: "ap-one", SiteID: "office", ManagementIP: "127.0.0.2", SecretFile: secretPath}}
+		state.APs = []model.APRecord{{ID: "ap-one", SiteID: "office", ManagementIP: "127.0.0.2", Secret: mustReadSecret(t, secretPath)}}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -224,7 +184,7 @@ func TestAPRegistryPollsPersistedAPs(t *testing.T) {
 	t.Cleanup(func() { cancel(); <-done })
 	if err := store.Update(func(state *model.State) error {
 		state.Sites = []model.Site{{ID: "office", Name: "Office"}}
-		state.APs = []model.APRecord{{ID: "ap-new", SiteID: "office", ManagementIP: "127.0.0.5", SecretFile: secretPath}}
+		state.APs = []model.APRecord{{ID: "ap-new", SiteID: "office", ManagementIP: "127.0.0.5", Secret: mustReadSecret(t, secretPath)}}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -260,7 +220,7 @@ func TestReconcileWaitsForSiteAssignment(t *testing.T) {
 	}, model.State{})
 	state := model.State{
 		Sites: []model.Site{{ID: "office", Name: "Office"}},
-		APs:   []model.APRecord{{ID: "ap-pending", ManagementIP: "127.0.0.4", SecretFile: secretPath}},
+		APs:   []model.APRecord{{ID: "ap-pending", ManagementIP: "127.0.0.4", Secret: mustReadSecret(t, secretPath)}},
 	}
 	if err := registry.reconcile(state); err != nil {
 		t.Fatalf("unassigned AP caused an error: %v", err)
@@ -281,7 +241,7 @@ func TestReconcileInvalidNewAPKeepsExistingSession(t *testing.T) {
 	}
 	state := model.State{
 		Sites: []model.Site{{ID: "office", Name: "Office"}},
-		APs:   []model.APRecord{{ID: "ap-good", SiteID: "office", ManagementIP: "127.0.0.7", SecretFile: secretPath}},
+		APs:   []model.APRecord{{ID: "ap-good", SiteID: "office", ManagementIP: "127.0.0.7", Secret: mustReadSecret(t, secretPath)}},
 	}
 	options := registryOptions{Base: []byte(`{"WLANs":[{"Auth":{"Type":"psk"}}]}`), CertDER: []byte{1}}
 	manager, _, err := prepareAPs(state, options)
@@ -324,4 +284,13 @@ func assertAPAccess(t *testing.T, manager *controller.Manager, resolver *dnsserv
 	} else if answer.Rcode != dns.RcodeRefused || pinned {
 		t.Fatalf("withdrawn AP %s at %s retains DNS or its session: DNS %d, session %t", id, address, answer.Rcode, pinned)
 	}
+}
+
+func mustReadSecret(t *testing.T, path string) []byte {
+	t.Helper()
+	secret, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return secret
 }

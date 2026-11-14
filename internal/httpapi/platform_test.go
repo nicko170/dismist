@@ -2,10 +2,11 @@ package httpapi
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -280,31 +281,30 @@ func TestMutationBodiesRejectTrailingJSON(t *testing.T) {
 
 func TestRegisterAPStoresPrivateRecordAndReturnsRedactedView(t *testing.T) {
 	handler, store, _ := platformFixture(t)
-	secret := filepath.Join(t.TempDir(), "ap-secret.bin")
-	if err := os.WriteFile(secret, bytes.Repeat([]byte{7}, 32), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	input, _ := json.Marshal(map[string]string{"id": "02:AA:00:00:00:06", "name": "Office AP", "model": "AP33", "management_ip": "192.0.2.10", "site_id": "b", "secret_file": secret})
+	secretBytes := bytes.Repeat([]byte{7}, 32)
+	secret := hex.EncodeToString(secretBytes)
+	input, _ := json.Marshal(map[string]string{"id": "02:AA:00:00:00:06", "name": "Office AP", "model": "AP33", "management_ip": "192.0.2.10", "site_id": "b", "secret": secret})
 	response := request(t, handler, http.MethodPost, "/api/aps", string(input))
-	if response.Code != http.StatusCreated || bytes.Contains(response.Body.Bytes(), []byte(secret)) || bytes.Contains(response.Body.Bytes(), bytes.Repeat([]byte{7}, 32)) || !bytes.Contains(response.Body.Bytes(), []byte(`"config_revision":2`)) {
+	if response.Code != http.StatusCreated || bytes.Contains(response.Body.Bytes(), []byte(secret)) || bytes.Contains(response.Body.Bytes(), []byte(base64.StdEncoding.EncodeToString(secretBytes))) || !bytes.Contains(response.Body.Bytes(), []byte(`"config_revision":2`)) {
 		t.Fatalf("registration response: %d %s", response.Code, response.Body.String())
 	}
 	state := store.Snapshot()
-	if len(state.APs) != 2 || state.APs[1].ID != "02-aa-00-00-00-06" || state.APs[1].SiteID != "b" || state.APs[1].SecretFile != secret || state.APs[1].ConfigRevision != state.Revision {
+	if len(state.APs) != 2 || state.APs[1].ID != "02-aa-00-00-00-06" || state.APs[1].SiteID != "b" || !bytes.Equal(state.APs[1].Secret, secretBytes) || state.APs[1].ConfigRevision != state.Revision {
 		t.Fatalf("AP not stored: %+v", state.APs)
 	}
 	listed := request(t, handler, http.MethodGet, "/api/aps", "")
-	if listed.Code != http.StatusOK || bytes.Contains(listed.Body.Bytes(), []byte(secret)) {
-		t.Fatalf("AP list leaked private path: %d %s", listed.Code, listed.Body.String())
+	if listed.Code != http.StatusOK || bytes.Contains(listed.Body.Bytes(), []byte(secret)) ||
+		bytes.Contains(listed.Body.Bytes(), []byte(base64.StdEncoding.EncodeToString(secretBytes))) || !bytes.Contains(listed.Body.Bytes(), []byte(`"has_secret":true`)) {
+		t.Fatalf("AP list leaked the secret or lacks has_secret: %d %s", listed.Code, listed.Body.String())
 	}
-	body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "management_ip": "192.0.2.11", "site_id": "b", "secret_file": secret})
+	body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "management_ip": "192.0.2.11", "site_id": "b", "secret": secret})
 	duplicate := request(t, handler, http.MethodPost, "/api/aps", string(body))
 	if duplicate.Code != http.StatusConflict || store.Snapshot().Revision != state.Revision {
 		t.Fatalf("duplicate AP ID accepted: %d %s", duplicate.Code, duplicate.Body.String())
 	}
 	// APs are identified by ID, so a second AP may share another's address
 	// (several APs behind one NAT).
-	body, _ = json.Marshal(map[string]string{"id": "02-aa-00-00-00-05", "management_ip": "192.0.2.10", "site_id": "b", "secret_file": secret})
+	body, _ = json.Marshal(map[string]string{"id": "02-aa-00-00-00-05", "management_ip": "192.0.2.10", "site_id": "b", "secret": secret})
 	if shared := request(t, handler, http.MethodPost, "/api/aps", string(body)); shared.Code != http.StatusCreated {
 		t.Fatalf("AP sharing an address rejected: %d %s", shared.Code, shared.Body.String())
 	}
@@ -312,16 +312,14 @@ func TestRegisterAPStoresPrivateRecordAndReturnsRedactedView(t *testing.T) {
 
 func TestRegisterAPRejectsDuplicateOrInvalidInputs(t *testing.T) {
 	handler, store, _ := platformFixture(t)
-	secret := filepath.Join(t.TempDir(), "ap-secret.bin")
-	if err := os.WriteFile(secret, bytes.Repeat([]byte{7}, 32), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	secretBytes := bytes.Repeat([]byte{7}, 32)
+	secret := hex.EncodeToString(secretBytes)
 	before := store.Snapshot().Revision
 	for _, input := range []map[string]string{
-		{"id": "invalid", "management_ip": "192.0.2.10", "site_id": "b", "secret_file": secret},
-		{"id": "02-aa-00-00-00-06", "management_ip": "invalid", "site_id": "b", "secret_file": secret},
-		{"id": "02-aa-00-00-00-06", "management_ip": "192.0.2.10", "site_id": "missing", "secret_file": secret},
-		{"id": "ap-a", "management_ip": "192.0.2.10", "site_id": "b", "secret_file": secret},
+		{"id": "invalid", "management_ip": "192.0.2.10", "site_id": "b", "secret": secret},
+		{"id": "02-aa-00-00-00-06", "management_ip": "invalid", "site_id": "b", "secret": secret},
+		{"id": "02-aa-00-00-00-06", "management_ip": "192.0.2.10", "site_id": "missing", "secret": secret},
+		{"id": "ap-a", "management_ip": "192.0.2.10", "site_id": "b", "secret": secret},
 	} {
 		body, _ := json.Marshal(input)
 		response := request(t, handler, http.MethodPost, "/api/aps", string(body))
@@ -329,24 +327,33 @@ func TestRegisterAPRejectsDuplicateOrInvalidInputs(t *testing.T) {
 			t.Fatalf("invalid AP registered: %d %s", response.Code, body)
 		}
 	}
-	if err := os.Chmod(secret, 0o644); err != nil {
-		t.Fatal(err)
+	for _, bad := range []string{"", "zz", hex.EncodeToString(bytes.Repeat([]byte{7}, 33)), "/var/lib/dismist/ap.bin"} {
+		body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "site_id": "b", "secret": bad})
+		if response := request(t, handler, http.MethodPost, "/api/aps", string(body)); response.Code != http.StatusBadRequest || store.Snapshot().Revision != before {
+			t.Fatalf("bad secret %q accepted: %d", bad, response.Code)
+		}
 	}
-	body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "management_ip": "192.0.2.10", "site_id": "b", "secret_file": secret})
-	response := request(t, handler, http.MethodPost, "/api/aps", string(body))
-	if response.Code != http.StatusBadRequest || store.Snapshot().Revision != before {
-		t.Fatalf("public secret file accepted: %d", response.Code)
+	legacy, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "site_id": "b", "secret_file": "/var/lib/dismist/ap.bin"})
+	if response := request(t, handler, http.MethodPost, "/api/aps", string(legacy)); response.Code != http.StatusBadRequest {
+		t.Fatalf("legacy secret_file registration accepted: %d", response.Code)
+	}
+	encoded, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "site_id": "b", "secret": base64.StdEncoding.EncodeToString(secretBytes)})
+	if response := request(t, handler, http.MethodPost, "/api/aps", string(encoded)); response.Code != http.StatusCreated {
+		t.Fatalf("base64 secret rejected: %d %s", response.Code, response.Body.String())
+	}
+	for _, ap := range store.Snapshot().APs {
+		if ap.ID == "02-aa-00-00-00-06" && !bytes.Equal(ap.Secret, secretBytes) {
+			t.Fatalf("base64 secret stored as %x", ap.Secret)
+		}
 	}
 }
 
 func TestRegisterAPRejectsShortPrivateSecretWithoutChangingDatabase(t *testing.T) {
 	handler, store, _ := platformFixture(t)
-	secret := filepath.Join(t.TempDir(), "short-secret.bin")
-	if err := os.WriteFile(secret, bytes.Repeat([]byte{7}, 31), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	secretBytes := bytes.Repeat([]byte{7}, 31)
+	secret := hex.EncodeToString(secretBytes)
 	before := store.Snapshot()
-	body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "management_ip": "192.0.2.10", "site_id": "b", "secret_file": secret})
+	body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "management_ip": "192.0.2.10", "site_id": "b", "secret": secret})
 	response := request(t, handler, http.MethodPost, "/api/aps", string(body))
 	if response.Code != http.StatusBadRequest || !bytes.Contains(response.Body.Bytes(), []byte("exactly 32 bytes")) {
 		t.Fatalf("short secret accepted or unclear error: %d %s", response.Code, response.Body.String())
@@ -379,29 +386,27 @@ func TestEditAPFieldsRebuildsOnlyItsConfigAndRedactsSecretPath(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	secret := filepath.Join(t.TempDir(), "replacement.bin")
-	if err := os.WriteFile(secret, bytes.Repeat([]byte{9}, 32), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	body, _ := json.Marshal(map[string]string{"name": "Renamed", "model": "AP34", "management_ip": "192.0.2.25", "secret_file": secret})
+	secretBytes := bytes.Repeat([]byte{9}, 32)
+	secret := hex.EncodeToString(secretBytes)
+	body, _ := json.Marshal(map[string]string{"name": "Renamed", "model": "AP34", "management_ip": "192.0.2.25", "secret": secret})
 	response := request(t, handler, http.MethodPut, "/api/aps/ap-a", string(body))
 	if response.Code != http.StatusOK || bytes.Contains(response.Body.Bytes(), []byte(secret)) || !bytes.Contains(response.Body.Bytes(), []byte(`"management_ip":"192.0.2.25"`)) {
 		t.Fatalf("AP edit: %d %s", response.Code, response.Body.String())
 	}
 	state := store.Snapshot()
-	if state.APs[0].Name != "Renamed" || state.APs[0].Model != "AP34" || state.APs[0].ManagementIP != "192.0.2.25" || state.APs[0].SecretFile != secret || state.APs[0].ConfigRevision != state.Revision || state.APs[1].ConfigRevision != 2 {
+	if state.APs[0].Name != "Renamed" || state.APs[0].Model != "AP34" || state.APs[0].ManagementIP != "192.0.2.25" || !bytes.Equal(state.APs[0].Secret, secretBytes) || state.APs[0].ConfigRevision != state.Revision || state.APs[1].ConfigRevision != 2 {
 		t.Fatalf("AP edit state: %+v", state.APs)
 	}
 	config, revision := control.ConfigSnapshot()
 	if revision != state.APs[0].ConfigRevision || !bytes.Contains(config, []byte(`"Name":"Renamed"`)) {
 		t.Fatalf("AP config not rebuilt: rev %d config %s", revision, config)
 	}
-	retained := request(t, handler, http.MethodPut, "/api/aps/ap-a", `{"model":"AP35","secret_file":""}`)
-	if retained.Code != http.StatusOK || store.Snapshot().APs[0].SecretFile != secret {
-		t.Fatalf("blank secret file did not retain existing credential: %d %s", retained.Code, retained.Body.String())
+	retained := request(t, handler, http.MethodPut, "/api/aps/ap-a", `{"model":"AP35","secret":""}`)
+	if retained.Code != http.StatusOK || !bytes.Equal(store.Snapshot().APs[0].Secret, secretBytes) {
+		t.Fatalf("blank secret did not retain existing credential: %d %s", retained.Code, retained.Body.String())
 	}
 	state = store.Snapshot()
-	noChange := request(t, handler, http.MethodPut, "/api/aps/ap-a", `{"name":"Renamed","secret_file":""}`)
+	noChange := request(t, handler, http.MethodPut, "/api/aps/ap-a", `{"name":"Renamed","secret":""}`)
 	if noChange.Code != http.StatusOK || store.Snapshot().Revision != state.Revision {
 		t.Fatalf("no-op edit bumped state: %d %s", noChange.Code, noChange.Body.String())
 	}
@@ -409,10 +414,8 @@ func TestEditAPFieldsRebuildsOnlyItsConfigAndRedactsSecretPath(t *testing.T) {
 
 func TestEditAPRejectsInvalidBindingsWithoutChangingState(t *testing.T) {
 	handler, store, _ := platformFixture(t)
-	secret := filepath.Join(t.TempDir(), "short.bin")
-	if err := os.WriteFile(secret, bytes.Repeat([]byte{4}, 31), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	secretBytes := bytes.Repeat([]byte{4}, 31)
+	secret := hex.EncodeToString(secretBytes)
 	otherIP := "192.0.2.40"
 	if err := store.Update(func(state *model.State) error {
 		state.APs = append(state.APs, model.APRecord{ID: "ap-b", SiteID: "b", SecretFile: "other-secret", ManagementIP: otherIP})
@@ -422,7 +425,7 @@ func TestEditAPRejectsInvalidBindingsWithoutChangingState(t *testing.T) {
 	}
 	before := store.Snapshot()
 	for _, input := range []map[string]string{
-		{"management_ip": "invalid"}, {"secret_file": secret},
+		{"management_ip": "invalid"}, {"secret": secret},
 	} {
 		body, _ := json.Marshal(input)
 		response := request(t, handler, http.MethodPut, "/api/aps/ap-a", string(body))
@@ -479,15 +482,13 @@ func TestAPNoOpEditReturnsPersistedRevision(t *testing.T) {
 
 func TestRegisterAPWithSharedOrNoSourceAddress(t *testing.T) {
 	handler, store, _ := platformFixture(t)
-	secret := filepath.Join(t.TempDir(), "new.bin")
-	if err := os.WriteFile(secret, bytes.Repeat([]byte{1}, 32), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "management_ip": "127.0.0.1", "site_id": "b", "secret_file": secret})
+	secretBytes := bytes.Repeat([]byte{1}, 32)
+	secret := hex.EncodeToString(secretBytes)
+	body, _ := json.Marshal(map[string]string{"id": "02-aa-00-00-00-06", "management_ip": "127.0.0.1", "site_id": "b", "secret": secret})
 	if response := request(t, handler, http.MethodPost, "/api/aps", string(body)); response.Code != http.StatusCreated {
 		t.Fatalf("AP sharing the legacy AP's address rejected: %d %s", response.Code, response.Body.String())
 	}
-	body, _ = json.Marshal(map[string]string{"id": "02-aa-00-00-00-07", "site_id": "b", "secret_file": secret})
+	body, _ = json.Marshal(map[string]string{"id": "02-aa-00-00-00-07", "site_id": "b", "secret": secret})
 	response := request(t, handler, http.MethodPost, "/api/aps", string(body))
 	if response.Code != http.StatusCreated {
 		t.Fatalf("AP without a management IP rejected: %d %s", response.Code, response.Body.String())
@@ -503,7 +504,7 @@ func TestRegisterAPWithSharedOrNoSourceAddress(t *testing.T) {
 			t.Fatalf("unpinned AP stored with address %q", ap.ManagementIP)
 		}
 	}
-	body, _ = json.Marshal(map[string]string{"id": "02-aa-00-00-00-08", "management_ip": "nope", "site_id": "b", "secret_file": secret})
+	body, _ = json.Marshal(map[string]string{"id": "02-aa-00-00-00-08", "management_ip": "nope", "site_id": "b", "secret": secret})
 	if response := request(t, handler, http.MethodPost, "/api/aps", string(body)); response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid management IP accepted: %d", response.Code)
 	}

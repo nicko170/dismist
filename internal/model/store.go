@@ -11,14 +11,22 @@ import (
 	"time"
 )
 
+// SecretSize is the length of an AP's EEPROM authentication secret.
+const SecretSize = 32
+
 type APRecord struct {
-	ID              string          `json:"id"`
-	Name            string          `json:"name,omitempty"`
-	SiteID          string          `json:"site_id,omitempty"`
-	ManagementIP    string          `json:"management_ip,omitempty"`
-	Model           string          `json:"model,omitempty"`
-	Firmware        string          `json:"firmware,omitempty"`
-	SecretFile      string          `json:"secret_file"`
+	ID           string `json:"id"`
+	Name         string `json:"name,omitempty"`
+	SiteID       string `json:"site_id,omitempty"`
+	ManagementIP string `json:"management_ip,omitempty"`
+	Model        string `json:"model,omitempty"`
+	Firmware     string `json:"firmware,omitempty"`
+	// Secret is the AP's 32-byte EEPROM authentication secret. It lives in
+	// the private database and is never returned by the API.
+	Secret []byte `json:"secret,omitempty"`
+	// SecretFile is a legacy path to the secret on disk. dismistd imports it
+	// into Secret at startup and clears it.
+	SecretFile      string          `json:"secret_file,omitempty"`
 	ConfigRevision  uint64          `json:"config_revision,omitempty"`
 	ConfigUpdatedAt time.Time       `json:"config_updated_at,omitzero"`
 	AppliedRevision uint64          `json:"applied_revision,omitempty"`
@@ -154,7 +162,7 @@ func validate(state State) error {
 	}
 	seenAP := map[string]bool{}
 	for _, ap := range state.APs {
-		if ap.ID == "" || ap.SecretFile == "" || seenAP[ap.ID] || (len(sites) > 0 && ap.SiteID != "" && !sites[ap.SiteID]) || validateAdvanced(ap.Advanced) != nil {
+		if ap.ID == "" || (len(ap.Secret) != SecretSize && ap.SecretFile == "") || seenAP[ap.ID] || (len(sites) > 0 && ap.SiteID != "" && !sites[ap.SiteID]) || validateAdvanced(ap.Advanced) != nil {
 			return errors.New("invalid or duplicate AP record")
 		}
 		seenAP[ap.ID] = true

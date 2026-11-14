@@ -54,10 +54,11 @@ func prepareAPs(state model.State, options registryOptions) (*controller.Manager
 		if !exists {
 			return nil, nil, fmt.Errorf("AP %s has no site", ap.ID)
 		}
-		secret, err := loadSecret(ap.SecretFile)
-		if err != nil {
-			return nil, nil, fmt.Errorf("AP %s secret: %w", ap.ID, err)
+		if len(ap.Secret) != model.SecretSize {
+			return nil, nil, fmt.Errorf("AP %s has no secret; upload it in the UI", ap.ID)
 		}
+		var secret [model.SecretSize]byte
+		copy(secret[:], ap.Secret)
 		networks := make([]model.Network, 0)
 		for _, network := range state.Networks {
 			if network.SiteID == ap.SiteID {

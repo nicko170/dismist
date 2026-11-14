@@ -11,21 +11,16 @@ import (
 )
 
 func TestPreparedAPsShareSiteConfigAndKeepSeparateSecrets(t *testing.T) {
-	dir := t.TempDir()
-	secret := func(name string, value byte) string {
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, bytes.Repeat([]byte{value}, 32), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return path
+	secret := func(value byte) []byte {
+		return bytes.Repeat([]byte{value}, 32)
 	}
 	state := model.State{
 		Revision: 4, UpdatedAt: time.Unix(1794475905, 0),
 		Sites: []model.Site{{ID: "site-a", Name: "A"}, {ID: "site-b", Name: "B"}},
 		APs: []model.APRecord{
-			{ID: "ap-a", SiteID: "site-a", SecretFile: secret("a.bin", 1)},
-			{ID: "ap-c", SiteID: "site-a", ManagementIP: "127.0.0.3", SecretFile: secret("c.bin", 3)},
-			{ID: "ap-b", SiteID: "site-b", ManagementIP: "127.0.0.2", SecretFile: secret("b.bin", 2)},
+			{ID: "ap-a", SiteID: "site-a", Secret: secret(1)},
+			{ID: "ap-c", SiteID: "site-a", ManagementIP: "127.0.0.3", Secret: secret(3)},
+			{ID: "ap-b", SiteID: "site-b", ManagementIP: "127.0.0.2", Secret: secret(2)},
 		},
 		Networks: []model.Network{{ID: "wlan-a", SiteID: "site-a", SSID: "A-WLAN", PSK: "example-passphrase-09", VLANID: 123}, {ID: "wlan-b", SiteID: "site-b", SSID: "B-WLAN", PSK: "example-passphrase-10", VLANID: 124}},
 	}
@@ -67,7 +62,7 @@ func TestUnrelatedSiteChangeDoesNotBumpAPConfigOnRestart(t *testing.T) {
 	state := model.State{
 		Revision: 4, UpdatedAt: configTime.Add(time.Hour),
 		Sites:    []model.Site{{ID: "site-a", Name: "A"}, {ID: "site-b", Name: "B"}},
-		APs:      []model.APRecord{{ID: "ap-a", SiteID: "site-a", SecretFile: secretPath, ConfigRevision: 3, ConfigUpdatedAt: configTime}},
+		APs:      []model.APRecord{{ID: "ap-a", SiteID: "site-a", Secret: bytes.Repeat([]byte{1}, 32), ConfigRevision: 3, ConfigUpdatedAt: configTime}},
 		Networks: []model.Network{{ID: "wlan-a", SiteID: "site-a", SSID: "A-WLAN", PSK: "example-passphrase-09", VLANID: 123}},
 	}
 	base := []byte(`{"ID":"old","Timestamp":1,"WLANs":[{"ID":"old","SSID":"OLD","Vlans":["1"],"Auth":{"Type":"psk","PSK":"example-passphrase-05"}}]}`)

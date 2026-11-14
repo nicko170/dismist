@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,8 +13,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -238,16 +239,17 @@ func (s *Server) apView(ap model.APRecord) map[string]any {
 			managementIP = control.AllowedManagementIP()
 		}
 	}
-	model := ap.Model
+	apModel := ap.Model
 	if status.Model != "" {
-		model = status.Model
+		apModel = status.Model
 	}
 	return map[string]any{
 		"id": ap.ID, "name": ap.Name, "site_id": ap.SiteID,
-		"model": model, "firmware": preferredFirmware(ap.Firmware, status),
+		"model": apModel, "firmware": preferredFirmware(ap.Firmware, status),
 		"management_ip": managementIP, "lan_ip": lanIPv4(interfaces),
-		"remote_address": status.RemoteAddress, "config_revision": ap.ConfigRevision,
-		"connected": status.Connected, "client_count": clientCount,
+		"remote_address": status.RemoteAddress, "has_secret": len(ap.Secret) == model.SecretSize,
+		"config_revision": ap.ConfigRevision,
+		"connected":       status.Connected, "client_count": clientCount,
 		"last_seen": status.LastSeen, "applied_revision": status.AppliedRevision,
 	}
 }
@@ -294,7 +296,7 @@ func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
 		Model        string `json:"model"`
 		ManagementIP string `json:"management_ip"`
 		SiteID       string `json:"site_id"`
-		SecretFile   string `json:"secret_file"`
+		Secret       string `json:"secret"`
 	}
 	decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024+1))
 	decoder.DisallowUnknownFields()
@@ -308,8 +310,13 @@ func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	mac, err := net.ParseMAC(strings.ReplaceAll(strings.TrimSpace(input.ID), "-", ":"))
-	if err != nil || len(mac) != 6 || !filepath.IsAbs(input.SecretFile) {
-		http.Error(writer, "invalid AP ID or secret file", http.StatusBadRequest)
+	if err != nil || len(mac) != 6 {
+		http.Error(writer, "invalid AP ID: use its Ethernet MAC address", http.StatusBadRequest)
+		return
+	}
+	secret, err := parseAPSecret(input.Secret)
+	if err != nil {
+		http.Error(writer, err.Error(), http.StatusBadRequest)
 		return
 	}
 	// The management IP is optional: it pins the AP to one source address.
@@ -323,10 +330,6 @@ func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
 		managementIP = ip.String()
 	}
 	id := strings.ReplaceAll(mac.String(), ":", "-")
-	if err := validateAPSecretFile(input.SecretFile); err != nil {
-		http.Error(writer, err.Error(), http.StatusBadRequest)
-		return
-	}
 	var created model.APRecord
 	err = s.store.Update(func(state *model.State) error {
 		var site model.Site
@@ -347,7 +350,7 @@ func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
 			}
 		}
 		created = model.APRecord{ID: id, Name: strings.TrimSpace(input.Name), Model: strings.TrimSpace(input.Model),
-			ManagementIP: managementIP, SiteID: input.SiteID, SecretFile: input.SecretFile,
+			ManagementIP: managementIP, SiteID: input.SiteID, Secret: secret,
 			ConfigRevision: state.Revision + 1, ConfigUpdatedAt: state.UpdatedAt}
 		networks := make([]model.Network, 0)
 		for _, network := range state.Networks {
@@ -368,22 +371,24 @@ func (s *Server) registerAP(writer http.ResponseWriter, request *http.Request) {
 	respond(writer, http.StatusCreated, map[string]any{"ap": s.apView(created), "revision": s.store.Snapshot().Revision})
 }
 
-func validateAPSecretFile(path string) error {
-	if !filepath.IsAbs(path) {
-		return errors.New("AP secret file must be an absolute path")
+// parseAPSecret reads an AP's 32-byte EEPROM secret given as hex (64
+// digits, optionally separated by spaces or colons) or base64 (standard or
+// URL alphabet, padded or not).
+func parseAPSecret(value string) ([]byte, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, errors.New("AP secret required: the AP's 32-byte EEPROM secret as hex or base64")
 	}
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return errors.New("AP secret file must exist and be private")
+	compact := strings.NewReplacer(" ", "", ":", "", "\n", "", "\r", "", "\t", "").Replace(value)
+	if decoded, err := hex.DecodeString(compact); err == nil && len(decoded) == model.SecretSize {
+		return decoded, nil
 	}
-	if info.Size() != 32 {
-		return errors.New("AP secret must be exactly 32 bytes")
+	for _, encoding := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		if decoded, err := encoding.DecodeString(compact); err == nil && len(decoded) == model.SecretSize {
+			return decoded, nil
+		}
 	}
-	secret, err := os.ReadFile(path)
-	if err != nil || len(secret) != 32 {
-		return errors.New("AP secret must be readable and exactly 32 bytes")
-	}
-	return nil
+	return nil, errors.New("AP secret must be exactly 32 bytes, as hex or base64")
 }
 
 func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
@@ -400,11 +405,11 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 		Name         *string `json:"name"`
 		Model        *string `json:"model"`
 		ManagementIP *string `json:"management_ip"`
-		SecretFile   *string `json:"secret_file"`
+		Secret       *string `json:"secret"`
 	}
 	decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024+1))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil || (input.Name == nil && input.Model == nil && input.ManagementIP == nil && input.SecretFile == nil) {
+	if err := decoder.Decode(&input); err != nil || (input.Name == nil && input.Model == nil && input.ManagementIP == nil && input.Secret == nil) {
 		http.Error(writer, "AP fields required", http.StatusBadRequest)
 		return
 	}
@@ -421,12 +426,11 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 			return
 		}
 	}
-	var newSecret string
-	if input.SecretFile != nil {
-		newSecret = strings.TrimSpace(*input.SecretFile)
-	}
-	if newSecret != "" {
-		if err := validateAPSecretFile(newSecret); err != nil {
+	// A blank secret on edit keeps the current one.
+	var newSecret []byte
+	if input.Secret != nil && strings.TrimSpace(*input.Secret) != "" {
+		var err error
+		if newSecret, err = parseAPSecret(*input.Secret); err != nil {
 			http.Error(writer, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -458,11 +462,12 @@ func (s *Server) updateAP(writer http.ResponseWriter, request *http.Request) {
 				updated.ManagementIP = ip.String()
 			}
 		}
-		if newSecret != "" {
-			updated.SecretFile = newSecret
+		if newSecret != nil {
+			updated.Secret = newSecret
+			updated.SecretFile = ""
 		}
 		previous := state.APs[index]
-		if updated.Name == previous.Name && updated.Model == previous.Model && updated.ManagementIP == previous.ManagementIP && updated.SecretFile == previous.SecretFile {
+		if updated.Name == previous.Name && updated.Model == previous.Model && updated.ManagementIP == previous.ManagementIP && bytes.Equal(updated.Secret, previous.Secret) {
 			return errNoChange
 		}
 		updated.ConfigRevision = state.Revision + 1
