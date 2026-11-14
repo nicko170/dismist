@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nicko170/dismist/internal/compile"
 	"github.com/nicko170/dismist/internal/compile/effective"
@@ -473,4 +474,36 @@ func TestDryRunWritesNothing(t *testing.T) {
 	if store.Snapshot().Typed() {
 		t.Fatal("dry run committed")
 	}
+}
+
+func TestFinalise(t *testing.T) {
+	sc := scenario{full: true, monitor: true}
+	store := liveStore(t, sc)
+	before := oldEffective(t, store)
+	runMigration(t, store, sc)
+	if err := Finalise(store, now.Add(24*time.Hour), model.Actor{Kind: model.ActorSystem}); err == nil {
+		t.Fatal("finalised after one day")
+	}
+	if err := Finalise(store, now.Add(31*24*time.Hour), model.Actor{Kind: model.ActorSession, Name: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	state := store.Snapshot()
+	if len(state.Sites[0].Advanced) != 0 || len(state.Networks[0].Advanced) != 0 || state.Sites[0].SSHPublicKeys != nil {
+		t.Fatal("legacy keys kept")
+	}
+	if info, _ := store.Schema(); info.Compat != 2 {
+		t.Fatalf("compat %d", info.Compat)
+	}
+	view, err := compile.Effective(legacyv0.BundledTemplate(), state, liveAP, store.HashKey())
+	if err != nil || !bytes.Equal(view.Canonical, before[liveAP]) {
+		t.Fatalf("finalise changed the AP config: %v", err)
+	}
+	// An older binary (schema 1) now refuses the database.
+	path := store.Path()
+	_ = store.Close()
+	reopened, err := model.OpenBolt(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = reopened.Close()
 }
