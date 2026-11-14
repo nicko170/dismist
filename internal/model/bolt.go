@@ -13,16 +13,56 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+// Bucket names. Every bucket of the v1 design (§4.1) is created by the first
+// M0+ start, including those another workstream fills, so later phases only
+// add keys. Older binaries ignore buckets they do not know.
+const (
+	BucketMeta             = "meta"
+	BucketSites            = "sites"
+	BucketAPs              = "aps"
+	BucketNetworks         = "networks"
+	BucketTemplates        = "templates"
+	BucketAPStatus         = "ap_status"
+	BucketClientSessions   = "client_sessions"
+	BucketClientActive     = "client_active"
+	BucketSamples          = "samples"
+	BucketEvents           = "events"
+	BucketAPConfig         = "ap_config"
+	BucketTokens           = "tokens"
+	BucketSessions         = "sessions"
+	BucketPendingDismissed = "pending_dismissed"
+	BucketConfigHistory    = "config_history"
+	BucketEvents2          = "events2"
+	BucketEvents2ID        = "events2_id"
+	BucketEvents2AP        = "events2_ap"
+	BucketSessionsT        = "sessions_t"
+	BucketSamplesHourly    = "samples_hourly"
+	BucketScans            = "scans"
+	BucketClientMeta       = "client_meta"
+)
+
 var bucketNames = []string{
-	"sites", "aps", "networks", "templates", "ap_status",
-	"client_sessions", "samples", "events", "meta",
-	"client_active",
+	BucketSites, BucketAPs, BucketNetworks, BucketTemplates, BucketAPStatus,
+	BucketClientSessions, BucketSamples, BucketEvents, BucketMeta,
+	BucketClientActive,
+	// v1, phase 0
+	BucketAPConfig, BucketTokens,
+	// v1, phase 1
+	BucketSessions, BucketPendingDismissed, BucketEvents2, BucketEvents2ID,
+	BucketEvents2AP, BucketSessionsT,
+	// v1, phases 2 to 4 (created now so no later phase adds a bucket)
+	BucketConfigHistory, BucketSamplesHourly, BucketScans, BucketClientMeta,
 }
 
+// BucketNames returns every bucket this binary creates.
+func BucketNames() []string { return append([]string(nil), bucketNames...) }
+
 type BoltStore struct {
-	mu    sync.RWMutex
-	db    *bolt.DB
-	state State
+	mu      sync.RWMutex
+	db      *bolt.DB
+	path    string
+	state   State
+	hashKey []byte
 }
 
 func OpenBolt(path, legacyJSON string) (*BoltStore, error) {
@@ -38,13 +78,24 @@ func OpenBolt(path, legacyJSON string) (*BoltStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := &BoltStore{db: db}
+	// The compat guard runs before anything is written, so a binary that is
+	// too old for this database leaves it exactly as it found it (§4.1 rule 1).
+	if err := db.View(checkCompat); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	store := &BoltStore{db: db, path: path}
 	err = db.Update(func(tx *bolt.Tx) error {
 		for _, name := range bucketNames {
 			if _, err := tx.CreateBucketIfNotExists([]byte(name)); err != nil {
 				return err
 			}
 		}
+		key, err := ensureHashKey(tx)
+		if err != nil {
+			return err
+		}
+		store.hashKey = key
 		if tx.Bucket([]byte("meta")).Get([]byte("revision")) != nil {
 			return nil
 		}
@@ -106,15 +157,67 @@ func OpenBolt(path, legacyJSON string) (*BoltStore, error) {
 
 func (s *BoltStore) Close() error { return s.db.Close() }
 
+// Path is the database file path.
+func (s *BoltStore) Path() string { return s.path }
+
 func (s *BoltStore) Snapshot() State {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return clone(s.state)
 }
 
+// Update applies change to a copy of the configuration state and commits it.
+// The change function runs before the bbolt write transaction opens, as it
+// always has; use UpdateTx when the mutation must also write another bucket
+// (ap_config, config history) atomically with the state.
 func (s *BoltStore) Update(change func(*State) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	next := s.prepareNext()
+	if err := change(&next); err != nil {
+		return err
+	}
+	if err := validate(next); err != nil {
+		return err
+	}
+	next.Revision = s.state.Revision + 1
+	stampUpdatedRev(&s.state, &next)
+	if err := s.db.Update(func(tx *bolt.Tx) error {
+		return s.commitState(tx, next)
+	}); err != nil {
+		return err
+	}
+	s.state = next
+	return nil
+}
+
+// UpdateTx is Update with the change function running inside the bbolt write
+// transaction, so it can read and write other buckets through tx and have
+// them commit (or roll back) together with the state. The change function
+// must not call other BoltStore methods: the store lock is held and a second
+// bbolt transaction in the same goroutine can deadlock.
+func (s *BoltStore) UpdateTx(change func(*State, *Tx) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.prepareNext()
+	if err := s.db.Update(func(btx *bolt.Tx) error {
+		if err := change(&next, &Tx{bolt: btx, hashKey: s.hashKey}); err != nil {
+			return err
+		}
+		if err := validate(next); err != nil {
+			return err
+		}
+		next.Revision = s.state.Revision + 1
+		stampUpdatedRev(&s.state, &next)
+		return s.commitState(btx, next)
+	}); err != nil {
+		return err
+	}
+	s.state = next
+	return nil
+}
+
+func (s *BoltStore) prepareNext() State {
 	next := clone(s.state)
 	for index := range next.APs {
 		if next.APs[index].ConfigRevision == 0 {
@@ -123,30 +226,44 @@ func (s *BoltStore) Update(change func(*State) error) error {
 		}
 	}
 	next.UpdatedAt = time.Now().UTC()
-	if err := change(&next); err != nil {
-		return err
+	return next
+}
+
+// commitState writes next inside tx: client sessions of moved APs are
+// closed, ap_config records of removed APs are dropped, then the state
+// buckets are rewritten.
+func (s *BoltStore) commitState(tx *bolt.Tx, next State) error {
+	present := make(map[string]bool, len(next.APs))
+	for _, current := range next.APs {
+		present[current.ID] = true
 	}
-	if err := validate(next); err != nil {
-		return err
-	}
-	next.Revision = s.state.Revision + 1
-	if err := s.db.Update(func(tx *bolt.Tx) error {
-		for _, previous := range s.state.APs {
-			for _, current := range next.APs {
-				if previous.ID == current.ID && previous.SiteID != current.SiteID {
-					if err := closeActiveSessions(tx, previous.SiteID, previous.ID, next.UpdatedAt, "site moved"); err != nil {
-						return err
-					}
+	for _, previous := range s.state.APs {
+		for _, current := range next.APs {
+			if previous.ID == current.ID && previous.SiteID != current.SiteID {
+				if err := closeActiveSessions(tx, previous.SiteID, previous.ID, next.UpdatedAt, "site moved"); err != nil {
+					return err
 				}
 			}
 		}
-		return writeBoltState(tx, next)
-	}); err != nil {
-		return err
+		if !present[previous.ID] {
+			if bucket := tx.Bucket([]byte(BucketAPConfig)); bucket != nil {
+				if err := bucket.Delete([]byte(previous.ID)); err != nil {
+					return err
+				}
+			}
+		}
 	}
-	s.state = next
-	return nil
+	return writeBoltState(tx, next)
 }
+
+// View runs fn in a read-only bbolt transaction. It is for code that must see
+// raw bucket bytes (internal/compile/legacyv0, internal/migrate); everything
+// else uses the typed store methods. fn must not write.
+func (s *BoltStore) View(fn func(*bolt.Tx) error) error { return s.db.View(fn) }
+
+// HashKey returns the per-database HMAC key (meta.hash_key, design §4.5).
+// The returned slice is a copy.
+func (s *BoltStore) HashKey() []byte { return append([]byte(nil), s.hashKey...) }
 
 func migrateLegacySites(state *State) error {
 	if len(state.Sites) > 0 {
