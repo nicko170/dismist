@@ -275,3 +275,93 @@ func TestNetworkOrderSurvivesRestart(t *testing.T) {
 		t.Fatalf("a site rename after a restart pushed revision %d", after)
 	}
 }
+
+// A pre-M0 binary (the phase-0 rollback) edits state and bumps the APs'
+// ConfigRevision without writing ap_config.desired. After the re-upgrade
+// that stale desired config must not be the change-detection baseline:
+// editing the value back is a change for the AP, which is running what
+// the old binary gave it.
+func TestStaleDesiredConfigIsNotTheBaseline(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "controller.db")
+	store, err := model.OpenBolt(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	configTime := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	const apID = "02-aa-00-00-00-01"
+	if err := store.Update(func(state *model.State) error {
+		state.Sites = []model.Site{{ID: "a", Name: "Home"}}
+		state.APs = []model.APRecord{{ID: apID, Name: "Hallway", SiteID: "a", Secret: bytes.Repeat([]byte{1}, 32), ConfigRevision: 1, ConfigUpdatedAt: configTime}}
+		state.Networks = []model.Network{{ID: "n1", SiteID: "a", SSID: "Example", PSK: "passphrase-0000", VLANID: 1, Enabled: true}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	base := []byte(`{"ID":"x","Timestamp":1,"WLANs":[{"ID":"t","SSID":"T","Enabled":true,"Vlans":["1"],"Auth":{"Type":"psk","PSK":"example-passphrase-00"}}]}`)
+	handler, _ := serveStore(t, store, base)
+	// Under M0: PSK A, stored as the desired config.
+	if response := request(t, handler, http.MethodPut, "/api/sites/a/networks/n1", `{"psk":"passphrase-AAAA"}`); response.Code != http.StatusOK {
+		t.Fatalf("edit: %d %s", response.Code, response.Body.String())
+	}
+	// Rolled back: the old binary sets PSK B and bumps the AP, with a plain
+	// Update that leaves ap_config alone.
+	if err := store.Update(func(state *model.State) error {
+		state.Networks[0].PSK = "passphrase-BBBB"
+		state.APs[0].ConfigRevision = state.Revision + 1
+		state.APs[0].ConfigUpdatedAt = state.UpdatedAt
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rolledBack := store.Snapshot().APs[0].ConfigRevision
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-upgraded: the AP is served PSK B; the operator sets A again.
+	store, err = model.OpenBolt(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	handler, controls := serveStore(t, store, base)
+	if served, revision := controls[apID].ConfigSnapshot(); revision != rolledBack || !bytes.Contains(served, []byte("passphrase-BBBB")) {
+		t.Fatalf("after the re-upgrade the AP is served revision %d: %s", revision, served)
+	}
+	if response := request(t, handler, http.MethodPut, "/api/sites/a/networks/n1", `{"psk":"passphrase-AAAA"}`); response.Code != http.StatusOK {
+		t.Fatalf("edit: %d %s", response.Code, response.Body.String())
+	}
+	state := store.Snapshot()
+	if state.APs[0].ConfigRevision == rolledBack {
+		t.Fatalf("setting PSK A again did not bump the AP from revision %d", rolledBack)
+	}
+	served, revision := controls[apID].ConfigSnapshot()
+	if revision != state.APs[0].ConfigRevision || !bytes.Contains(served, []byte("passphrase-AAAA")) {
+		t.Fatalf("the AP is served revision %d (want %d): %s", revision, state.APs[0].ConfigRevision, served)
+	}
+	desired, found, err := store.APConfig().Desired(apID)
+	if err != nil || !found || desired.Revision != revision || !bytes.Equal(desired.Bytes, served) {
+		t.Fatalf("desired config %d found=%v err=%v, want the served revision %d", desired.Revision, found, err, revision)
+	}
+
+	// A stale desired config is replaced by what the AP is served on a
+	// save that changes nothing for it, so later saves compare against it.
+	if err := store.Update(func(state *model.State) error {
+		state.APs[0].ConfigRevision = state.Revision + 1
+		state.APs[0].ConfigUpdatedAt = state.UpdatedAt
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	bumped := store.Snapshot().APs[0]
+	if response := request(t, handler, http.MethodPut, "/api/sites/a", `{"name":"Renamed"}`); response.Code != http.StatusOK {
+		t.Fatalf("rename: %d %s", response.Code, response.Body.String())
+	}
+	if got := store.Snapshot().APs[0].ConfigRevision; got != bumped.ConfigRevision {
+		t.Fatalf("a rename moved the AP from revision %d to %d", bumped.ConfigRevision, got)
+	}
+	desired, _, _ = store.APConfig().Desired(apID)
+	if desired.Revision != bumped.ConfigRevision || desired.Timestamp != compile.ConfigTimestamp(bumped.ConfigUpdatedAt) {
+		t.Fatalf("stale desired config not re-seeded: revision %d timestamp %v, want %d %v", desired.Revision, desired.Timestamp, bumped.ConfigRevision, compile.ConfigTimestamp(bumped.ConfigUpdatedAt))
+	}
+}

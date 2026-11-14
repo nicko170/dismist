@@ -71,7 +71,9 @@ type SiteInput struct {
 	// Sites are the site IDs to compile (a move passes both sites). Empty
 	// means every site.
 	Sites []string
-	// Desired is the stored ap_config. nil means none is stored.
+	// Desired is the stored ap_config. nil means none is stored. An entry
+	// written for another revision or config time than the AP has is not
+	// used (see desiredCurrent).
 	Desired DesiredLookup
 	// Previous is the state before the mutation. For an AP with no stored
 	// desired config it supplies the baseline, so the first save after an
@@ -92,8 +94,24 @@ type APResult struct {
 	// (ignoring Timestamp and SiteName). A failed compile is not changed.
 	Changed  bool
 	Baseline string
-	// HasDesired reports that ap_config.desired existed for the AP.
+	// HasDesired reports that a current ap_config.desired existed for the
+	// AP (see desiredCurrent).
 	HasDesired bool
+	// StaleDesired reports that ap_config.desired existed but was written
+	// for another revision or config time than the AP has, so it was not
+	// used. Apply replaces it.
+	StaleDesired bool
+}
+
+// desiredCurrent reports whether a stored desired config was written for
+// the AP's current ConfigRevision and config time. Something that edits
+// state without ap_config (a pre-M0 binary after a rollback, design §8.3)
+// bumps the AP and leaves the desired config of the older revision behind;
+// that config is not what the AP runs, so comparing against it could
+// judge a real change as none.
+func desiredCurrent(state model.State, ap model.APRecord, desired model.DesiredConfig) bool {
+	return desired.Revision == ConfigRevision(state, ap) &&
+		desired.Timestamp == ConfigTimestamp(ConfigTime(state, ap))
 }
 
 // SiteResult is the outcome for every compiled AP.
@@ -170,10 +188,14 @@ func Site(in SiteInput) (SiteResult, error) {
 			if err != nil {
 				return SiteResult{}, err
 			}
-			if found {
+			switch {
+			case !found:
+			case desiredCurrent(in.State, ap, desired):
 				one.HasDesired = true
 				one.Baseline = BaselineDesired
 				baseline = desired.Bytes
+			default:
+				one.StaleDesired = true
 			}
 		}
 		if baseline == nil && in.Previous != nil {
@@ -241,9 +263,9 @@ type Applied struct {
 //     and SiteName) gets ConfigRevision = state.Revision+1 and
 //     ConfigUpdatedAt = Now, is recompiled with the new Timestamp, has its
 //     desired config stored, and is returned in Pushes;
-//   - an AP whose config is the same changes nothing (a missing desired
-//     config is seeded from its current compile, which is what it is
-//     already being served).
+//   - an AP whose config is the same changes nothing (a missing or stale
+//     desired config is seeded from its current compile, which is what it
+//     is already being served).
 //
 // A compile failure of any affected AP refuses the whole mutation: Apply
 // returns the joined *APError values and changes nothing (isolation is for

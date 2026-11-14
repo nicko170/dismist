@@ -181,6 +181,31 @@ func TestChangeDetectionBaselines(t *testing.T) {
 	if len(result.Changed) != 0 || result.APs[0].Baseline != compile.BaselineDesired {
 		t.Fatalf("desired baseline: %+v", result)
 	}
+	// A desired config of another revision (written before something that
+	// left ap_config alone bumped the AP) is not used: the previous state
+	// is the baseline, or the AP counts as changed without one.
+	bumped := state
+	bumped.APs = append([]model.APRecord(nil), state.APs...)
+	bumped.APs[0].ConfigRevision++
+	result, _ = compile.Site(compile.SiteInput{Template: aptemplate.Default(), State: bumped, Desired: store.APConfig(), Previous: &bumped})
+	if one := result.APs[0]; one.Baseline != compile.BaselinePrevious || one.HasDesired || !one.StaleDesired || one.Changed {
+		t.Fatalf("stale desired, previous baseline: %+v", one)
+	}
+	if two := result.APs[1]; two.Baseline != compile.BaselineDesired || two.StaleDesired {
+		t.Fatalf("current desired of another AP: %+v", two)
+	}
+	result, _ = compile.Site(compile.SiteInput{Template: aptemplate.Default(), State: bumped, Desired: store.APConfig()})
+	if one := result.APs[0]; one.Baseline != compile.BaselineNone || !one.Changed {
+		t.Fatalf("stale desired, no baseline: %+v", one)
+	}
+	// So is one of another config time at the same revision.
+	moved := state
+	moved.APs = append([]model.APRecord(nil), state.APs...)
+	moved.APs[0].ConfigUpdatedAt = moved.APs[0].ConfigUpdatedAt.Add(time.Second)
+	result, _ = compile.Site(compile.SiteInput{Template: aptemplate.Default(), State: moved, Desired: store.APConfig()})
+	if one := result.APs[0]; !one.StaleDesired || !one.Changed {
+		t.Fatalf("desired of another config time: %+v", one)
+	}
 	// Timestamp and SiteName are ignored; anything else is not.
 	a := []byte(`{"A":1,"SiteName":"x","Timestamp":1}`)
 	if same, _ := compile.SameConfig(a, []byte(`{"Timestamp":2,"A":1,"SiteName":"y"}`)); !same {
