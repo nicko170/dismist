@@ -1,5 +1,3 @@
-//go:build apstatus
-
 package main
 
 import (

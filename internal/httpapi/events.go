@@ -26,7 +26,7 @@ func eventView(event model.EventV2, names map[string]string) api.EventView {
 	view := api.EventView{
 		ID: event.ID, SiteID: event.SiteID, APID: event.APID, APName: names[event.APID], Kind: event.Kind,
 		PaceType: event.PaceType, Severity: api.Severity(event.Severity), Title: event.Title, Detail: event.Detail,
-		ClientMAC: event.ClientMAC, WLANID: event.WLANID, FirstSeen: event.FirstSeen, LastSeen: event.LastSeen,
+		ClientMAC: firstNonEmpty(normaliseMAC(event.ClientMAC), event.ClientMAC), WLANID: event.WLANID, FirstSeen: event.FirstSeen, LastSeen: event.LastSeen,
 		Count: event.Count, Data: map[string]any{},
 	}
 	if view.Severity == "" {

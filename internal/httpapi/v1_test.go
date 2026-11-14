@@ -221,7 +221,6 @@ func TestTypedEditsInCommittedMode(t *testing.T) {
 		{"pmf on wpa3", http.MethodPatch, "/api/sites/home/networks/net-home", `{"security":"wpa3_personal","pmf":"optional"}`, 400, api.ErrorCodeInvalid, "pmf"},
 		{"steering on one band", http.MethodPatch, "/api/sites/home/networks/net-home", `{"bands":["5"],"band_steering":true}`, 400, api.ErrorCodeInvalid, "band_steering"},
 		{"enterprise without radius", http.MethodPatch, "/api/sites/home/networks/net-home", `{"security":"wpa2_enterprise"}`, 400, api.ErrorCodeInvalid, "radius.auth"},
-		{"not stored yet", http.MethodPatch, "/api/sites/home/networks/net-home", `{"hidden":true}`, 501, api.ErrorCodeUnavailable, "hidden"},
 		{"160 MHz", http.MethodPatch, "/api/sites/home", `{"rf":{"band_5":{"width":160}}}`, 422, api.ErrorCodeInvalid, "rf.band_5.width"},
 		{"power 0", http.MethodPatch, "/api/sites/home", `{"rf":{"band_5":{"power":{"mode":"fixed","dbm":0}}}}`, 422, api.ErrorCodeInvalid, "rf.band_5.power.dbm"},
 		{"DFS channel without DFS", http.MethodPatch, "/api/sites/home", `{"rf":{"band_5":{"channels":[52]}}}`, 422, api.ErrorCodeInvalid, "rf.band_5.channels"},
@@ -248,7 +247,7 @@ func TestTypedEditsInCommittedMode(t *testing.T) {
 		{"power out of range", `{"rf":{"2.4":{"power_dbm":30}}}`, 422, "rf.2.4.power_dbm"},
 		{"SSH without keys", `{"ssh_enabled":true}`, 422, "ssh_enabled"},
 		{"experimental management", `{"management":{"vlan_id":30}}`, 422, "ap.management"},
-		{"valid override not stored yet", `{"rf":{"5":{"channel":149,"width":80,"power_dbm":17}}}`, 501, "rf.5"},
+		{"valid override", `{"rf":{"5":{"channel":149,"width":80,"power_dbm":17}}}`, 200, `"5":{"disabled":null,"channel":149,"width":80,"power_dbm":17}`},
 	}
 	for _, tc := range apCases {
 		response := f.call(t, http.MethodPatch, "/api/aps/"+homeAP, tc.body, ifMatchHeader(f.updatedRev("ap", homeAP))...)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -59,17 +60,18 @@ func TestStateAndSetCompat(t *testing.T) {
 	if err := run([]string{"state", path}, &out); err != nil || !strings.Contains(out.String(), `"compat":1`) {
 		t.Fatalf("state = %s, %v", out.String(), err)
 	}
-	if err := run([]string{"set-compat", path, "2"}, &out); err != nil {
+	// One above what this binary supports: its own guard must refuse it.
+	tooNew := strconv.FormatUint(model.SupportedSchema+1, 10)
+	if err := run([]string{"set-compat", path, tooNew}, &out); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if err := run([]string{"state", path}, &out); err != nil || !strings.Contains(out.String(), `"compat":2`) {
+	if err := run([]string{"state", path}, &out); err != nil || !strings.Contains(out.String(), `"compat":`+tooNew) {
 		t.Fatalf("state after set-compat = %s, %v", out.String(), err)
 	}
-	// The binary's own guard now refuses the database.
 	_, err = model.OpenBolt(path, "")
 	var compat *model.CompatError
-	if !errors.As(err, &compat) || compat.Compat != 2 {
+	if !errors.As(err, &compat) || compat.Compat != model.SupportedSchema+1 {
 		t.Fatalf("OpenBolt on compat 2 = %v", err)
 	}
 	for _, args := range [][]string{{}, {"set-compat", path, "zero"}, {"set-compat", path, "0"}, {"equal", path}, {"bogus"}} {

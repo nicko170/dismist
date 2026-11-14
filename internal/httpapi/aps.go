@@ -852,7 +852,7 @@ func (s *Server) apLogHandler(writer http.ResponseWriter, _ *http.Request, p par
 	}
 	view := api.APLog{APID: ap.ID, Lines: []api.APLogLine{}}
 	for _, line := range s.observe(ap.ID).telemetry.KernelLog {
-		view.Lines = append(view.Lines, api.APLogLine{At: timePtr(line.At), Text: line.Text})
+		view.Lines = append(view.Lines, api.APLogLine{At: nil, Text: line})
 	}
 	respond(writer, http.StatusOK, view)
 }

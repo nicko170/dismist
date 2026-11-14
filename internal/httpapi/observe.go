@@ -358,10 +358,9 @@ type obsTelemetry struct {
 	InactiveVLANs     []int          `json:"inactive_vlans"`
 	Scan              *obsScan       `json:"scan"`
 	LastKnownVAPs     []obsVAP       `json:"last_known_vaps"`
-	KernelLog         []struct {
-		At   time.Time `json:"at"`
-		Text string    `json:"text"`
-	} `json:"kernel_log"`
+	// KernelLog is the AP kernel log ring (24.1, oldest first); the AP
+	// sends lines without a time of their own.
+	KernelLog []string `json:"kmsg"`
 }
 
 // obsCounters is controller.Counters.

@@ -1,10 +1,6 @@
-//go:build apstatus
-
 // This file adapts the model's APStatusStore (workstream A, phase 1) to
-// controller.StatusSink. It builds with -tags apstatus until the
-// integration merges A's store; then the build tag goes and main.go sets
-// registryOptions.Status = newAPStatusSink(store.APStatus()) and
-// registryOptions.LastKnownVAPs = lastKnownVAPs(store.APStatus()).
+// controller.StatusSink; main.go sets registryOptions.Status and
+// registryOptions.LastKnownVAPs from it.
 
 package main
 
