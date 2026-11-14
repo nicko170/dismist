@@ -52,6 +52,15 @@ jobs:
       - name: go test
         run: go test ./...
 
+      # Only the "UI not built" stub of ui/dist/index.html is committed: a
+      # committed build would reference hashed assets that are not, and a
+      # binary built from a clean checkout would serve a blank page.
+      - name: ui/dist/index.html is the stub
+        run: |
+          if ! git show HEAD:ui/dist/index.html | grep -q 'UI not built'; then
+            echo "::error::ui/dist/index.html is a build output; restore the stub (git checkout origin/main -- ui/dist/index.html)"; exit 1
+          fi
+
   generate:
     name: Generated files up to date
     runs-on: ubuntu-latest
@@ -272,10 +281,14 @@ jobs:
         working-directory: ui
         run: npx playwright install --with-deps chromium
 
-      # The harness checks /metrics end to end with two fake APs, then runs
-      # the specs tagged @live (none is fine until the screens add them).
+      # The harness checks /metrics end to end with two registered fake APs
+      # and a pending one, then runs the flows tagged @live (e2e/harness-live:
+      # sign-in, deep links on every route, real telemetry views, register
+      # from pending, WLAN create/edit with the impact line, RF save, events
+      # paging and upsert, stream loss, session expiry, Back after a dialog)
+      # at every width, one at a time against the one controller.
       - name: Playwright @live specs
-        run: .github/workflows/scripts/live-harness.sh -- bash -c 'cd ui && npx playwright test --grep @live --pass-with-no-tests'
+        run: .github/workflows/scripts/live-harness.sh -- bash -c 'cd ui && npx playwright test --grep @live --workers=1'
 
       - uses: actions/upload-artifact@v4
         if: failure()

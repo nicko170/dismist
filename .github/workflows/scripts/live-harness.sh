@@ -12,7 +12,11 @@
 #   E2E_ADMIN_TOKEN  the administrator token (sign in with it)
 #   E2E_SITE_ID      the site's ID
 #   E2E_AP_IDS       the fake APs' IDs, space separated
+#   E2E_PENDING_AP   a third fake AP that is connected but not registered
+#   E2E_PENDING_SECRET  its secret (hex), for the register-from-pending flow
 #   E2E_METRICS_URL  the scrape endpoint
+# The first fake AP also sends a synthetic PACE event every 5 s; every fake
+# AP reports a kernel log line, a neighbour scan and a BLE radio.
 # Everything is synthetic and on loopback; no real AP is contacted.
 #
 # Environment: DISMISTD_BIN, DISMIST_BIN, FAKEAP_BIN (built from the tree
@@ -74,11 +78,20 @@ for n in 1 2; do
   id=02-aa-00-00-00-0$n
   secret=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
   api POST /api/aps "{\"id\":\"$id\",\"name\":\"Example AP $n\",\"site_id\":\"$site\",\"secret\":\"$secret\"}" >/dev/null
+  events=0
+  if [ "$n" = 1 ]; then events=5s; fi
   "$FAKEAP_BIN" -url "wss://$wss/ws" -id "$id" -secret "$secret" -insecure -clients $((n + 1)) \
-    -full 5s -fast 2s -local-ip "192.0.2.1$n" >"$work/fakeap-$n.log" 2>&1 &
+    -full 5s -fast 2s -events "$events" -local-ip "192.0.2.1$n" -serial "EXAMPLE00000$n" >"$work/fakeap-$n.log" 2>&1 &
   pids+=($!)
   ap_ids+=("$id")
 done
+# A third fake AP that is not registered: it says hello and waits in the
+# pending list.
+pending_id=02-aa-00-00-00-03
+pending_secret=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+"$FAKEAP_BIN" -url "wss://$wss/ws" -id "$pending_id" -secret "$pending_secret" -insecure -clients 1 \
+  -full 5s -fast 2s -local-ip 192.0.2.13 -serial EXAMPLE000003 >"$work/fakeap-3.log" 2>&1 &
+pids+=($!)
 
 # The metrics pipeline end to end: both APs connected and reporting.
 for _ in $(seq 1 30); do
@@ -99,4 +112,5 @@ echo "live harness: dismistd on http://$ui with ${#ap_ids[@]} fake APs connected
 
 if [ $# -eq 0 ]; then exit 0; fi
 E2E_BASE_URL="http://$ui" E2E_ADMIN_TOKEN="$token" E2E_SITE_ID="$site" E2E_AP_IDS="${ap_ids[*]}" \
+  E2E_PENDING_AP="$pending_id" E2E_PENDING_SECRET="$pending_secret" \
   E2E_METRICS_URL="http://$metrics/metrics" "$@"

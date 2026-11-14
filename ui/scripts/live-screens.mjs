@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Live screen sweep (design §7.10): signs in to a running dismistd (with
-// tools/fakeap connected), opens every screen at 390 and 1440 px wide,
-// records API responses of 400 and above, console errors and page errors,
-// and optionally saves a screenshot of each screen.
+// Live screen sweep: signs in to a running dismistd (with tools/fakeap
+// connected), opens every screen at 390 and 1440 px wide, records API
+// responses of 400 and above, console errors and page errors, and
+// optionally saves a screenshot of each screen (evidence/v1-screens). The
+// asserted end-to-end flows are e2e/harness-live/*.spec.ts (@live, run in
+// CI by the ui-e2e-live job); this script only takes the screenshots.
 //
 //   BASE_URL=http://127.0.0.1:18488 TOKEN=… SITE=… AP=… CLIENT=… WLAN=… REV=… \
 //     [OUT=dir] node scripts/live-screens.mjs
