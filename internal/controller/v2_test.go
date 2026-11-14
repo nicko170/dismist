@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -694,5 +695,117 @@ func TestRebootDetectedAcrossControllerRestart(t *testing.T) {
 	rec.wait(t, "reboot recorded", func(r *recorder) bool { return len(r.reboots) == 1 && r.reboots[0].Evidence == RebootEvidenceBootCount })
 	if second.server.Counters().Reboots != 1 || second.server.Status().LastRebootDetected.IsZero() {
 		t.Fatalf("reboot not counted: %+v", second.server.Counters())
+	}
+}
+
+// liveConfig is the live AP's situation with synthetic identities: the
+// legacy compile with a network patch turning on WPA2+WPA3 PSK (AKM and
+// Dot11w) and a site patch replacing Radios[] (AU/890; 5 GHz 149/80 at
+// 17 dBm in both the static and RRM fields; 2.4 GHz 1/20 at 12 dBm;
+// Monitor.CCRev AU/890). typed=true is the schema-2 compile of the same
+// settings: equal effective config, different bytes (RRM-only values and
+// another key order).
+func liveConfig(t *testing.T, timestamp float64, typed bool) []byte {
+	t.Helper()
+	var config map[string]any
+	if err := json.Unmarshal(labConfig(t, timestamp), &config); err != nil {
+		t.Fatal(err)
+	}
+	config["Monitor"].(map[string]any)["CCRev"] = "AU/890"
+	for _, raw := range config["Radios"].([]any) {
+		radio := raw.(map[string]any)
+		radio["CCRev"], radio["CCRevSP"] = "AU/890", "AU/890"
+		rrm := radio["RRM"].(map[string]any)
+		channel, width, power := 149, 80, 17
+		if radio["Band"] == "2.4" {
+			channel, width, power = 1, 20, 12
+		}
+		rrm["Channel"], rrm["Width"], rrm["Power"] = channel, width, power
+		if typed {
+			radio["Channel"], radio["Width"], radio["Power"] = 0, width, 0
+		} else {
+			radio["Channel"], radio["Width"], radio["Power"] = channel, width, power
+		}
+	}
+	wlan := config["WLANs"].([]any)[0].(map[string]any)
+	auth := wlan["Auth"].(map[string]any)
+	auth["AKM"] = map[string]any{"WPA2_PSK": true, "WPA3_PSK": true}
+	wlan["Dot11w"] = map[string]any{"Enabled": true, "Required": false, "SA_Query_Timeout": 1000, "SA_Query_Attempts": 5}
+	encoded, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if typed {
+		// A different serialisation of the same object.
+		var reordered map[string]json.RawMessage
+		_ = json.Unmarshal(encoded, &reordered)
+		var buffer bytes.Buffer
+		buffer.WriteString("{")
+		keys := make([]string, 0, len(reordered))
+		for key := range reordered {
+			keys = append(keys, key)
+		}
+		sort.Sort(sort.Reverse(sort.StringSlice(keys)))
+		for index, key := range keys {
+			if index > 0 {
+				buffer.WriteString(",")
+			}
+			name, _ := json.Marshal(key)
+			buffer.Write(name)
+			buffer.WriteString(":")
+			buffer.Write(reordered[key])
+		}
+		buffer.WriteString("}")
+		encoded = buffer.Bytes()
+	}
+	return encoded
+}
+
+func liveSnapshot() fakeap.Snapshot {
+	snapshot := fakeap.DefaultSnapshot(1)
+	snapshot.Radios[0].Channel, snapshot.Radios[0].Bandwidth, snapshot.Radios[0].MaxTxPower = 149, 80, 17
+	snapshot.Radios[1].Channel, snapshot.Radios[1].Bandwidth, snapshot.Radios[1].MaxTxPower = 1, 20, 12
+	snapshot.Radios[0].CACState = 0
+	return snapshot
+}
+
+// TestVerificationOfTheMigratedLiveConfig is the hardware-side check of
+// the schema-2 migration on the live situation (design §4.7, §5.9): after
+// a restart the AP receives the typed compile of its patches with the old
+// Timestamp; the delivery is effectively unchanged, so its BSSIDs must
+// equal the persisted ones and its radios the configured AU/890 values.
+func TestVerificationOfTheMigratedLiveConfig(t *testing.T) {
+	legacy, typed := liveConfig(t, 1794475905.5, false), liveConfig(t, 1794475905.5, true)
+	if bytes.Equal(legacy, typed) || !sameEffective(legacy, typed, "none") {
+		t.Fatal("the fixture must differ in bytes and match in effective config")
+	}
+	persisted := []telemetry.VAP{
+		{Interface: "wl0.1", BSSID: "02:aa:00:00:11:01", WLANID: "00000000-0000-4000-8000-000000000001", Band: "5"},
+		{Interface: "wl1.1", BSSID: "02:aa:00:00:10:01", WLANID: "00000000-0000-4000-8000-000000000001", Band: "2.4"},
+	}
+	run := func(id string, snapshot fakeap.Snapshot) Verification {
+		t.Helper()
+		rec := &recorder{}
+		fixture := newSessionFixture(t, rec.options(Options{ID: id, Config: typed, Revision: 7, Timings: fastTimings(),
+			LocalFiles: "none", LastDelivered: legacy, LastKnownVAPs: persisted}))
+		ap := fixture.connect(t, fakeap.DefaultExtras())
+		defer ap.Close()
+		runAP(ap, quickRun(snapshot))
+		rec.wait(t, "verified", func(r *recorder) bool { return len(r.verified) != 0 })
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		return rec.verified[0]
+	}
+	same := run("02-aa-00-00-00-51", liveSnapshot())
+	if !same.OK || !same.Unchanged {
+		t.Fatalf("the migrated config must verify unchanged on the live telemetry: %+v", same)
+	}
+	moved := liveSnapshot()
+	moved.WLANs[0].BSSID = []byte{0x02, 0xaa, 0, 0, 0x11, 0x02}
+	moved.Radios[1].MaxTxPower = 20
+	changed := run("02-aa-00-00-00-52", moved)
+	joined := strings.Join(changed.Mismatches, "; ")
+	if changed.OK || !strings.Contains(joined, "wl0.1 BSSID changed") || !strings.Contains(joined, "max power 20 dBm, configured 12 dBm") {
+		t.Fatalf("a moved BSSID or power after an unchanged delivery must fail: %+v", changed)
 	}
 }
