@@ -2,7 +2,10 @@ package api
 
 import "time"
 
-// SSE event names of GET /api/sites/$id/stream (design §4.10).
+// SSE event names of GET /api/sites/$id/stream (design §4.10). Each event's
+// data is the JSON of the type named in StreamMessage.
+//
+//tygo:emit export type StreamMessage = | { type: "snapshot"; data: StreamSnapshot } | { type: "ap"; data: APLive } | { type: "event"; data: EventSummary } | { type: "config"; data: ConfigEvent } | { type: "push"; data: PushEvent } | { type: "pending"; data: PendingEvent };
 const (
 	StreamEventSnapshot = "snapshot"
 	StreamEventAP       = "ap"
