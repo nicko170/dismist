@@ -321,3 +321,18 @@ func TestSiteAdvancedPatchIsAppliedAndPreviewRedactsSecrets(t *testing.T) {
 		t.Fatalf("invalid patch changed state: %d %+v", bad.Code, store.Snapshot())
 	}
 }
+
+func TestServesSPAForClientRoutesOnly(t *testing.T) {
+	handler, _, _ := apiFixture(t)
+	for _, route := range []string{"/sites/lab/aps/ap-1", "/settings", "/sites/lab/wlans?tab=clients"} {
+		response := request(t, handler, http.MethodGet, route, "")
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "<div id=\"root\"></div>") {
+			t.Fatalf("deep link %s did not load the app: %d", route, response.Code)
+		}
+	}
+	for _, missing := range []string{"/assets/missing.js", "/favicon-missing.png", "/api/nope"} {
+		if response := request(t, handler, http.MethodGet, missing, ""); response.Code != http.StatusNotFound {
+			t.Fatalf("%s = %d, want 404", missing, response.Code)
+		}
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,6 +37,7 @@ type Server struct {
 	base            []byte
 	apID            string
 	assets          http.Handler
+	web             fs.FS
 	hosts           map[string]bool
 	streamInterval  time.Duration
 	streamHeartbeat time.Duration
@@ -89,7 +91,7 @@ func New(store model.StateStore, control *controller.Server, base []byte, apID s
 	}
 	return &Server{
 		store: store, control: control, base: append([]byte(nil), base...),
-		apID: apID, assets: http.FileServer(http.FS(web)), hosts: hosts,
+		apID: apID, web: web, assets: http.FileServer(http.FS(web)), hosts: hosts,
 		streamInterval: time.Second, streamHeartbeat: 15 * time.Second, streamMaxAge: 30 * time.Minute,
 		mutationLock: new(sync.Mutex),
 	}
@@ -212,12 +214,34 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		id := strings.TrimPrefix(request.URL.Path, "/api/networks/")
 		s.removeNetwork(writer, s.currentSiteID(), id)
 	default:
-		if request.Method == http.MethodGet && !strings.HasPrefix(request.URL.Path, "/api/") {
-			s.assets.ServeHTTP(writer, request)
+		if (request.Method == http.MethodGet || request.Method == http.MethodHead) && !strings.HasPrefix(request.URL.Path, "/api/") {
+			s.serveUI(writer, request)
 		} else {
 			http.NotFound(writer, request)
 		}
 	}
+}
+
+// serveUI serves the embedded single-page app. Real files are served as-is
+// (hashed /assets/ files may be cached for good); any other path without a
+// file extension is a client-side route, so it gets index.html and deep
+// links and reloads work. A missing file with an extension is a 404.
+func (s *Server) serveUI(writer http.ResponseWriter, request *http.Request) {
+	name := strings.TrimPrefix(path.Clean("/"+request.URL.Path), "/")
+	if name != "" {
+		if info, err := fs.Stat(s.web, name); err == nil && !info.IsDir() {
+			if strings.HasPrefix(name, "assets/") {
+				writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			}
+			s.assets.ServeHTTP(writer, request)
+			return
+		}
+		if path.Ext(name) != "" {
+			http.NotFound(writer, request)
+			return
+		}
+	}
+	http.ServeFileFS(writer, request, s.web, "index.html")
 }
 
 // apView is the operator view of an AP. management_ip is the optional source
