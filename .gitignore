@@ -27,3 +27,8 @@ __pycache__/
 *.pfx
 *.token
 *.db
+
+# Locally built binaries
+/cmd/dismistd/dismistd
+/cmd/dismist/dismist
+/fakeap
