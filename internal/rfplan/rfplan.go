@@ -364,3 +364,46 @@ func ApplyInitial(state *model.State, now time.Time, siteIDs ...string) []Assign
 	}
 	return all
 }
+
+// OwnBSSIDs returns each AP's own BSSIDs (field 32.3) from the stored AP
+// status, for Inputs.OwnBSSIDs.
+func OwnBSSIDs(status map[string]model.APStatusRecord) map[string][]string {
+	result := map[string][]string{}
+	for apID, record := range status {
+		for _, vap := range record.VAPs {
+			if vap.BSSID != "" {
+				result[apID] = append(result[apID], vap.BSSID)
+			}
+		}
+		sort.Strings(result[apID])
+	}
+	return result
+}
+
+// ScanMap indexes a site's stored scans by AP ID, for Inputs.Scans.
+func ScanMap(scans []model.APScan) map[string]model.APScan {
+	result := make(map[string]model.APScan, len(scans))
+	for _, scan := range scans {
+		result[scan.APID] = scan
+	}
+	return result
+}
+
+// SiteInputs gathers the planner inputs of one site from state and the
+// stores' data (telemetry-derived maps may be nil).
+func SiteInputs(state model.State, siteID string, scans []model.APScan, status map[string]model.APStatusRecord,
+	utilisation map[string]map[string]float64, current map[string]map[string]int, now time.Time) (Inputs, bool) {
+	in := Inputs{Scans: ScanMap(scans), OwnBSSIDs: OwnBSSIDs(status), Utilisation: utilisation, Current: current, Now: now}
+	found := false
+	for _, site := range state.Sites {
+		if site.ID == siteID {
+			in.Site, found = site, true
+		}
+	}
+	for _, ap := range state.APs {
+		if ap.SiteID == siteID {
+			in.APs = append(in.APs, ap)
+		}
+	}
+	return in, found
+}
