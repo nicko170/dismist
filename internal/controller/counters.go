@@ -11,7 +11,7 @@ import (
 var frameSubjects = [...]string{
 	"get-time", "ep-auth", "ep-config", "ep-telemetry", "ping", "ping2",
 	"udp-setup", "udp-rekey", "ep-subscribe", "ep-file", "wlc-site-rest",
-	"ep-ip-register", "ip6",
+	"ep-ip-register", "ip6", "ep-config-change", "ap-cmd-rx",
 }
 
 // SubjectOther is the frame counter for subjects outside FrameSubjects.
@@ -37,7 +37,7 @@ func subjectIndex(subject string) int {
 // TopicUndecodable.
 var telemetryTopics = [...]string{
 	"ap-stats-full-", "ap-stats-fast-", "ep-config-applied-", "ep-pace-event-",
-	"client-pace-event-",
+	"client-pace-event-", "ap-cmd-output-",
 }
 
 // Telemetry topic counters outside TelemetryTopics.
@@ -115,10 +115,26 @@ type Counters struct {
 	// ep-ip-register frames recorded.
 	FileOffers      uint64 `json:"file_offers"`
 	IPRegistrations uint64 `json:"ip_registrations"`
+
+	// Counters v2 (phase 2 to 4).
+
+	// Pushes counts finished config pushes by mode (PushModeNotify,
+	// PushModeReconnect) and result (PushResult* constants), for
+	// dismist_ap_config_pushes_total{mode,result}.
+	Pushes map[string]map[string]uint64 `json:"pushes"`
+	// Verifications counts post-delivery verifications run;
+	// VerifyMismatches those that found a difference.
+	Verifications    uint64 `json:"verifications"`
+	VerifyMismatches uint64 `json:"verify_mismatches"`
+	// Commands counts ap-cmd-rx commands sent, by command.
+	Commands map[string]uint64 `json:"commands"`
+	// ClockSkewWarnings counts sessions whose AP clock was off by more than
+	// 30 s.
+	ClockSkewWarnings uint64 `json:"clock_skew_warnings"`
 }
 
 // replyFeatures are the features that answer an AP frame (Counters.Replies).
-var replyFeatures = [...]Feature{FeaturePong2, FeatureSubscribeReply, FeatureFileDiscard, FeatureSiteRest404}
+var replyFeatures = [...]Feature{FeaturePong2, FeatureSubscribeReply, FeatureFileDiscard, FeatureSiteRest404, FeatureNotModified}
 
 func replyIndex(feature Feature) int {
 	for index, known := range replyFeatures {
@@ -146,9 +162,37 @@ type counters struct {
 	paceNoise         atomic.Uint64
 	fileOffers        atomic.Uint64
 	ipRegistrations   atomic.Uint64
+	verifications     atomic.Uint64
+	verifyMismatches  atomic.Uint64
+	clockSkewWarnings atomic.Uint64
 
 	decodeMu     sync.Mutex
 	decodeErrors map[string]uint64
+	pushes       map[string]map[string]uint64
+	commands     map[string]uint64
+}
+
+// push counts one finished push.
+func (c *counters) push(mode, result string) {
+	c.decodeMu.Lock()
+	defer c.decodeMu.Unlock()
+	if c.pushes == nil {
+		c.pushes = make(map[string]map[string]uint64)
+	}
+	if c.pushes[mode] == nil {
+		c.pushes[mode] = make(map[string]uint64)
+	}
+	c.pushes[mode][result]++
+}
+
+// command counts one ap-cmd-rx command sent.
+func (c *counters) command(name string) {
+	c.decodeMu.Lock()
+	defer c.decodeMu.Unlock()
+	if c.commands == nil {
+		c.commands = make(map[string]uint64)
+	}
+	c.commands[name]++
 }
 
 func (c *counters) frame(subject string) { c.frames[subjectIndex(subject)].Add(1) }
@@ -207,6 +251,11 @@ func (c *counters) snapshot() Counters {
 		PaceNoise:         c.paceNoise.Load(),
 		FileOffers:        c.fileOffers.Load(),
 		IPRegistrations:   c.ipRegistrations.Load(),
+		Verifications:     c.verifications.Load(),
+		VerifyMismatches:  c.verifyMismatches.Load(),
+		ClockSkewWarnings: c.clockSkewWarnings.Load(),
+		Pushes:            map[string]map[string]uint64{},
+		Commands:          map[string]uint64{},
 	}
 	for index, subject := range FrameSubjects() {
 		result.Frames[subject] = c.frames[index].Load()
@@ -220,6 +269,15 @@ func (c *counters) snapshot() Counters {
 	c.decodeMu.Lock()
 	for section, count := range c.decodeErrors {
 		result.DecodeErrors[section] = count
+	}
+	for _, mode := range []string{PushModeNotify, PushModeReconnect} {
+		result.Pushes[mode] = map[string]uint64{}
+		for _, outcome := range PushResults() {
+			result.Pushes[mode][outcome] = c.pushes[mode][outcome]
+		}
+	}
+	for name, count := range c.commands {
+		result.Commands[name] = count
 	}
 	c.decodeMu.Unlock()
 	return result

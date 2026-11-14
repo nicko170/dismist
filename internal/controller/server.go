@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net"
 	"net/http"
 	"sort"
@@ -58,11 +57,55 @@ type Options struct {
 	// bytes sent (design §4.4: ap_config.delivered is written each time).
 	OnConfigDelivered func(ConfigDelivery)
 	// OnEvent, when set, receives every typed event (controller and PACE)
-	// for the events2 store (design §5.8). It is called on the AP's session
-	// goroutine and must not block.
-	OnEvent            func(Event)
-	OnTelemetry        func([]byte)
-	OnAPFrame          func(protocol.Message)
+	// for the events2 store (design §5.8). It is called outside the
+	// server's lock, on the goroutine that produced the event, and must
+	// not block for long.
+	OnEvent     func(Event)
+	OnTelemetry func([]byte)
+	OnAPFrame   func(protocol.Message)
+
+	// Status persists last-known facts in ap_status (design §5.4, §8.4):
+	// hellos, reboots, the field-32 VAP list, the tunnel address and the
+	// ep-config request. nil keeps them in memory only.
+	Status StatusSink
+	// LastKnownVAPs seeds the last-known VAP list (from ap_status) so the
+	// unchanged-config verification after a pod restart has a baseline.
+	LastKnownVAPs []telemetry.VAP
+	// LastDelivered is the config last delivered to the AP before this
+	// session object existed (ap_config.delivered), the baseline of the
+	// unchanged-config check.
+	LastDelivered []byte
+	// LocalFiles is the AP's effective.LocalFiles* state, which the
+	// verification's normaliser needs.
+	LocalFiles string
+
+	// PushMode is the AP's learned push mode (APRecord.PushMode): "",
+	// PushModeNotify or PushModeReconnect.
+	PushMode string
+	// OnPush receives every push lifecycle state (SSE "push", design
+	// §4.10).
+	OnPush func(PushEvent)
+	// OnPushModeLearned is called when the learned push mode changes, to
+	// store it in APRecord.PushMode.
+	OnPushModeLearned func(apID, mode string)
+	// OnVerified receives every post-delivery verification result, to
+	// store it in ap_config.delivered.verified (design §5.9).
+	OnVerified func(apID string, result Verification)
+	// OnScan receives every neighbour scan (field 69) for the scans
+	// bucket (design §5.10).
+	OnScan func(apID string, at time.Time, scan telemetry.Scan)
+	// OnCommandOutput receives ap-cmd-output- messages (ping, traceroute,
+	// arp output, phase 4).
+	OnCommandOutput func(apID string, output telemetry.CommandOutput)
+	// LocateUntil is when the AP's locate state expires (APRecord
+	// .LocateUntil); OnLocateExpired is called then, to clear it and push
+	// LED.Locator=false (design §5.6).
+	LocateUntil     time.Time
+	OnLocateExpired func(apID string)
+	// Timings overrides the protocol timers (tests); zero fields keep the
+	// defaults.
+	Timings Timings
+
 	UDPProbeAddress    string
 	UDPProbeAAD        []byte
 	UDPProbeSendTest   bool
@@ -79,77 +122,81 @@ type ConfigDelivery struct {
 	At        time.Time
 }
 
+// apConn is one AP WebSocket connection. Replies (session goroutine),
+// pushes and commands (API goroutines) all write through it, so writes are
+// serialised.
+type apConn struct {
+	ws      *websocket.Conn
+	writeMu sync.Mutex
+}
+
+func (c *apConn) write(message protocol.Message) error {
+	frame, err := protocol.Encode(message)
+	if err != nil {
+		return err
+	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	_ = c.ws.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	return c.ws.WriteMessage(websocket.BinaryMessage, frame)
+}
+
+// reply answers a request frame with the same version, class, subject and
+// handle.
+func (c *apConn) reply(request protocol.Message, body []byte) error {
+	return c.write(protocol.Message{
+		Version: request.Version, ServiceClass: request.ServiceClass,
+		Subject: request.Subject, Handle: request.Handle, Body: body,
+	})
+}
+
+func (c *apConn) close() error { return c.ws.Close() }
+
 type Server struct {
-	allowedIP          net.IP
-	auth               Authenticator
-	mu                 sync.RWMutex
-	config             []byte
-	revision           uint64
-	configTS           float64
-	active             *websocket.Conn
-	closing            *websocket.Conn
-	closingCause       string
-	status             Status
-	counters           counters
-	features           atomic.Uint32
-	onConfigDelivered  func(ConfigDelivery)
-	stats              TelemetrySnapshot
-	clients            map[string]ClientActivity
-	associated         map[string]telemetry.Client
+	allowedIP         net.IP
+	auth              Authenticator
+	mu                sync.RWMutex
+	config            []byte
+	revision          uint64
+	configTS          float64
+	active            *apConn
+	closing           *apConn
+	closingCause      string
+	status            Status
+	counters          counters
+	features          atomic.Uint32
+	onConfigDelivered func(ConfigDelivery)
+	onEvent           func(Event)
+	onPush            func(PushEvent)
+	onPushMode        func(apID, mode string)
+	onVerified        func(apID string, result Verification)
+	onScan            func(apID string, at time.Time, scan telemetry.Scan)
+	onCommandOutput   func(apID string, output telemetry.CommandOutput)
+	onLocateExpired   func(apID string)
+	sink              StatusSink
+	localFiles        string
+	timings           Timings
+	stats             TelemetrySnapshot
+	clients           map[string]ClientActivity
+	associated        map[string]telemetry.Client
+	observe           observeState
+	push              pushState
+	verify            verifyState
+	commands          commandState
+	locate            locateState
+	learnedPushMode   string
+	otherSubjects     map[string]time.Time
+
+	eventsMu      sync.Mutex
+	pendingEvents []Event
+	pendingPushes []PushEvent
+
 	onTelemetry        func([]byte)
 	onAPFrame          func(protocol.Message)
 	udpProbeAddress    string
 	udpProbeAAD        []byte
 	udpProbeSendTest   bool
 	udpProbeRekeyDelay time.Duration
-}
-
-type Status struct {
-	Connected       bool      `json:"connected"`
-	ConnectedAt     time.Time `json:"connected_at"`
-	ConnectionCount uint64    `json:"connection_count"`
-	TLSCipherSuite  string    `json:"tls_cipher_suite"`
-	LastDisconnect  time.Time `json:"last_disconnect"`
-	Firmware        string    `json:"firmware"`
-	Model           string    `json:"model,omitempty"`
-	LastSeen        time.Time `json:"last_seen"`
-	AppliedRevision uint64    `json:"applied_revision"`
-	LastError       string    `json:"last_error,omitempty"`
-	RemoteAddress   string    `json:"remote_address,omitempty"`
-	// Hello holds the extra fields of the last authenticated hello, from
-	// the tolerant pass (design §5.4); HelloAt is when it arrived.
-	Hello   HelloExtras `json:"hello,omitzero"`
-	HelloAt time.Time   `json:"hello_at,omitzero"`
-	// LastDisconnectCause says why the last authenticated session ended
-	// (controller disconnect, closed by the AP, read error, replaced by a
-	// new connection, protocol error).
-	LastDisconnectCause string `json:"last_disconnect_cause,omitempty"`
-	// ConfigSource is ConfigSourceCompiled, ConfigSourceDelivered or
-	// ConfigSourceNone.
-	ConfigSource string `json:"config_source,omitempty"`
-	// CompileError is the compile failure behind a delivered or absent
-	// config; cleared when a compiled config is set.
-	CompileError string `json:"compile_error,omitempty"`
-
-	// Status v2 (phase 1, design §5.4, §5.5, §5.7).
-
-	// DesiredConfigTimestamp is the Timestamp of the config dismist
-	// serves this AP (dismist_ap_desired_config_timestamp_seconds).
-	DesiredConfigTimestamp float64 `json:"desired_config_timestamp,omitempty"`
-	// ConfigRequest is the AP's last ep-config request: its applied
-	// Timestamp, rollback flag and capability tags.
-	ConfigRequest ConfigRequest `json:"config_request,omitzero"`
-	// Applied is the AP's last ep-config-applied report.
-	Applied ConfigApplied `json:"applied,omitzero"`
-	// TunnelIPv6 is the AP's tunnel address from its last ep-ip-register
-	// (diagnostic only); TunnelIPv6At is when it arrived.
-	TunnelIPv6   string    `json:"tunnel_ipv6,omitempty"`
-	TunnelIPv6At time.Time `json:"tunnel_ipv6_at,omitzero"`
-	// LastRebootDetected is when dismist last saw the AP had rebooted
-	// (a higher boot count in a hello or frame, or an uptime reset).
-	LastRebootDetected time.Time `json:"last_reboot_detected,omitzero"`
-	// LastFileOffer is the last crash report the AP offered (ep-file).
-	LastFileOffer *FileOffer `json:"last_file_offer,omitempty"`
 }
 
 type ClientActivity struct {
@@ -159,12 +206,19 @@ type ClientActivity struct {
 	LastSeen  time.Time `json:"last_seen"`
 }
 
+// ConnectionEvent is one entry of the AP's in-memory event buffer (the
+// last 100), which the legacy UI and the SSE stream read. Stored events
+// are the typed Event (OnEvent).
 type ConnectionEvent struct {
 	When      time.Time `json:"when"`
 	Kind      string    `json:"kind"`
 	Title     string    `json:"title"`
 	Detail    string    `json:"detail,omitempty"`
 	ClientMAC string    `json:"client_mac,omitempty"`
+	// ID is the PACE event ID; a re-sent event with the same ID updates
+	// the buffered one instead of adding another.
+	ID       string `json:"id,omitempty"`
+	Severity string `json:"severity,omitempty"`
 }
 
 func NewServer(options Options) (*Server, error) {
@@ -194,6 +248,11 @@ func NewServer(options Options) (*Server, error) {
 	default:
 		return nil, errors.New("invalid controller options")
 	}
+	switch options.PushMode {
+	case "", PushModeNotify, PushModeReconnect:
+	default:
+		return nil, errors.New("invalid controller options")
+	}
 	if err := CheckUDPProbe(options.UDPProbeAddress, options.UDPProbeAAD, options.UDPProbeSendTest, options.UDPProbeRekeyDelay); err != nil {
 		return nil, err
 	}
@@ -220,7 +279,19 @@ func NewServer(options Options) (*Server, error) {
 		configTS:           metadata.Timestamp,
 		clients:            make(map[string]ClientActivity),
 		associated:         make(map[string]telemetry.Client),
+		otherSubjects:      make(map[string]time.Time),
 		onConfigDelivered:  options.OnConfigDelivered,
+		onEvent:            options.OnEvent,
+		onPush:             options.OnPush,
+		onPushMode:         options.OnPushModeLearned,
+		onVerified:         options.OnVerified,
+		onScan:             options.OnScan,
+		onCommandOutput:    options.OnCommandOutput,
+		onLocateExpired:    options.OnLocateExpired,
+		sink:               options.Status,
+		localFiles:         options.LocalFiles,
+		timings:            options.Timings.withDefaults(),
+		learnedPushMode:    options.PushMode,
 		onTelemetry:        options.OnTelemetry,
 		onAPFrame:          options.OnAPFrame,
 		udpProbeAddress:    options.UDPProbeAddress,
@@ -229,7 +300,14 @@ func NewServer(options Options) (*Server, error) {
 		udpProbeRekeyDelay: options.UDPProbeRekeyDelay,
 	}
 	server.status.ConfigSource = source
+	server.status.DesiredConfigTimestamp = metadata.Timestamp
 	server.features.Store(uint32(options.Features))
+	if len(options.LastKnownVAPs) != 0 {
+		server.stats.LastKnownVAPs = append([]telemetry.VAP(nil), options.LastKnownVAPs...)
+	}
+	if len(options.LastDelivered) != 0 && json.Valid(options.LastDelivered) {
+		server.verify.previous = append([]byte(nil), options.LastDelivered...)
+	}
 	if options.CompileError != "" {
 		server.status.CompileError = truncateText(options.CompileError, 500)
 		server.counters.compileErrors.Add(1)
@@ -237,8 +315,9 @@ func NewServer(options Options) (*Server, error) {
 		if source == ConfigSourceNone {
 			title = "Configuration compile failed; no configuration to serve"
 		}
-		server.addEventLocked(ConnectionEvent{When: time.Now(), Kind: "config", Title: title, Detail: server.status.CompileError})
+		server.emitLocked(Event{Kind: EventConfig, Severity: SeverityError, Title: title, Detail: server.status.CompileError})
 	}
+	server.SetLocateUntil(options.LocateUntil)
 	return server, nil
 }
 
@@ -266,7 +345,21 @@ func CheckUDPProbe(address string, aad []byte, sendTest bool, rekeyDelay time.Du
 func (s *Server) Status() Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.status
+	status := s.status
+	status.PushMode = s.pushModeLocked()
+	status.Capabilities = s.capabilitiesLocked()
+	status.LocateUntil = s.locate.until
+	if s.push.last != nil {
+		last := *s.push.last
+		status.Push = &last
+	}
+	if s.status.Verification != nil {
+		verification := *s.status.Verification
+		verification.Mismatches = append([]string(nil), verification.Mismatches...)
+		verification.Notes = append([]string(nil), verification.Notes...)
+		status.Verification = &verification
+	}
+	return status
 }
 
 // ID is the AP ID this session serves.
@@ -279,8 +372,35 @@ func (s *Server) Counters() Counters { return s.counters.snapshot() }
 func (s *Server) Features() Features { return Features(s.features.Load()) }
 
 // SetFeatures switches protocol features; the change applies from the
-// next frame the AP sends, without a reconnect.
-func (s *Server) SetFeatures(features Features) { s.features.Store(uint32(features)) }
+// next frame the AP sends, without a reconnect. Switching
+// config_change_notify on again forgets a learned "reconnect" push mode,
+// so the operator can retry notify pushes.
+func (s *Server) SetFeatures(features Features) {
+	previous := Features(s.features.Swap(uint32(features)))
+	if previous == features {
+		return
+	}
+	var learned bool
+	s.mu.Lock()
+	if !previous.Has(FeatureConfigChangeNotify) && features.Has(FeatureConfigChangeNotify) && s.learnedPushMode == PushModeReconnect {
+		s.learnedPushMode, s.push.fallbacks, learned = "", 0, true
+	}
+	for _, feature := range allFeatures {
+		if previous.Has(feature) != features.Has(feature) {
+			state := "off"
+			if features.Has(feature) {
+				state = "on"
+			}
+			s.emitLocked(Event{Kind: EventFeature, Severity: SeverityInfo,
+				Title: fmt.Sprintf("Protocol feature %s switched %s", feature, state)})
+		}
+	}
+	s.mu.Unlock()
+	s.flush()
+	if learned && s.onPushMode != nil {
+		s.onPushMode(s.auth.ID, "")
+	}
+}
 
 // FeatureEnabled reports whether one protocol feature is on for this AP.
 func (s *Server) FeatureEnabled(feature Feature) bool { return s.Features().Has(feature) }
@@ -315,11 +435,23 @@ func (s *Server) ConfigSnapshot() ([]byte, uint64) {
 func (s *Server) TelemetrySnapshot() TelemetrySnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.snapshotLocked()
+}
+
+func (s *Server) snapshotLocked() TelemetrySnapshot {
 	result := s.stats
 	result.VAPs = append([]telemetry.VAP(nil), s.stats.VAPs...)
 	result.Radios = append([]telemetry.RadioStats(nil), s.stats.Radios...)
 	result.Events = append([]ConnectionEvent(nil), s.stats.Events...)
 	result.Interfaces = append([]telemetry.Interface(nil), s.stats.Interfaces...)
+	result.Probes = append([]telemetry.Probe(nil), s.stats.Probes...)
+	result.Ports = append([]telemetry.Port(nil), s.stats.Ports...)
+	result.LLDP = append([]telemetry.LLDPNeighbor(nil), s.stats.LLDP...)
+	result.LLDPPower = append([]telemetry.LLDPPower(nil), s.stats.LLDPPower...)
+	result.InactiveVLANs = append([]int(nil), s.stats.InactiveVLANs...)
+	result.LastKnownVAPs = append([]telemetry.VAP(nil), s.stats.LastKnownVAPs...)
+	result.KMsg = append([]string(nil), s.stats.KMsg...)
+	result.BLE = append([]telemetry.BLERadio(nil), s.stats.BLE...)
 	result.RecentClients = make([]ClientActivity, 0, len(s.clients))
 	for _, client := range s.clients {
 		result.RecentClients = append(result.RecentClients, client)
@@ -344,7 +476,7 @@ func (s *Server) SetConfig(config []byte, revision uint64) error {
 
 // SetConfigIfNewer refuses an older committed revision that arrives after a
 // newer site or AP mutation. Its return value tells callers whether the AP
-// needs to reconnect to fetch a changed config.
+// needs to fetch a changed config; Push runs the delivery lifecycle too.
 func (s *Server) SetConfigIfNewer(config []byte, revision uint64) (bool, error) {
 	if !json.Valid(config) {
 		return false, errors.New("invalid AP config JSON")
@@ -365,6 +497,7 @@ func (s *Server) SetConfigIfNewer(config []byte, revision uint64) (bool, error) 
 	s.revision = revision
 	s.status.ConfigSource = ConfigSourceCompiled
 	s.status.CompileError = ""
+	s.status.DesiredConfigTimestamp = metadata.Timestamp
 	return true, nil
 }
 
@@ -382,7 +515,7 @@ func (s *Server) DisconnectBecause(cause string) {
 	}
 	s.mu.Unlock()
 	if active != nil {
-		_ = active.Close()
+		_ = active.close()
 	}
 }
 
@@ -424,15 +557,16 @@ type sessionEnd struct {
 // this AP's active session once it authenticates, so an unauthenticated
 // client naming this AP cannot displace the real one. onAuthenticated, when
 // set, is called once the AP has authenticated.
-func (s *Server) serveConn(conn *websocket.Conn, cipherSuite uint16, remoteAddr string, hello []byte, onAuthenticated func()) sessionEnd {
-	defer conn.Close()
-	conn.SetReadLimit(8 << 20)
+func (s *Server) serveConn(ws *websocket.Conn, cipherSuite uint16, remoteAddr string, hello []byte, onAuthenticated func()) sessionEnd {
+	conn := &apConn{ws: ws}
+	defer conn.close()
+	ws.SetReadLimit(8 << 20)
 	authenticator := s.auth
 	authenticator.CipherSuite = cipherSuite
 	end := sessionEnd{onAuthenticated: onAuthenticated}
 	err := s.handle(conn, authenticator, remoteAddr, hello, &end)
 	if err != nil {
-		closeWithPolicyViolation(conn, "invalid AP message")
+		closeWithPolicyViolation(ws, "invalid AP message")
 	}
 	if end.authFailure != "" {
 		s.counters.authFailure(end.authFailure)
@@ -449,11 +583,12 @@ func (s *Server) serveConn(conn *websocket.Conn, cipherSuite uint16, remoteAddr 
 		s.status.LastDisconnect = time.Now()
 		s.status.LastDisconnectCause = cause
 		s.counters.disconnects.Add(1)
-		s.addEventLocked(ConnectionEvent{When: time.Now(), Kind: "connection", Title: "AP disconnected", Detail: cause})
+		s.emitLocked(Event{Kind: EventConnection, Severity: SeverityInfo, Title: "AP disconnected", Detail: cause})
 	} else if s.closing == conn {
 		s.closing, s.closingCause = nil, ""
 	}
 	s.mu.Unlock()
+	s.flush()
 	return end
 }
 
@@ -521,7 +656,11 @@ func clockBody() []byte {
 	return body[:]
 }
 
-func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remoteAddr string, pending []byte, end *sessionEnd) error {
+// handle runs the session's frame loop. The authentication states and the
+// frames they accept are unchanged from phase 0 (design §5.4): the hello is
+// decoded into Hello only, and everything new is recorded after
+// authentication.
+func (s *Server) handle(conn *apConn, authenticator Authenticator, remoteAddr string, pending []byte, end *sessionEnd) error {
 	const (
 		awaitHello = iota
 		awaitClientProof
@@ -532,7 +671,7 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 	var helloBody []byte
 	var reply1 Reply1
 	var authHandle uint64
-	configUnavailableNoted := false
+	session := &sessionState{}
 	for {
 		var messageType int
 		var raw []byte
@@ -540,7 +679,7 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 			messageType, raw, pending = websocket.BinaryMessage, pending, nil
 		} else {
 			var err error
-			messageType, raw, err = conn.ReadMessage()
+			messageType, raw, err = conn.ws.ReadMessage()
 			if err != nil {
 				end.readErr = err
 				if state == awaitClientProof {
@@ -580,7 +719,7 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 			if message.ServiceClass != 2 {
 				return ErrAuthentication
 			}
-			if err := writeReply(conn, message, clockBody()); err != nil {
+			if err := conn.reply(message, clockBody()); err != nil {
 				return err
 			}
 		case "ep-auth":
@@ -607,7 +746,7 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 				if err != nil {
 					return err
 				}
-				if err := writeReply(conn, message, body); err != nil {
+				if err := conn.reply(message, body); err != nil {
 					return err
 				}
 				authHandle = message.Handle
@@ -631,7 +770,7 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 				if err != nil {
 					return err
 				}
-				if err := writeReply(conn, message, body); err != nil {
+				if err := conn.reply(message, body); err != nil {
 					return err
 				}
 				state = authed
@@ -647,42 +786,21 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 			if state != authed || message.ServiceClass != 2 {
 				return ErrAuthentication
 			}
-			s.mu.RLock()
-			config := append([]byte(nil), s.config...)
-			revision, configTS := s.revision, s.configTS
-			hasConfig := s.config != nil
-			compileError := s.status.CompileError
-			s.mu.RUnlock()
-			if !hasConfig {
-				// The AP's config failed to compile and it was never
-				// delivered one: answer nothing rather than a wrong config.
-				s.counters.configUnavailable.Add(1)
-				if !configUnavailableNoted {
-					configUnavailableNoted = true
-					s.mu.Lock()
-					s.addEventLocked(ConnectionEvent{When: time.Now(), Kind: "config", Title: "Configuration unavailable", Detail: compileError})
-					s.mu.Unlock()
-				}
-				continue
-			}
-			if err := writeReply(conn, message, config); err != nil {
+			if err := s.handleConfigRequest(conn, message, session); err != nil {
 				return err
 			}
-			deliveredAt := time.Now()
-			s.counters.configDeliveries.Add(1)
-			s.mu.Lock()
-			s.addEventLocked(ConnectionEvent{When: deliveredAt, Kind: "config", Title: "Configuration delivered"})
-			s.mu.Unlock()
-			if s.onConfigDelivered != nil {
-				s.onConfigDelivered(ConfigDelivery{
-					APID: s.auth.ID, Config: config, Revision: revision, Timestamp: configTS, At: deliveredAt,
-				})
-			}
-		case "ping", "ping2":
+		case "ping":
 			if state != authed || message.ServiceClass != 2 {
 				return ErrAuthentication
 			}
-			if err := writeReply(conn, message, message.Body); err != nil {
+			if err := conn.reply(message, message.Body); err != nil {
+				return err
+			}
+		case "ping2":
+			if state != authed || message.ServiceClass != 2 {
+				return ErrAuthentication
+			}
+			if err := s.handlePing2(conn, message); err != nil {
 				return err
 			}
 		case "udp-setup":
@@ -718,7 +836,7 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 			if err != nil {
 				return err
 			}
-			if err := writeReply(conn, message, body); err != nil {
+			if err := conn.reply(message, body); err != nil {
 				return err
 			}
 		case "udp-rekey":
@@ -748,7 +866,7 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 			if err != nil {
 				return err
 			}
-			if err := writeReply(conn, message, body); err != nil {
+			if err := conn.reply(message, body); err != nil {
 				return err
 			}
 			if s.udpProbeSendTest {
@@ -771,7 +889,7 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 				if _, err := rand.Read(handleBytes[:]); err != nil {
 					return err
 				}
-				if err := writeReply(conn, protocol.Message{Version: 1, ServiceClass: 2,
+				if err := conn.writeMessage(protocol.Message{Version: 1, ServiceClass: 2,
 					Subject: "udp-test", Handle: uint64(binary.BigEndian.Uint32(handleBytes[:]))}, testBody); err != nil {
 					return err
 				}
@@ -784,81 +902,69 @@ func (s *Server) handle(conn *websocket.Conn, authenticator Authenticator, remot
 				s.onTelemetry(append([]byte(nil), message.Body...))
 			}
 			s.observeTelemetry(message.Body)
+		case "ep-subscribe":
+			if state != authed {
+				return ErrAuthentication
+			}
+			if err := s.handleSubscribe(conn, message); err != nil {
+				return err
+			}
+		case "ep-file":
+			if state != authed {
+				return ErrAuthentication
+			}
+			if err := s.handleFileOffer(conn, message); err != nil {
+				return err
+			}
+		case "wlc-site-rest":
+			if state != authed {
+				return ErrAuthentication
+			}
+			if err := s.handleSiteRest(conn, message); err != nil {
+				return err
+			}
+		case "ep-ip-register":
+			if state != authed {
+				return ErrAuthentication
+			}
+			s.handleIPRegister(message)
 		default:
 			if state != authed {
 				return ErrAuthentication
 			}
+			s.noteOtherSubject(message.Subject)
 		}
 	}
 }
 
-func (s *Server) observeTelemetry(body []byte) {
-	update, err := telemetry.Decode(body)
-	if err != nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
-	switch update.Topic {
-	case "ap-stats-full-":
-		s.stats.FullFrames++
-		s.stats.LastFull = now
-		s.stats.VAPs = append([]telemetry.VAP(nil), update.VAPs...)
-		s.stats.Radios = append([]telemetry.RadioStats(nil), update.Radios...)
-		s.stats.UptimeSeconds = update.UptimeSeconds
-		if len(update.Interfaces) != 0 {
-			s.stats.Interfaces = append([]telemetry.Interface(nil), update.Interfaces...)
-		}
-		s.associated = mergeAssociated(s.associated, update.Clients)
-	case "ap-stats-fast-":
-		s.stats.FastFrames++
-		s.stats.LastFast = now
-		if update.UptimeSeconds != 0 {
-			s.stats.UptimeSeconds = update.UptimeSeconds
-		}
-		s.associated = mergeAssociated(s.associated, update.Clients)
-	case "ep-config-applied-":
-		if update.Error != "" {
-			s.counters.configRejections.Add(1)
-			s.status.LastError = update.Error
-			s.addEventLocked(ConnectionEvent{When: now, Kind: "config", Title: "Configuration rejected", Detail: update.Error})
-		} else if s.configTS > 0 && math.Abs(update.ConfigTimestamp-s.configTS) < 0.000001 {
-			if s.status.AppliedRevision != s.revision {
-				s.status.AppliedRevision = s.revision
-				s.addEventLocked(ConnectionEvent{When: now, Kind: "config", Title: "Configuration applied"})
-			}
-			s.status.LastError = ""
-		}
-	case "ep-pace-event-", "client-pace-event-":
-		if update.Event == nil {
-			return
-		}
-		event := update.Event
-		when := event.When
-		if when.IsZero() {
-			when = now
-		}
-		s.addEventLocked(ConnectionEvent{
-			When: when, Kind: "ap_event", Title: event.Title,
-			Detail: event.Text, ClientMAC: event.ClientMAC,
-		})
-		if isClientActivity(s.auth.ID, *event) {
-			s.clients[event.ClientMAC] = ClientActivity{
-				MAC: event.ClientMAC, IP: event.ClientIP,
-				LastEvent: event.Title, LastSeen: when,
-			}
-		}
-	}
+// writeMessage sends a controller-initiated frame (not a reply).
+func (c *apConn) writeMessage(message protocol.Message, body []byte) error {
+	message.Body = body
+	return c.write(message)
 }
 
 // authenticated makes conn the AP's active session after a successful
 // handshake, then runs the tolerant hello pass (design §5.4): the extra
 // hello fields land in Status, decode failures are counted, and the
 // connection event says whether the AP rebooted or only reconnected.
-func (s *Server) authenticated(conn *websocket.Conn, authenticator Authenticator, hello Hello, helloBody []byte, remoteAddr string) {
+func (s *Server) authenticated(conn *apConn, authenticator Authenticator, hello Hello, helloBody []byte, remoteAddr string) {
 	extras, failed := decodeHelloExtras(helloBody)
 	now := time.Now()
+	extras.normaliseRebootTime(now)
+	// The previous hello: this session object's own, or after a daemon
+	// restart the one ap_status kept (design §5.4 "Reboot vs reconnect").
+	s.mu.RLock()
+	previousHello, previousAt := s.status.Hello, s.status.HelloAt
+	s.mu.RUnlock()
+	if s.sink != nil {
+		stored, storedAt, err := s.sink.RecordHello(s.auth.ID, now, hello.Model, extras)
+		if err != nil {
+			log.Printf("AP %s: cannot record the hello: %v", s.auth.ID, err)
+		} else if previousAt.IsZero() && stored != nil {
+			previousHello, previousAt = *stored, storedAt
+		}
+	}
+	rebooted, evidence := rebootEvidence(previousHello, previousAt, extras, now)
 	s.mu.Lock()
 	previous := s.active
 	if previous != nil && previous != conn {
@@ -872,9 +978,8 @@ func (s *Server) authenticated(conn *websocket.Conn, authenticator Authenticator
 		s.status.LastDisconnect = now
 		s.status.LastDisconnectCause = cause
 		s.counters.disconnects.Add(1)
-		s.addEventLocked(ConnectionEvent{When: now, Kind: "connection", Title: "AP disconnected", Detail: cause})
+		s.emitLocked(Event{Kind: EventConnection, Severity: SeverityInfo, Title: "AP disconnected", Detail: cause})
 	}
-	previousHello, previousAt := s.status.Hello, s.status.HelloAt
 	s.active = conn
 	s.status.Connected = true
 	s.status.LastSeen = now
@@ -887,37 +992,39 @@ func (s *Server) authenticated(conn *websocket.Conn, authenticator Authenticator
 	s.status.LastError = ""
 	s.status.Hello = extras
 	s.status.HelloAt = now
+	s.observe.newSession(extras.BootCount)
 	detail := hello.Firmware
 	if summary := extras.summary(); summary != "" {
 		detail += "; " + summary
 	}
-	rebooted, _ := rebootDetected(previousHello, previousAt, extras, now)
+	var reboot *Reboot
 	switch {
 	case rebooted:
-		var why []string
-		if extras.LastRebootReason != "" {
-			why = append(why, extras.LastRebootReason)
+		reboot = &Reboot{
+			DetectedAt: now, Evidence: evidence, BootCount: extras.BootCount,
+			PreviousBootCount: previousHello.BootCount, Uptime: extras.Uptime,
+			LastRebootTime: extras.LastRebootTime, Reason: extras.LastRebootReason,
+			BootState: extras.LastBootState,
 		}
-		if extras.LastBootState != "" {
-			why = append(why, extras.LastBootState)
-		}
-		title := "AP rebooted"
-		if len(why) != 0 {
-			title += " (" + strings.Join(why, ", ") + ")"
-		}
-		s.addEventLocked(ConnectionEvent{When: now, Kind: "reboot", Title: title, Detail: detail})
+		s.recordRebootLocked(*reboot, detail)
 	case !previousAt.IsZero():
-		s.addEventLocked(ConnectionEvent{When: now, Kind: "connection", Title: "AP reconnected", Detail: detail})
+		s.emitLocked(Event{Kind: EventConnection, Severity: SeverityInfo, Title: "AP reconnected", Detail: detail})
 	default:
-		s.addEventLocked(ConnectionEvent{When: now, Kind: "connection", Title: "AP authenticated", Detail: detail})
+		s.emitLocked(Event{Kind: EventConnection, Severity: SeverityInfo, Title: "AP authenticated", Detail: detail})
 	}
 	s.mu.Unlock()
+	s.flush()
+	if reboot != nil && s.sink != nil {
+		if err := s.sink.RecordReboot(s.auth.ID, *reboot); err != nil {
+			log.Printf("AP %s: cannot record the reboot: %v", s.auth.ID, err)
+		}
+	}
 	// Counted after Status holds the new hello, so a reader that sees the
 	// connection counted also sees its hello.
 	s.counters.decodeError("hello", len(failed))
 	s.counters.connections.Add(1)
 	if previous != nil && previous != conn {
-		_ = previous.Close()
+		_ = previous.close()
 	}
 	logged := hello.Firmware
 	if summary := extras.summary(); summary != "" {
@@ -932,35 +1039,24 @@ func (s *Server) authenticated(conn *websocket.Conn, authenticator Authenticator
 	}
 }
 
-func mergeAssociated(previous map[string]telemetry.Client, incoming []telemetry.Client) map[string]telemetry.Client {
-	next := make(map[string]telemetry.Client, len(incoming))
-	for _, client := range incoming {
-		if client.MAC == "" {
-			continue
-		}
-		if old, ok := previous[client.MAC]; ok {
-			if client.Name == "" {
-				client.Name = old.Name
-			}
-			if client.Auth == "" {
-				client.Auth = old.Auth
-			}
-			if client.Cipher == "" {
-				client.Cipher = old.Cipher
-			}
-			if client.BSSID == "" {
-				client.BSSID = old.BSSID
-			}
-			if client.SSID == "" {
-				client.SSID = old.SSID
-			}
-			if client.IP == "" {
-				client.IP = old.IP
-			}
-		}
-		next[client.MAC] = client
+// recordRebootLocked notes a detected reboot: the counter, the status and
+// a reboot event.
+func (s *Server) recordRebootLocked(reboot Reboot, detail string) {
+	s.counters.reboots.Add(1)
+	s.status.LastRebootDetected = reboot.DetectedAt
+	var why []string
+	if reboot.Reason != "" {
+		why = append(why, reboot.Reason)
 	}
-	return next
+	if reboot.BootState != "" {
+		why = append(why, reboot.BootState)
+	}
+	title := "AP rebooted"
+	if len(why) != 0 {
+		title += " (" + strings.Join(why, ", ") + ")"
+	}
+	data, _ := json.Marshal(reboot)
+	s.emitLocked(Event{Kind: EventReboot, Severity: SeverityWarning, Title: title, Detail: detail, Data: data})
 }
 
 func isClientActivity(apID string, event telemetry.Event) bool {
@@ -971,13 +1067,8 @@ func isClientActivity(apID string, event telemetry.Event) bool {
 	return !strings.EqualFold(event.ClientMAC, apMAC)
 }
 
-func (s *Server) addEventLocked(event ConnectionEvent) {
-	s.stats.Events = append(s.stats.Events, event)
-	if len(s.stats.Events) > 100 {
-		s.stats.Events = append([]ConnectionEvent(nil), s.stats.Events[len(s.stats.Events)-100:]...)
-	}
-}
-
+// writeReply answers a request on a raw connection (the Manager's routing
+// phase, before a session exists).
 func writeReply(conn *websocket.Conn, request protocol.Message, body []byte) error {
 	frame, err := protocol.Encode(protocol.Message{
 		Version: request.Version, ServiceClass: request.ServiceClass,

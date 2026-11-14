@@ -13,8 +13,8 @@ import (
 type Feature string
 
 // The fixed feature names. Every one is off unless switched on with
-// -ap-features or APRecord.Features (protocol_features). Phase 0 ships the
-// framework only: no handler consults a feature yet.
+// -ap-features or APRecord.Features (protocol_features), so upgrading
+// changes nothing an AP receives until an operator switches a feature on.
 const (
 	// FeaturePong2 answers ping2 with a protobuf Pong2 instead of an echo.
 	FeaturePong2 Feature = "pong2"
@@ -25,8 +25,19 @@ const (
 	// FeatureSiteRest404 answers wlc-site-rest GETs with a 404 at once.
 	FeatureSiteRest404 Feature = "site_rest_404"
 	// FeatureConfigChangeNotify pushes config with ep-config-change instead
-	// of a reconnect (§5.6).
+	// of a reconnect (§5.6), falling back to a reconnect when the AP does
+	// not re-fetch within 15 s.
 	FeatureConfigChangeNotify Feature = "config_change_notify"
+	// FeatureAPCmd allows ap-cmd-rx commands (reboot, restart radios,
+	// disconnect clients, ping, traceroute, arp) to this AP (§5.6). The
+	// wire format was recovered statically from 0.15 ep-control and is
+	// needs-live-test; without the feature every command is refused as
+	// unverified.
+	FeatureAPCmd Feature = "ap_cmd"
+	// FeatureNotModified answers an ep-config request whose
+	// AppliedConfigTimestamp equals the current Timestamp with
+	// {"NotModified":true} (§5.6, phase 4, experimental).
+	FeatureNotModified Feature = "not_modified"
 )
 
 // allFeatures is the fixed list, in display order. Bit i of Features is
@@ -37,6 +48,8 @@ var allFeatures = []Feature{
 	FeatureFileDiscard,
 	FeatureSiteRest404,
 	FeatureConfigChangeNotify,
+	FeatureAPCmd,
+	FeatureNotModified,
 }
 
 // AllFeatures returns every feature name in display order.
