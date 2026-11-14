@@ -1,4 +1,5 @@
 import { setupWorker } from 'msw/browser'
+import { configHandlers as featureConfigHandlers } from '@/features/settings/mocks/config-handlers'
 import type { APView, EventView } from '../types'
 import * as data from './data'
 import { dropStreams, emit, failStreams, restHandlers, streamHandlers, toLive, toSummary } from './handlers'
@@ -29,7 +30,8 @@ declare global {
 
 /** Starts MSW in the browser (`--mode mock` only; never in production builds). */
 export async function startMocks() {
-  const worker = setupWorker(...restHandlers, ...configHandlers, ...streamHandlers())
+  // Workstream F's typed config mocks come first so their phase-2 views win.
+  const worker = setupWorker(...featureConfigHandlers, ...restHandlers, ...configHandlers, ...streamHandlers())
   await worker.start({
     serviceWorker: { url: '/mockServiceWorker.js' },
     onUnhandledFrame: 'bypass',
