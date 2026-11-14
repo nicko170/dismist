@@ -16,13 +16,14 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { RecommendationList } from '@/features/settings/Recommendations'
 import { ConfigForm, ImpactDiff, impactLine } from '@/features/settings/kit/ConfigForm'
 import { ChipGroup, describedBy, FieldShell, NumberInput, OptionField, useOptionState } from '@/features/settings/kit/fields'
+import { getOption } from '@/features/settings/kit/options'
 import { UnsavedChangesGuard } from '@/features/settings/kit/guard'
 import { Dialog, Segmented } from '@/features/settings/kit/primitives'
 import { Section } from '@/features/settings/kit/Section'
 import { LegacyModeBanner, useSiteFormContext } from '@/features/settings/kit/site'
 import { useConfigForm } from '@/features/settings/kit/useConfigForm'
 import { cn } from '@/lib/utils'
-import { channelChips, fallbackChoices, POWER_WARN, remapChannels } from './channels'
+import { channelChips, fallbackChoices, POWER_WARN, remapChannels, WIDTHS } from './channels'
 import { BAND_KEY, rfSchema, toRFForm, toRFInput, type RFForm } from './form'
 import { PlanDialog, PlanTable } from './Plan'
 
@@ -265,7 +266,13 @@ function BandCard({ band, view }: { band: Band; view: RFProfileView }) {
           <span className="text-sm text-muted-foreground">40 MHz on 2.4 GHz is only available through the expert patch.</span>
         </div>
       ) : (
-        <OptionField k="site.rf.band_5.width" />
+        <OptionField
+          k="site.rf.band_5.width"
+          // AP33 has no 160 MHz chanspec under AU/890 (live `wl chanspecs`): never offered, whatever the registry lists.
+          choices={getOption('site.rf.band_5.width')
+            .enum.filter((e) => WIDTHS['5'].includes(Number(e.value)))
+            .map((e) => ({ value: e.value, label: e.label }))}
+        />
       )}
       {band === '5' ? <OptionField k="site.rf.band_5.dfs" /> : null}
       <ChannelsField band={band} valid={valid} width={width} dfs={dfs} />
