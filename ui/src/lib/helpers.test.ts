@@ -28,7 +28,7 @@ describe('jsonpath', () => {
     const out = JSON.parse(insertPath('{"led":{"Brightness":10}}', 'LED.Locator'))
     expect(out).toEqual({ led: { Brightness: 10, Locator: null } })
     expect(JSON.parse(insertPath('', 'Radios[].RRM.Channel'))).toEqual({ Radios: [{ RRM: { Channel: null } }] })
-    expect(() => insertPath('[1]', 'LED.Locator')).toThrow()
+    expect(() => insertPath('[1]', 'LED.Locator')).toThrow('must be a JSON object')
   })
 
   it('collects key paths', () => {
