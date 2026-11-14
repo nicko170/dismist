@@ -240,6 +240,13 @@ func TestInspectStockAndFactoryResetAP(t *testing.T) {
 		t.Fatalf("bundles: %+v", report.CABundles)
 	}
 
+	ap.setFile(apEPControlRW+"/cloud.ini", "[[cloud]]\nurl = \"wss://ap.example.net/ws\"\n[cloud.tls]\nrootcerts = \"relative.pem\"\n")
+	relative := runAP33Test(t, "inspect", "--json", "--log-lines", "0", "-i", key.file, "-p", strconv.Itoa(ap.port()), "127.0.0.1")
+	if relative.err != nil || !strings.Contains(relative.stdout, `not reading \"relative.pem\": not an absolute path`) {
+		t.Fatalf("relative rootcerts: %v\n%s", relative.err, relative.stdout)
+	}
+	assertReadOnly(t, ap.recorded())
+
 	for name := range syntheticAPFiles() {
 		if strings.HasPrefix(name, apEPControlRW+"/") {
 			ap.removeFile(name)

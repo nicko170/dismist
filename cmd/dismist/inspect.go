@@ -220,8 +220,14 @@ func (c *collector) run(command string) (string, bool, error) {
 	return string(result.Stdout), result.ExitStatus == 0, nil
 }
 
+// readFile cats an absolute path. Every path inspect reads is absolute, so
+// no "--" is needed (and old busybox builds need not support it).
 func (c *collector) readFile(file string) ([]byte, bool, error) {
-	result, err := c.runner.Run(c.ctx, "cat -- "+shellQuote(file))
+	if !strings.HasPrefix(file, "/") {
+		c.warn("not reading %q: not an absolute path", file)
+		return nil, false, nil
+	}
+	result, err := c.runner.Run(c.ctx, "cat "+shellQuote(file))
 	if err != nil {
 		return nil, false, err
 	}
