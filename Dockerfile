@@ -18,7 +18,8 @@ RUN npm run build
 FROM --platform=$BUILDPLATFORM node:24-alpine AS ui
 WORKDIR /src/ui
 COPY ui/package.json ui/package-lock.json ./
-RUN npm ci
+COPY ui/scripts/ensure-native-typescript.sh ./scripts/
+RUN npm ci && scripts/ensure-native-typescript.sh
 COPY ui/ ./
 RUN npm run build && \
     test -s dist/index.html && \

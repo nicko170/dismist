@@ -124,7 +124,9 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - name: Install
-        run: npm ci
+        run: |
+          npm ci
+          scripts/ensure-native-typescript.sh
 
       - name: Type check, lint and unit tests
         run: |
@@ -192,7 +194,7 @@ jobs:
       - name: Build the UI and the binaries the tests drive
         if: steps.scaffold.outputs.present == 'true'
         run: |
-          (cd ui && npm ci && npm run build)
+          (cd ui && npm ci && scripts/ensure-native-typescript.sh && npm run build)
           mkdir -p "$RUNNER_TEMP/bin"
           go build -o "$RUNNER_TEMP/bin/dismistd" ./cmd/dismistd
           echo "DISMISTD_BIN=$RUNNER_TEMP/bin/dismistd" >>"$GITHUB_ENV"
