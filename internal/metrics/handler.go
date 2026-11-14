@@ -1,27 +1,144 @@
 // Package metrics exposes bounded, read-only Prometheus telemetry for the controller.
+//
+// Labels carry IDs only (site UUID, AP ID). Names, IP addresses, SSIDs, client
+// MACs, passphrases and secret paths never appear in the default mode.
 package metrics
 
 import (
-	"bytes"
+	"crypto/sha256"
+	"crypto/subtle"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
-	"sort"
-	"strconv"
 	"strings"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
 )
 
-type handler struct {
-	store   model.StateStore
-	manager *controller.Manager
+// ClientMode selects how client data is exported (-metrics-clients).
+type ClientMode string
+
+const (
+	ClientsOff       ClientMode = "off"
+	ClientsAggregate ClientMode = "aggregate"
+	ClientsPerClient ClientMode = "per-client"
+)
+
+// ParseClientMode accepts "off", "aggregate" or "per-client".
+func ParseClientMode(value string) (ClientMode, error) {
+	switch mode := ClientMode(value); mode {
+	case ClientsOff, ClientsAggregate, ClientsPerClient:
+		return mode, nil
+	}
+	return "", fmt.Errorf("unknown client metrics mode %q (want off, aggregate or per-client)", value)
 }
 
-// New returns a scrape handler. Its only route is GET /metrics; the caller must
-// bind it to a loopback listener or put an authenticated proxy in front of it.
+// CompileStatus is one AP's config compile state.
+type CompileStatus struct {
+	// Failing is true while the AP's last compile failed and it is served
+	// its last delivered config instead.
+	Failing bool
+	// Failures counts failed compiles since the controller started.
+	Failures uint64
+}
+
+// Options configures the scrape handler. Store and Manager are required.
+type Options struct {
+	Store   model.StateStore
+	Manager *controller.Manager
+
+	// Token, when non-empty, must be presented as "Authorization: Bearer
+	// <token>" on every scrape (-metrics-token-file).
+	Token string
+
+	// Names adds a name label to *_info series (-metrics-names). Clients and
+	// ClientLimit select the client series (-metrics-clients,
+	// -metrics-client-limit). Phase 0 exports no *_info or client series yet,
+	// so these are accepted and kept for the collectors that use them.
+	Names       bool
+	Clients     ClientMode
+	ClientLimit int
+
+	// StoreSchema reports meta.schema and meta.compat; ok is false when the
+	// database cannot be read. Nil omits dismist_store_schema and
+	// dismist_store_compat.
+	StoreSchema func() (schema, compat int, ok bool)
+	// CompileStatus reports the compile state by AP ID; APs absent from the
+	// map are reported as compiling cleanly. Nil omits the
+	// dismist_ap_config_compile_error(s) series.
+	CompileStatus func() map[string]CompileStatus
+
+	// ErrorLog receives scrape errors. Nil logs to the standard logger.
+	ErrorLog promhttp.Logger
+}
+
+type handler struct {
+	scrape http.Handler
+	// tokenDigest is the SHA-256 of the required bearer token, or nil when
+	// scrapes are not authenticated. Comparing digests keeps the comparison
+	// constant-time regardless of the presented token's length.
+	tokenDigest []byte
+}
+
+// New returns an unauthenticated scrape handler with default options. Its
+// only route is GET /metrics; the caller must bind it to a loopback listener
+// or put an authenticated proxy in front of it.
 func New(store model.StateStore, manager *controller.Manager) http.Handler {
-	return &handler{store: store, manager: manager}
+	h, err := NewHandler(Options{Store: store, Manager: manager})
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
+// NewHandler returns the scrape handler for GET /metrics.
+func NewHandler(options Options) (http.Handler, error) {
+	if options.Store == nil || options.Manager == nil {
+		return nil, errors.New("metrics: store and manager are required")
+	}
+	if options.Clients == "" {
+		options.Clients = ClientsAggregate
+	}
+	if _, err := ParseClientMode(string(options.Clients)); err != nil {
+		return nil, err
+	}
+	if options.ClientLimit < 0 {
+		return nil, errors.New("metrics: client limit must not be negative")
+	}
+	if strings.ContainsFunc(options.Token, isTokenSpace) {
+		return nil, errors.New("metrics: token must not contain spaces or control characters")
+	}
+	registry := prometheus.NewRegistry()
+	if err := registry.Register(collectors.NewGoCollector()); err != nil {
+		return nil, err
+	}
+	if err := registry.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
+		return nil, err
+	}
+	if err := registry.Register(newCollector(options)); err != nil {
+		return nil, err
+	}
+	errorLog := options.ErrorLog
+	if errorLog == nil {
+		errorLog = log.New(log.Writer(), "metrics: ", log.Flags())
+	}
+	h := &handler{scrape: promhttp.HandlerFor(registry, promhttp.HandlerOpts{
+		// A series that fails to collect is logged and left out; the rest of
+		// the scrape is still served.
+		ErrorHandling: promhttp.ContinueOnError,
+		ErrorLog:      errorLog,
+	})}
+	if options.Token != "" {
+		digest := sha256.Sum256([]byte(options.Token))
+		h.tokenDigest = digest[:]
+	}
+	return h, nil
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -34,93 +151,22 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	state := h.store.Snapshot()
-	servers := h.manager.Servers()
-	sort.Slice(state.Sites, func(i, j int) bool { return state.Sites[i].ID < state.Sites[j].ID })
-	sort.Slice(state.APs, func(i, j int) bool { return state.APs[i].ID < state.APs[j].ID })
-
-	var out bytes.Buffer
-	writeMetric(&out, "dismist_sites", "Registered sites.", "gauge", strconv.Itoa(len(state.Sites)))
-	writeMetric(&out, "dismist_aps", "Registered access points.", "gauge", strconv.Itoa(len(state.APs)))
-
-	siteAPs := make(map[string]int, len(state.Sites))
-	siteClients := make(map[string]int, len(state.Sites))
-	aps := make([]apSample, 0, len(state.APs))
-	for _, ap := range state.APs {
-		siteAPs[ap.SiteID]++
-		sample := apSample{site: ap.SiteID, id: ap.ID, desired: ap.ConfigRevision}
-		if server := servers[ap.ID]; server != nil {
-			status := server.Status()
-			stats := server.TelemetrySnapshot()
-			sample.connected = status.Connected
-			sample.connections = status.ConnectionCount
-			sample.applied = status.AppliedRevision
-			sample.lastSeen = status.LastSeen.Unix()
-			if status.LastSeen.IsZero() {
-				sample.lastSeen = 0
-			}
-			sample.fullFrames = stats.FullFrames
-			sample.fastFrames = stats.FastFrames
-			sample.uptime = stats.UptimeSeconds
-			sample.clients = liveClientCount(status, stats)
-			siteClients[ap.SiteID] += sample.clients
-		}
-		aps = append(aps, sample)
+	if h.tokenDigest != nil && !h.authorized(r) {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="dismist metrics"`)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
-	writeSiteMetric(&out, "dismist_site_aps", "Registered access points per site.", state.Sites, siteAPs)
-	writeSiteMetric(&out, "dismist_site_associated_clients", "Associated clients on connected access points per site.", state.Sites, siteClients)
-	writeAPMetric(&out, "dismist_ap_connected", "Whether the access point is connected to the controller.", "gauge", aps, func(a apSample) string {
-		if a.connected {
-			return "1"
-		}
-		return "0"
-	})
-	writeAPMetric(&out, "dismist_ap_associated_clients", "Associated clients while the access point is connected.", "gauge", aps, func(a apSample) string { return strconv.Itoa(a.clients) })
-	writeAPMetric(&out, "dismist_ap_connections_total", "Authenticated access point connections since controller start.", "counter", aps, func(a apSample) string { return strconv.FormatUint(a.connections, 10) })
-	writeAPMetric(&out, "dismist_ap_full_frames_total", "Full telemetry frames received since controller start.", "counter", aps, func(a apSample) string { return strconv.FormatUint(a.fullFrames, 10) })
-	writeAPMetric(&out, "dismist_ap_fast_frames_total", "Fast telemetry frames received since controller start.", "counter", aps, func(a apSample) string { return strconv.FormatUint(a.fastFrames, 10) })
-	writeAPMetric(&out, "dismist_ap_uptime_seconds", "Access point uptime reported by its latest telemetry.", "gauge", aps, func(a apSample) string { return strconv.FormatUint(a.uptime, 10) })
-	writeAPMetric(&out, "dismist_ap_desired_revision", "Desired access point configuration revision.", "gauge", aps, func(a apSample) string { return strconv.FormatUint(a.desired, 10) })
-	writeAPMetric(&out, "dismist_ap_applied_revision", "Last access point configuration revision reported as applied.", "gauge", aps, func(a apSample) string { return strconv.FormatUint(a.applied, 10) })
-	writeAPMetric(&out, "dismist_ap_last_seen_timestamp_seconds", "Unix time of the last access point message, or zero if never seen.", "gauge", aps, func(a apSample) string { return strconv.FormatInt(a.lastSeen, 10) })
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write(out.Bytes())
+	h.scrape.ServeHTTP(w, r)
 }
 
-type apSample struct {
-	site, id                                                      string
-	connected                                                     bool
-	clients                                                       int
-	connections, fullFrames, fastFrames, uptime, desired, applied uint64
-	lastSeen                                                      int64
-}
-
-func liveClientCount(status controller.Status, stats controller.TelemetrySnapshot) int {
-	if !status.Connected || (stats.LastFull.Before(status.ConnectedAt) && stats.LastFast.Before(status.ConnectedAt)) {
-		return 0
+func (h *handler) authorized(r *http.Request) bool {
+	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return false
 	}
-	return len(stats.AssociatedClients)
+	digest := sha256.Sum256([]byte(strings.TrimSpace(token)))
+	return subtle.ConstantTimeCompare(digest[:], h.tokenDigest) == 1
 }
 
-func writeSiteMetric(out *bytes.Buffer, name, help string, sites []model.Site, values map[string]int) {
-	fmt.Fprintf(out, "# HELP %s %s\n# TYPE %s gauge\n", name, help, name)
-	for _, site := range sites {
-		fmt.Fprintf(out, "%s{site=\"%s\"} %d\n", name, escapeLabel(site.ID), values[site.ID])
-	}
-}
-
-func writeAPMetric(out *bytes.Buffer, name, help, kind string, aps []apSample, value func(apSample) string) {
-	fmt.Fprintf(out, "# HELP %s %s\n# TYPE %s %s\n", name, help, name, kind)
-	for _, ap := range aps {
-		fmt.Fprintf(out, "%s{site=\"%s\",ap=\"%s\"} %s\n", name, escapeLabel(ap.site), escapeLabel(ap.id), value(ap))
-	}
-}
-
-func writeMetric(out *bytes.Buffer, name, help, kind, value string) {
-	fmt.Fprintf(out, "# HELP %s %s\n# TYPE %s %s\n%s %s\n", name, help, name, kind, name, value)
-}
-
-var labelEscaper = strings.NewReplacer("\\", "\\\\", "\n", "\\n", "\"", "\\\"")
-
-func escapeLabel(value string) string { return labelEscaper.Replace(value) }
+func isTokenSpace(r rune) bool { return r <= ' ' || r == 0x7f }
