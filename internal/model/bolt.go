@@ -96,6 +96,9 @@ func OpenBolt(path, legacyJSON string) (*BoltStore, error) {
 			return err
 		}
 		store.hashKey = key
+		if err := backfillSessionIndex(tx); err != nil {
+			return err
+		}
 		if tx.Bucket([]byte("meta")).Get([]byte("revision")) != nil {
 			return nil
 		}
