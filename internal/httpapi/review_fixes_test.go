@@ -289,3 +289,26 @@ func TestLongSampleRangesReadHourlyRollups(t *testing.T) {
 		t.Fatalf("default step %+v", defaults)
 	}
 }
+
+// The expert editor's vocabulary comes from the firmware path list and the
+// server's forbidden patterns.
+func TestExpertVocabulary(t *testing.T) {
+	f := newV1Fixture(t)
+	wlan := decodeInto[api.ExpertVocabulary](t, f.call(t, http.MethodGet, "/api/options/expert?scope=wlan", ""), http.StatusOK)
+	has := func(list []string, want string) bool {
+		for _, item := range list {
+			if item == want {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(wlan.Paths, "Hidden") || !has(wlan.Paths, "Auth.AKM.WPA3_PSK") || has(wlan.Paths, "Radios") || !has(wlan.Forbidden, "SSID") || !has(wlan.Forbidden, "Wxlan.Portal*") {
+		t.Fatalf("wlan vocabulary: %d paths, forbidden %v", len(wlan.Paths), wlan.Forbidden)
+	}
+	site := decodeInto[api.ExpertVocabulary](t, f.call(t, http.MethodGet, "/api/options/expert?scope=site", ""), http.StatusOK)
+	if !has(site.Paths, "Monitor.NbrScan") && !has(site.Paths, "Monitor.Enabled") || has(site.Paths, "Hidden") || !has(site.Forbidden, "WLANs") {
+		t.Fatalf("site vocabulary: %d paths, forbidden %v", len(site.Paths), site.Forbidden)
+	}
+	errorOf(t, f.call(t, http.MethodGet, "/api/options/expert?scope=nope", ""), http.StatusBadRequest, api.ErrorCodeInvalid)
+}

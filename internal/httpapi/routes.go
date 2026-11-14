@@ -26,6 +26,7 @@ func (s *Server) registerRoutes() {
 	r.handle(get, "/api/onboarding", s.onboardingView)
 	r.handle(get, "/api/onboarding/ca-bundle.pem", s.caBundle)
 	r.handle(get, "/api/search", s.search)
+	r.handle(get, "/api/options/expert", s.expertVocabulary)
 
 	// Sites.
 	r.handle(get, "/api/sites", s.listSites)

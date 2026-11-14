@@ -893,6 +893,18 @@ export interface ExpertPatchView {
   updated_rev: number /* uint64 */;
 }
 /**
+ * ExpertVocabulary is GET /api/options/expert?scope=: what the expert
+ * editor (design §7.4) completes and refuses for a scope. Paths are the
+ * AP33 0.15 config paths ep-control decodes (relative to the WLAN object
+ * for the wlan scope; "[]" marks list elements); Forbidden are the
+ * server's forbidden patterns (a trailing "*" is a name prefix).
+ */
+export interface ExpertVocabulary {
+  scope: ExpertScope;
+  paths: string[];
+  forbidden: string[];
+}
+/**
  * ExpertPatchInput is PUT …/expert. A null patch removes it. Confirm must
  * be true to save a patch that shadows typed fields (the 422 lists them).
  */

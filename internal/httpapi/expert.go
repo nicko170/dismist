@@ -637,3 +637,31 @@ func restoreRedacted(original, incoming any) (any, error) {
 		return incoming, nil
 	}
 }
+
+// expertVocabulary serves GET /api/options/expert?scope= (design §7.4):
+// the firmware paths of the scope for completion and the forbidden
+// patterns the server enforces, so the editor never drifts from them.
+func (s *Server) expertVocabulary(writer http.ResponseWriter, request *http.Request, _ params) {
+	scope := api.ExpertScope(request.URL.Query().Get("scope"))
+	switch scope {
+	case api.ExpertScopeSite, api.ExpertScopeAP, api.ExpertScopeWLAN:
+	default:
+		writeAPIError(writer, invalidField("scope", `scope must be "site", "ap" or "wlan"`))
+		return
+	}
+	view := api.ExpertVocabulary{Scope: scope, Paths: []string{}, Forbidden: []string{}}
+	const wlanPrefix = "WLANs[]."
+	for _, path := range firmware.AP33().SortedPaths() {
+		inWLAN := strings.HasPrefix(path, wlanPrefix)
+		switch {
+		case scope == api.ExpertScopeWLAN && inWLAN:
+			view.Paths = append(view.Paths, strings.TrimPrefix(path, wlanPrefix))
+		case scope != api.ExpertScopeWLAN && !inWLAN && path != "WLANs" && path != "WLANs[]" && path != "":
+			view.Paths = append(view.Paths, path)
+		}
+	}
+	for _, pattern := range compile.ForbiddenPaths(string(scope)) {
+		view.Forbidden = append(view.Forbidden, strings.TrimPrefix(pattern, wlanPrefix))
+	}
+	respond(writer, http.StatusOK, view)
+}

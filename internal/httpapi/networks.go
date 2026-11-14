@@ -222,6 +222,11 @@ func (s *Server) wlanView(ctx apContext, network model.Network, lifted map[strin
 		Roaming: api.RoamingView{Fast: "none", NeighborReport: true, BSSTransition: true, BSSLoad: true},
 	}
 	viewFrom(network, &view)
+	if view.QoSClass == "" {
+		// Stored "" is no override, the same as "none" (the enum the
+		// registry and the form use).
+		view.QoSClass = "none"
+	}
 	record := readWLANRecord(network)
 	view.ID, view.SiteID, view.SSID, view.Enabled, view.VLANID = network.ID, network.SiteID, network.SSID, network.Enabled, network.VLANID
 	view.HasPSK = network.PSK != ""
