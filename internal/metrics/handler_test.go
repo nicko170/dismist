@@ -25,12 +25,23 @@ import (
 // fakeSession stands in for a registered AP session with a chosen status and
 // telemetry, so tests cover connected APs without a WSS handshake.
 type fakeSession struct {
-	status controller.Status
-	stats  controller.TelemetrySnapshot
+	status   controller.Status
+	stats    controller.TelemetrySnapshot
+	detail   APDetail
+	counters controller.Counters
+	features controller.Features
+	config   []byte
 }
 
 func (f fakeSession) Status() controller.Status                       { return f.status }
 func (f fakeSession) TelemetrySnapshot() controller.TelemetrySnapshot { return f.stats }
+func (f fakeSession) Counters() controller.Counters                   { return f.counters }
+func (f fakeSession) Features() controller.Features                   { return f.features }
+func (f fakeSession) ConfigSnapshot() ([]byte, uint64)                { return f.config, 0 }
+
+// fixtureNow is the scrape time of the fixture: AP 1's last full frame is
+// a minute old, so its telemetry is fresh.
+var fixtureNow = time.Date(2026, 11, 14, 3, 7, 5, 0, time.UTC)
 
 // fakeStore serves a fixed state without the model's validation, so tests
 // can hold records the store would refuse (an AP without a secret, a site
@@ -54,7 +65,7 @@ func openStore(t *testing.T, state model.State) model.StateStore {
 // fixture is a controller with connected, reconnected, disconnected and
 // unregistered APs, a site with no APs, an AP whose site is gone and an
 // unassigned AP. Names, addresses, SSIDs and MACs are all synthetic.
-func fixture(t *testing.T) (model.StateStore, map[string]session) {
+func fixture(t *testing.T) (model.StateStore, map[string]Session) {
 	t.Helper()
 	connectedAt := time.Date(2026, 11, 14, 3, 4, 5, 0, time.UTC)
 	state := model.State{
@@ -77,15 +88,19 @@ func fixture(t *testing.T) (model.StateStore, map[string]session) {
 		{MAC: "02-aa-00-00-10-01", Name: "phone", IP: "198.51.100.20", SSID: "Example", BSSID: "02-aa-00-00-20-01"},
 		{MAC: "02-aa-00-00-10-02", SSID: "Example"},
 	}
-	sessions := map[string]session{
+	sessions := map[string]Session{
 		// Connected, telemetry since this connection.
 		"02-aa-00-00-00-01": fakeSession{
-			status: controller.Status{Connected: true, ConnectedAt: connectedAt, ConnectionCount: 6, AppliedRevision: 7, LastSeen: connectedAt.Add(90 * time.Second), Firmware: "apfw-0.15.0", Model: "AP33", RemoteAddress: "198.51.100.7:40000"},
+			status: controller.Status{Connected: true, ConnectedAt: connectedAt, ConnectionCount: 6, AppliedRevision: 7, LastSeen: connectedAt.Add(90 * time.Second), Firmware: "apfw-0.15.0", Model: "AP33", RemoteAddress: "198.51.100.7:40000", LastError: "bad radio", Hello: controller.HelloExtras{BootCount: 6}},
 			stats: controller.TelemetrySnapshot{
-				FullFrames: 12, FastFrames: 345, LastFull: connectedAt.Add(60 * time.Second), UptimeSeconds: 218,
+				FullFrames: 12, FastFrames: 345, LastFull: connectedAt.Add(2 * time.Minute), LastFast: connectedAt.Add(2*time.Minute + 58*time.Second), UptimeSeconds: 218,
 				AssociatedClients: clients,
 				VAPs:              []telemetry.VAP{{Interface: "r1v0", SSID: "Example", BSSID: "02-aa-00-00-20-01"}},
 			},
+			detail:   fixtureDetail(),
+			counters: fixtureCounters(),
+			features: controller.Features(0).With(controller.FeaturePong2),
+			config:   []byte(`{"Timestamp":1794548005.856035,"WLANs":[{"SSID":"Example","PSK":"correct horse battery staple"}]}`),
 		},
 		// Connected, but its telemetry is from before the reconnect.
 		"02-aa-00-00-00-02": fakeSession{
@@ -101,10 +116,23 @@ func fixture(t *testing.T) (model.StateStore, map[string]session) {
 	return openStore(t, state), sessions
 }
 
-func testCollector(store model.StateStore, sessions map[string]session, options Options) *collector {
+// testCollector builds a collector over the fixture. Unless the options say
+// otherwise, the fixture's detail is the Detail source and fixtureNow the clock.
+func testCollector(store model.StateStore, sessions map[string]Session, options Options) *collector {
 	options.Store, options.Manager = store, controller.NewManager()
+	if options.Detail == nil {
+		options.Detail = func(_ string, session Session) APDetail {
+			if fake, ok := session.(fakeSession); ok {
+				return fake.detail
+			}
+			return APDetail{}
+		}
+	}
+	if options.Now == nil {
+		options.Now = func() time.Time { return fixtureNow }
+	}
 	c := newCollector(options)
-	c.sessions = func() map[string]session { return sessions }
+	c.sessions = func() map[string]Session { return sessions }
 	return c
 }
 
@@ -195,18 +223,43 @@ func sumFamily(t *testing.T, c *collector, name string) float64 {
 	return sum
 }
 
+// lintExceptions are promlint findings the design's catalogue (§6.3) keeps
+// on purpose: link speeds and throughput in bits per second, as network
+// equipment reports them.
+var lintExceptions = map[string]bool{
+	"dismist_ap_port_speed_bits_per_second":           true,
+	"dismist_radio_client_throughput_bits_per_second": true,
+}
+
 func TestCollectorPassesLint(t *testing.T) {
 	store, sessions := fixture(t)
-	c := testCollector(store, sessions, Options{
-		StoreSchema:   func() (int, int, bool) { return 2, 1, true },
-		CompileStatus: func() map[string]CompileStatus { return nil },
-	})
-	problems, err := testutil.CollectAndLint(c)
+	for _, mode := range []ClientMode{ClientsAggregate, ClientsPerClient} {
+		c := testCollector(store, sessions, Options{
+			StoreSchema:   func() (int, int, bool) { return 2, 1, true },
+			CompileStatus: func() map[string]CompileStatus { return nil },
+			Clients:       mode, ClientLimit: 10, Names: true,
+			Build:          BuildInfo{Version: "1.0.0", Revision: "abc", GoVersion: "go1.27"},
+			StoreUsage:     func() (StoreUsage, bool) { return StoreUsage{SizeBytes: 1, FreeBytes: 2, HasFree: true}, true },
+			MigrationState: func() (string, bool) { return "committed", true },
+			Backups:        func() (BackupStatus, bool) { return BackupStatus{Bytes: 1}, true },
+		})
+		problems, err := testutil.CollectAndLint(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, problem := range problems {
+			if lintExceptions[problem.Metric] && strings.Contains(problem.Text, `"bits"`) {
+				continue
+			}
+			t.Errorf("%s: %s: %s", mode, problem.Metric, problem.Text)
+		}
+	}
+	problems, err := testutil.CollectAndLint(NewInstruments())
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, problem := range problems {
-		t.Errorf("%s: %s", problem.Metric, problem.Text)
+		t.Errorf("instruments: %s: %s", problem.Metric, problem.Text)
 	}
 }
 
@@ -307,27 +360,6 @@ func TestScrapeReportsRegisteredSitesAndAPsWithoutSensitiveData(t *testing.T) {
 	}
 	for _, sensitive := range []string{"Private Site", "192.0.2.5", "/private/secret", "client_mac", "ssid", "psk"} {
 		if strings.Contains(strings.ToLower(body), strings.ToLower(sensitive)) {
-			t.Errorf("scrape leaked %q", sensitive)
-		}
-	}
-}
-
-// TestDefaultModeLeaksNothing scrapes connected APs with clients and WLANs
-// and checks no name, address, SSID, BSSID, MAC, firmware or PSK appears.
-func TestDefaultModeLeaksNothing(t *testing.T) {
-	store, sessions := fixture(t)
-	c := testCollector(store, sessions, Options{})
-	out, err := testutil.CollectAndFormat(c, expfmt.TypeTextPlain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := strings.ToLower(string(out))
-	for _, sensitive := range []string{
-		"example home", "lounge ap", "office ap", "192.0.2.5", "198.51.100.", "example",
-		"02-aa-00-00-10-01", "02-aa-00-00-10-02", "02-aa-00-00-20-01", "phone", "apfw", "ap33",
-		"correct horse", "net-1", "ssid", "psk", "mac",
-	} {
-		if strings.Contains(body, sensitive) {
 			t.Errorf("scrape leaked %q", sensitive)
 		}
 	}

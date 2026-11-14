@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nicko170/dismist/internal/metrics"
+	"github.com/nicko170/dismist/internal/model"
 )
 
 // metricsConfig holds the -metrics-* flags.
@@ -51,6 +52,7 @@ func startMetrics(c *metricsConfig, options metrics.Options) (*http.Server, erro
 		return nil, errors.New("-metrics-client-limit must not be negative")
 	}
 	options.Names, options.Clients, options.ClientLimit = c.names, mode, c.clientLimit
+	fillMetricsSources(&options, flag.CommandLine)
 	if c.tokenFile != "" {
 		token, err := metrics.ReadTokenFile(c.tokenFile)
 		if err != nil {
@@ -83,6 +85,38 @@ func startMetrics(c *metricsConfig, options metrics.Options) (*http.Server, erro
 		log.Printf("WARNING: /metrics on %s is readable without a token by anything that can reach it; set -metrics-token-file or restrict access to the port", listener.Addr())
 	}
 	return server, nil
+}
+
+// fillMetricsSources wires the sources the scrape handler can find without
+// main's help: build info, the database's size, free space, schema and
+// migration state, compile status, the per-AP detail view and the
+// certificates named by -tls-cert and -ap-ca-file. Sources already set are
+// kept. The backup scheduler and the listener instruments (TLS, DNS, HTTP,
+// observation writes) come from main.
+func fillMetricsSources(options *metrics.Options, flags *flag.FlagSet) {
+	if options.Build == (metrics.BuildInfo{}) {
+		options.Build = buildInfo()
+	}
+	if store, ok := options.Store.(*model.BoltStore); ok {
+		if options.StoreSchema == nil {
+			options.StoreSchema = storeSchema(store)
+		}
+		if options.StoreUsage == nil {
+			options.StoreUsage = storeUsage(store)
+		}
+		if options.MigrationState == nil {
+			options.MigrationState = migrationState(store)
+		}
+	}
+	if options.CompileStatus == nil && options.Manager != nil {
+		options.CompileStatus = compileStatus(options.Manager)
+	}
+	if options.Detail == nil {
+		options.Detail = apDetail(options.Store)
+	}
+	if options.Certificates == nil {
+		options.Certificates = certificatesFromFlags(flags)
+	}
 }
 
 // metricsListener binds a numeric loopback address only. main.go uses it

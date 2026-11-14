@@ -73,7 +73,7 @@ jobs:
             for command in dismist dismistd; do
               CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
                 go build -mod=readonly -trimpath -buildvcs=false \
-                -ldflags='-buildid=' \
+                -ldflags="-buildid= -X main.version=${GITHUB_REF_NAME#v} -X main.commit=${GITHUB_SHA}" \
                 -o "dist/${command}-${os}-${arch}" "./cmd/${command}"
             done
           done
@@ -146,6 +146,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ github.sha }}
           annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
