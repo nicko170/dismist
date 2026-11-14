@@ -226,16 +226,17 @@ const (
 	authBadToken                   // an Authorization header that is not a valid token
 )
 
-// authenticate checks the bearer token when an Authorization header is
-// present (a bad token is not retried as a cookie), else the session
-// cookie.
+// authenticate checks the bearer token when an Authorization: Bearer
+// header is present (a bad token is not retried as a cookie), else the
+// session cookie. Other Authorization schemes are ignored: a reverse proxy
+// with HTTP Basic auth forwards the browser's Basic credentials on every
+// request, next to the session cookie.
 func (g *Gate) authenticate(request *http.Request) (Principal, authStatus) {
-	if header := request.Header.Get("Authorization"); header != "" {
-		scheme, token, found := strings.Cut(header, " ")
-		if !found || !strings.EqualFold(scheme, "Bearer") || g.tokens == nil {
+	if token, ok := bearer(request.Header.Get("Authorization")); ok {
+		if g.tokens == nil {
 			return Principal{}, authBadToken
 		}
-		record, ok := g.tokens.Verify(strings.TrimSpace(token))
+		record, ok := g.tokens.Verify(token)
 		if !ok {
 			return Principal{}, authBadToken
 		}
@@ -246,6 +247,16 @@ func (g *Gate) authenticate(request *http.Request) (Principal, authStatus) {
 		return Principal{Via: api.AuthViaSession, Scope: api.TokenScopeAdmin, Expires: expires}, authOK
 	}
 	return Principal{}, authNone
+}
+
+// bearer returns the credentials of an Authorization header that uses the
+// Bearer scheme (case-insensitive, RFC 9110 §11.1), and whether it does.
+func bearer(header string) (string, bool) {
+	scheme, token, _ := strings.Cut(strings.TrimSpace(header), " ")
+	if !strings.EqualFold(scheme, "Bearer") {
+		return "", false
+	}
+	return strings.TrimSpace(token), true
 }
 
 // touch records a token use at most once a minute per token, so busy

@@ -160,3 +160,51 @@ func TestGateLoginThroughTrustedHTTPSProxy(t *testing.T) {
 		t.Fatalf("login with untrusted forwarded scheme = %d, want 403", direct.Code)
 	}
 }
+
+// A reverse proxy with HTTP Basic auth forwards the browser's
+// Authorization header on every request; only a Bearer header is a token
+// attempt, so the session cookie still signs those requests in.
+func TestGateIgnoresNonBearerAuthorization(t *testing.T) {
+	token := strings.Repeat("d", 64)
+	gate := New(token, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	login := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "http://controller.local:8088/auth/login", strings.NewReader(`{"token":"`+token+`"}`))
+	request.Header.Set("Authorization", "Basic b3BlcmF0b3I6c2VjcmV0")
+	gate.ServeHTTP(login, request)
+	if login.Code != http.StatusOK {
+		t.Fatalf("login: %d %s", login.Code, login.Body.String())
+	}
+	cookie := login.Result().Cookies()[0]
+	send := func(path, authorization string, withCookie bool) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "http://controller.local:8088"+path, nil)
+		request.Header.Set("Authorization", authorization)
+		if withCookie {
+			request.AddCookie(cookie)
+		}
+		response := httptest.NewRecorder()
+		gate.ServeHTTP(response, request)
+		return response
+	}
+	for _, authorization := range []string{"Basic b3BlcmF0b3I6c2VjcmV0", "Digest username=\"operator\"", "basic"} {
+		if response := send("/api/sites", authorization, true); response.Code != http.StatusOK {
+			t.Fatalf("%q with a session cookie: %d %s", authorization, response.Code, response.Body.String())
+		}
+		if response := send("/auth/session", authorization, true); response.Code != http.StatusOK {
+			t.Fatalf("/auth/session with %q and a session cookie: %d %s", authorization, response.Code, response.Body.String())
+		}
+		response := send("/api/sites", authorization, false)
+		body := checkErrorBody(t, authorization+" alone", response, http.StatusUnauthorized, "unauthorized")
+		if !strings.Contains(string(body["error"]), "sign in") {
+			t.Fatalf("%q without a cookie: %s, want the sign-in message", authorization, response.Body.String())
+		}
+	}
+	// A Bearer header is a token attempt: a bad one is refused even with a
+	// valid cookie (tokens are not configured here, so every one is bad).
+	for _, authorization := range []string{"Bearer dsm_x_y", "bearer dsm_x_y", "Bearer"} {
+		response := send("/api/sites", authorization, true)
+		body := checkErrorBody(t, authorization, response, http.StatusUnauthorized, "unauthorized")
+		if !strings.Contains(string(body["error"]), "token") {
+			t.Fatalf("%q: %s, want the bad-token message", authorization, response.Body.String())
+		}
+	}
+}
