@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { impactLine } from '@/features/settings/kit/ConfigForm'
 import { Dialog } from '@/features/settings/kit/primitives'
 import { cn } from '@/lib/utils'
+import { formatUtil } from '@/lib/format'
 
 // The channel plan table and the planner preview (design §3.10 "Channel plan
 // table", "Plan channels"). v1 never re-plans automatically: the operator
@@ -84,7 +85,7 @@ export function PlanTable({ siteId, rows }: { siteId: string; rows: PlanRow[] })
               </div>
               <div className="grid gap-0.5">
                 <dt className="text-xs text-muted-foreground">Load</dt>
-                <dd className="tabular-nums">{row.actual ? `${Math.round(row.actual.util)} % · ${row.actual.clients} clients` : '–'}</dd>
+                <dd className="tabular-nums">{row.actual ? `${formatUtil(row.actual.util)} · ${row.actual.clients} clients` : '–'}</dd>
               </div>
             </dl>
           </li>
@@ -119,7 +120,7 @@ export function PlanTable({ siteId, rows }: { siteId: string; rows: PlanRow[] })
                 <td className="hidden px-4 py-3 lg:table-cell">
                   <Actual row={row} />
                 </td>
-                <td className="hidden px-4 py-3 text-right tabular-nums xl:table-cell">{row.actual ? `${Math.round(row.actual.util)} %` : '–'}</td>
+                <td className="hidden px-4 py-3 text-right tabular-nums xl:table-cell">{row.actual ? formatUtil(row.actual.util) : '–'}</td>
                 <td className="hidden px-4 py-3 text-right tabular-nums xl:table-cell">{row.actual?.clients ?? '–'}</td>
                 <td className="px-4 py-3">
                   <Chip tone={statusMeta[row.status].tone}>{statusMeta[row.status].label}</Chip>

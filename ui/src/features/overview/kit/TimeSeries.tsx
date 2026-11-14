@@ -69,21 +69,27 @@ export function TimeSeries({
     const innerH = height - pad.top - pad.bottom
     const x = (t: number) => pad.left + ((t - t0) / span) * innerW
     const y = (v: number) => pad.top + innerH - (v / yMax) * innerH
-    // Break the line at gaps (null values).
+    // Break the line at gaps (null values). A run of one point has no line
+    // to draw, so it becomes a dot (a lone sample, or one bucket between
+    // gaps, still shows).
     const segments: string[] = []
-    let current = ''
-    for (const p of points) {
-      if (p.v === null) {
-        if (current) segments.push(current)
-        current = ''
-        continue
-      }
-      current += `${current ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`
+    const dots: { cx: number; cy: number }[] = []
+    let run: { t: number; v: number }[] = []
+    const flush = () => {
+      if (run.length === 1) dots.push({ cx: x(run[0].t), cy: y(run[0].v) })
+      else if (run.length > 1) segments.push(run.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(''))
+      run = []
     }
-    if (current) segments.push(current)
+    for (const p of points) {
+      if (p.v === null) flush()
+      else run.push({ t: p.t, v: p.v })
+    }
+    flush()
     const multiDay = span > 36 * 3600_000
-    const xTicks = Array.from({ length: 5 }, (_, i) => t0 + (span * i) / 4)
-    return { pad, ticks, x, y, segments, xTicks, multiDay, innerH, innerW, t0, span }
+    // About one time label per 90 px, so labels never touch on a phone.
+    const tickCount = Math.max(2, Math.min(5, Math.floor(innerW / 90)))
+    const xTicks = Array.from({ length: tickCount }, (_, i) => t0 + (span * i) / (tickCount - 1))
+    return { pad, ticks, x, y, segments, dots, xTicks, multiDay, innerH, innerW, t0, span }
   }, [points, width, height])
 
   const summary = summarise(points, unit)
@@ -129,7 +135,7 @@ export function TimeSeries({
               key={t}
               x={geometry.x(t)}
               y={height - 6}
-              textAnchor={i === 0 ? 'start' : i === 4 ? 'end' : 'middle'}
+              textAnchor={i === 0 ? 'start' : i === geometry.xTicks.length - 1 ? 'end' : 'middle'}
               className="fill-muted-foreground text-[11px] tabular-nums"
             >
               {(geometry.multiDay ? dayFmt : timeFmt).format(t)}
@@ -137,6 +143,9 @@ export function TimeSeries({
           ))}
           {geometry.segments.map((d, i) => (
             <path key={i} d={d} fill="none" className="stroke-chart-2" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          ))}
+          {geometry.dots.map((dot, i) => (
+            <circle key={`dot-${i}`} data-point cx={dot.cx} cy={dot.cy} r={3} className="fill-chart-2" />
           ))}
           {hovered && hovered.v !== null ? (
             <g>

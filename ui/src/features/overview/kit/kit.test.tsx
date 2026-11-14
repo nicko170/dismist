@@ -57,9 +57,27 @@ describe('charts', () => {
     expect(screen.getByText(/Peak 4 clients/)).toBeInTheDocument()
     expect(screen.getByText('Show data')).toBeInTheDocument()
   })
+  it('draws a lone sample, and one between gaps, as a dot', () => {
+    const t = Date.parse('2026-11-14T10:00:00Z')
+    const { container, unmount } = render(<TimeSeries points={[{ t, v: 2 }]} unit="clients" label="Clients" />)
+    expect(container.querySelectorAll('circle[data-point]')).toHaveLength(1)
+    expect(container.querySelectorAll('path')).toHaveLength(0)
+    unmount()
+    const gappy = render(
+      <TimeSeries
+        points={[{ t, v: 1 }, { t: t + 60_000, v: 2 }, { t: t + 120_000, v: null }, { t: t + 180_000, v: 3 }, { t: t + 240_000, v: null }]}
+        unit="clients"
+        label="Clients"
+      />,
+    )
+    expect(gappy.container.querySelectorAll('path')).toHaveLength(1)
+    expect(gappy.container.querySelectorAll('circle[data-point]')).toHaveLength(1)
+  })
   it('splits utilisation and lists every part in words', () => {
-    expect(normaliseUtil(40, { tx: 10, rx_bss: 20, unknown_wifi: 3, undecodable: 2 }).idle).toBe(65)
-    render(<UtilBar util={12} parts={{ tx: 5, rx_bss: 7 }} />)
+    // The API's fractions (0 to 1) and part keys.
+    expect(normaliseUtil(0.4, { tx: 0.1, rx_in_bss: 0.2, unknown_wifi: 0.03, undecodable_wifi: 0.02 }).idle).toBeCloseTo(65)
+    expect(normaliseUtil(0.2, {}).busy).toBeCloseTo(20)
+    render(<UtilBar util={0.12} parts={{ tx: 0.05, rx_in_bss: 0.07 }} />)
     expect(screen.getByRole('img', { name: 'Channel utilisation 12 %' })).toBeInTheDocument()
     expect(screen.getByText('Idle')).toBeInTheDocument()
   })

@@ -1,4 +1,5 @@
 import type { APDetail, PortView, RadioView } from '@/gen/api.gen'
+import { formatUtil } from '@/lib/format'
 
 // Display helpers for AP telemetry (design §3.5).
 
@@ -62,7 +63,7 @@ export function radioLine(radio: Pick<RadioView, 'band' | 'channel' | 'width' | 
     radio.channel ? `ch ${radio.channel}/${radio.width || 20}` : 'off',
     powerText(radio),
     `${radio.clients} ${radio.clients === 1 ? 'client' : 'clients'}`,
-    `util ${Math.round(radio.util)} %`,
+    `util ${formatUtil(radio.util)}`,
   ].join(' · ')
 }
 

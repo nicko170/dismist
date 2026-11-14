@@ -3,6 +3,7 @@ import type {
   APView,
   AuthSessionView,
   ClientDetail,
+  ClientMeta,
   ClientView,
   EventView,
   OnboardingView,
@@ -81,8 +82,8 @@ export const aps: APView[] = [
     site_id: 'home',
     client_count: 15,
     radios: [
-      { band: '2.4', channel: 1, width: 20, clients: 4, util: 31 },
-      { band: '5', channel: 149, width: 80, clients: 11, util: 18 },
+      { band: '2.4', channel: 1, width: 20, clients: 4, util: 0.31 },
+      { band: '5', channel: 149, width: 80, clients: 11, util: 0.18 },
     ],
   }),
   ap({
@@ -107,8 +108,8 @@ export const aps: APView[] = [
     applied_revision: 42,
     client_count: 4,
     radios: [
-      { band: '2.4', channel: 6, width: 20, clients: 1, util: 22 },
-      { band: '5', channel: 36, width: 80, clients: 3, util: 9 },
+      { band: '2.4', channel: 6, width: 20, clients: 1, util: 0.22 },
+      { band: '5', channel: 36, width: 80, clients: 3, util: 0.09 },
     ],
   }),
   ap({
@@ -119,7 +120,7 @@ export const aps: APView[] = [
     remote_address: '192.0.2.40',
     behind_nat: false,
     client_count: 2,
-    radios: [{ band: '5', channel: 44, width: 40, clients: 2, util: 5 }],
+    radios: [{ band: '5', channel: 44, width: 40, clients: 2, util: 0.05 }],
   }),
 ]
 
@@ -218,7 +219,7 @@ export function apDetail(view: APView): APDetail {
         max_power_dbm: radio.band === '5' ? 17 : 12,
         noise_dbm: -92,
         util: radio.util,
-        util_parts: { tx: radio.util * 0.4, rx_bss: radio.util * 0.35, rx_other: radio.util * 0.15, non_wifi: radio.util * 0.1 },
+        util_parts: { tx: radio.util * 0.4, rx_in_bss: radio.util * 0.35, rx_other_bss: radio.util * 0.15, non_wifi: radio.util * 0.1 },
         clients: radio.clients,
         dfs: null,
         counters: {},
@@ -410,6 +411,9 @@ export function clientSessions(mac: string): SessionView[] {
   ]
 }
 
+/** PUT /api/clients/$mac/meta store (the client_meta bucket). */
+export const clientMetas = new Map<string, ClientMeta>()
+
 export function clientDetail(mac: string): ClientDetail | null {
   const live = clients.find((c) => c.mac === mac) ?? null
   if (!live) return null
@@ -424,6 +428,7 @@ export function clientDetail(mac: string): ClientDetail | null {
     sessions: clientSessions(mac),
     events: events.filter((e) => e.client_mac === mac),
     next_before: null,
+    meta: clientMetas.get(mac) ?? null,
   }
 }
 
@@ -449,7 +454,9 @@ export const system: SystemView = {
     schema: 1,
     compat: 1,
     rollback_without_restore: true,
+    compat_raised_at_revision: null,
     retention: { events: '30d', samples: '14d' },
+    records: { sites: 2, aps: 4, networks: 5, events_v2: 1840, samples: 40320, samples_hourly: 2688, client_sessions: 512, config_history: 46 },
   },
   backup: {
     last_success: ago(3600),

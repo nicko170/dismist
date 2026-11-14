@@ -3,29 +3,32 @@ import { cn } from '@/lib/utils'
 // Stacked channel utilisation with text (design §3.5 Radios tab): Tx, Rx in
 // BSS, Rx other BSS, non-Wi-Fi, other (unknown Wi-Fi and undecodable) and
 // idle. Every segment is also listed in words, so colour is never the only
-// signal; segments are separated by a 2 px surface gap.
+// signal; segments are separated by a 2 px surface gap. Values are what the
+// API sends: fractions from 0 to 1 (RadioView.util and util_parts, keyed
+// tx, rx_in_bss, rx_other_bss, unknown_wifi, non_wifi, undecodable_wifi).
 
 const parts = [
   { key: 'tx', label: 'Tx', className: 'bg-chart-1' },
-  { key: 'rx_bss', label: 'Rx in BSS', className: 'bg-chart-2' },
-  { key: 'rx_other', label: 'Rx other BSS', className: 'bg-chart-4' },
+  { key: 'rx_in_bss', label: 'Rx in BSS', className: 'bg-chart-2' },
+  { key: 'rx_other_bss', label: 'Rx other BSS', className: 'bg-chart-4' },
   { key: 'non_wifi', label: 'Non-Wi-Fi', className: 'bg-chart-3' },
   { key: 'other', label: 'Other', className: 'bg-chart-5' },
 ] as const
 
 export type UtilParts = Record<string, number | undefined>
 
+/** Fractions (0 to 1) to percentages for drawing and text. */
 export function normaliseUtil(util: number, raw: UtilParts | null | undefined) {
   const value = (key: string) => {
     const v = raw?.[key]
-    return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0
+    return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v * 100 : 0
   }
   const segments = parts.map((part) => ({
     ...part,
-    value: part.key === 'other' ? value('unknown_wifi') + value('undecodable') : value(part.key),
+    value: part.key === 'other' ? value('unknown_wifi') + value('undecodable_wifi') : value(part.key),
   }))
   const known = segments.reduce((sum, s) => sum + s.value, 0)
-  const busy = known > 0 ? known : Math.max(0, Math.min(100, util || 0))
+  const busy = known > 0 ? known : Math.max(0, Math.min(100, (util || 0) * 100))
   return { segments: known > 0 ? segments : [], busy: Math.min(100, busy), idle: Math.max(0, 100 - busy) }
 }
 

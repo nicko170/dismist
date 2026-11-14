@@ -260,7 +260,7 @@ export function KitPage() {
             { label: 'Band', value: <BandLabel band="2.4" /> },
           ]}
         />
-        <UtilBar util={38} parts={{ tx: 12, rx_bss: 14, rx_other: 7, non_wifi: 5 }} />
+        <UtilBar util={0.38} parts={{ tx: 0.12, rx_in_bss: 0.14, rx_other_bss: 0.07, non_wifi: 0.05 }} />
         <UtilLegend />
       </Section>
 

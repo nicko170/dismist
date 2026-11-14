@@ -6,7 +6,7 @@ import { Chip } from '@/components/app/StatusChip'
 import { Identifier, Mono } from '@/components/app/identifiers'
 import { RelativeTime } from '@/components/app/RelativeTime'
 import { ErrorState, SkeletonRows } from '@/components/app/states'
-import { formatBytes, formatDuration } from '@/lib/format'
+import { formatBytes, formatCount, formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/time'
 import { ThemeSegmented } from '@/features/shell/ThemeControls'
 import { Card, Dash, Facts, actionLink } from '@/features/overview/kit/Card'
@@ -113,7 +113,24 @@ export function SystemOverview() {
               value: s.db.rollback_without_restore ? (
                 <Chip tone="good">Possible without a restore</Chip>
               ) : (
-                <Chip tone="warn">Needs a database restore first</Chip>
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <Chip tone="warn">Needs a database restore first</Chip>
+                  {s.db.compat_raised_at_revision ? <span className="text-xs text-muted-foreground">since rev {s.db.compat_raised_at_revision}</span> : null}
+                </span>
+              ),
+            },
+            {
+              label: 'Records',
+              value: Object.keys(s.db.records ?? {}).length ? (
+                <span className="text-sm tabular-nums">
+                  {Object.entries(s.db.records)
+                    .filter(([, n]) => n > 0)
+                    .toSorted(([a], [b]) => a.localeCompare(b))
+                    .map(([bucket, n]) => `${bucket.replace(/_/g, ' ')} ${formatCount(n)}`)
+                    .join(' · ')}
+                </span>
+              ) : (
+                <Dash />
               ),
             },
             {

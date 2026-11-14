@@ -49,7 +49,7 @@ export function APSettings({ siteId, apId }: { siteId: string; apId: string }) {
   if (ap.isError) {
     return (
       <div className="grid gap-4">
-        <PageHeader title="AP settings" />
+        <PageHeader as="h2" title="AP settings" />
         <ErrorState error={ap.error} title="Could not load this AP" onRetry={() => void ap.refetch()} />
       </div>
     )
@@ -57,7 +57,7 @@ export function APSettings({ siteId, apId }: { siteId: string; apId: string }) {
   if (!ap.data || !site.data) {
     return (
       <div className="grid gap-4">
-        <PageHeader title="AP settings" />
+        <PageHeader as="h2" title="AP settings" />
         <SkeletonRows rows={4} />
       </div>
     )
@@ -71,6 +71,7 @@ function APSettingsContent({ siteId, ap, site }: { siteId: string; ap: APSetting
   return (
     <div className="grid gap-5">
       <PageHeader
+        as="h2"
         title={`${name} settings`}
         meta={`${ap.model || 'Model unknown until first connection'} · ${ap.firmware || 'firmware unknown'}`}
         actions={

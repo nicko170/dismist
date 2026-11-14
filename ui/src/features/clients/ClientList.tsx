@@ -45,7 +45,7 @@ export function ClientList({ clients, siteId, showAP = true }: { clients: Client
         </span>
       ),
     },
-    { id: 'signal', header: 'Signal', render: (c) => <SignalChip signal={c.signal} rssi={c.rssi} />, className: 'w-[22%] lg:w-[17%]' },
+    { id: 'signal', header: 'Signal', render: (c) => <SignalChip compact signal={c.signal} rssi={c.rssi} />, className: 'w-[22%] lg:w-[17%] whitespace-nowrap' },
     { id: 'band', header: 'Band', render: (c) => bandText(c) || <Dash /> },
     ...(showAP ? [{ id: 'ap', header: 'AP', render: (c: ClientView) => c.ap_name || <Dash /> }] : []),
     { id: 'ip', header: 'IP', render: (c) => <IPValue client={c} /> },

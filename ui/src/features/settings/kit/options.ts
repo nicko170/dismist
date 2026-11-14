@@ -56,10 +56,22 @@ export function intSchema(meta: OptionMeta) {
   return schema
 }
 
+/**
+ * A registry label inside a sentence: ordinary capitalised words are
+ * lower-cased ("Max clients" → "max clients"); acronyms and mixed-case
+ * words stay as they are ("SSID", "DTIM period", "QoS class").
+ */
+export function inSentence(label: string): string {
+  return label
+    .split(' ')
+    .map((word) => (/^[A-Z][a-z]+$/.test(word) || /^[a-z]/.test(word) ? word.toLowerCase() : word))
+    .join(' ')
+}
+
 export function bytesSchema(meta: OptionMeta, required: boolean) {
   const max = meta.maxBytes ?? meta.max ?? null
   let schema = z.string()
-  if (required) schema = schema.min(1, { error: `Enter the ${meta.label.toLowerCase()}.` })
+  if (required) schema = schema.min(1, { error: `Enter the ${inSentence(meta.label)}.` })
   if (max != null) {
     schema = schema.refine((v) => utf8Length(v) <= max, {
       error: meta.maxBytes ? `At most ${max} bytes.` : `At most ${max} characters.`,
@@ -70,7 +82,7 @@ export function bytesSchema(meta: OptionMeta, required: boolean) {
 
 export function enumSchema(meta: OptionMeta) {
   const values = meta.enum.map((v) => v.value)
-  return z.string().refine((v) => values.includes(v), { error: `Choose one of the ${meta.label.toLowerCase()} options.` })
+  return z.string().refine((v) => values.includes(v), { error: `Choose one of the ${inSentence(meta.label)} options.` })
 }
 
 /**
@@ -85,7 +97,7 @@ export function leafSchema(key: string, options: { nullable?: boolean; required?
       schema = z.boolean()
       break
     case 'int':
-      schema = meta.enum.length ? z.number().refine((v) => meta.enum.some((e) => e.value === String(v)), { error: `Choose a ${meta.label.toLowerCase()}.` }) : intSchema(meta)
+      schema = meta.enum.length ? z.number().refine((v) => meta.enum.some((e) => e.value === String(v)), { error: `Choose a ${inSentence(meta.label)}.` }) : intSchema(meta)
       break
     case 'string':
       schema = meta.enum.length ? enumSchema(meta) : bytesSchema(meta, options.required ?? false)

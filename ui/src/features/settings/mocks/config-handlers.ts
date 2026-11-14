@@ -499,9 +499,16 @@ export const configHandlers: HttpHandler[] = [
   http.get('/api/sites/:siteId/rf/neighbours', ({ request }) => {
     const denied = guard()
     if (denied) return denied
-    const bandFilter = new URL(request.url).searchParams.get('band')
+    const search = new URL(request.url).searchParams
+    const bandFilter = search.get('band')
+    const ap = search.get('ap')
     const view = fixtures.neighbours()
-    return HttpResponse.json({ ...view, neighbours: view.neighbours.filter((n) => !bandFilter || n.band === bandFilter) })
+    return HttpResponse.json({
+      ...view,
+      neighbours: view.neighbours.filter((n) => (!bandFilter || n.band === bandFilter) && (!ap || n.seen_by === ap)),
+      own: view.own.filter((n) => !ap || n.seen_by === ap),
+      scans: view.scans.filter((s) => !ap || s.ap_id === ap),
+    })
   }),
 
   // ---- recommendations ----

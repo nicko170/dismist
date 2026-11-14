@@ -49,12 +49,12 @@ export function homeRF(): RFProfileView {
     band_5: band({ width: 80, channels: [36, 149], power: { mode: 'fixed', dbm: 17 } }, false),
     scanning_radio: null,
     plan: [
-      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', band: '5', mode: 'static', channel: 149, width: 80, power_dbm: 17, dfs_fallback: null, source: 'static', actual: { channel: 149, width: 80, max_power_dbm: 17, util: 18, clients: 11 }, status: 'match' },
-      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', band: '2.4', mode: 'static', channel: 1, width: 20, power_dbm: 12, dfs_fallback: null, source: 'static', actual: { channel: 1, width: 20, max_power_dbm: 12, util: 31, clients: 4 }, status: 'match' },
+      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', band: '5', mode: 'static', channel: 149, width: 80, power_dbm: 17, dfs_fallback: null, source: 'static', actual: { channel: 149, width: 80, max_power_dbm: 17, util: 0.18, clients: 11 }, status: 'match' },
+      { ap_id: '02-aa-00-00-00-01', ap_name: 'Hallway', band: '2.4', mode: 'static', channel: 1, width: 20, power_dbm: 12, dfs_fallback: null, source: 'static', actual: { channel: 1, width: 20, max_power_dbm: 12, util: 0.31, clients: 4 }, status: 'match' },
       { ap_id: '02-aa-00-00-00-02', ap_name: 'Garage', band: '5', mode: 'auto', channel: 36, width: 80, power_dbm: 17, dfs_fallback: null, source: 'initial assignment', actual: null, status: 'offline' },
       { ap_id: '02-aa-00-00-00-02', ap_name: 'Garage', band: '2.4', mode: 'auto', channel: 6, width: 20, power_dbm: 12, dfs_fallback: null, source: 'initial assignment', actual: null, status: 'offline' },
-      { ap_id: '02-aa-00-00-00-03', ap_name: 'Study', band: '5', mode: 'auto', channel: 36, width: 80, power_dbm: 17, dfs_fallback: null, source: 'initial assignment', actual: { channel: 36, width: 80, max_power_dbm: 17, util: 9, clients: 3 }, status: 'match' },
-      { ap_id: '02-aa-00-00-00-03', ap_name: 'Study', band: '2.4', mode: 'auto', channel: 11, width: 20, power_dbm: 12, dfs_fallback: null, source: 'initial assignment', actual: { channel: 6, width: 20, max_power_dbm: 12, util: 22, clients: 1 }, status: 'mismatch' },
+      { ap_id: '02-aa-00-00-00-03', ap_name: 'Study', band: '5', mode: 'auto', channel: 36, width: 80, power_dbm: 17, dfs_fallback: null, source: 'initial assignment', actual: { channel: 36, width: 80, max_power_dbm: 17, util: 0.09, clients: 3 }, status: 'match' },
+      { ap_id: '02-aa-00-00-00-03', ap_name: 'Study', band: '2.4', mode: 'auto', channel: 11, width: 20, power_dbm: 12, dfs_fallback: null, source: 'initial assignment', actual: { channel: 6, width: 20, max_power_dbm: 12, util: 0.22, clients: 1 }, status: 'mismatch' },
     ],
     recommendations: [],
     updated_rev: 7,
@@ -66,7 +66,7 @@ export function labRF(): RFProfileView {
     ...homeRF(),
     band_24: band({ width: 20, channels: [1, 6, 11], power: { mode: 'auto', min: 8, max: 15 } }, true),
     band_5: band({ width: 40, channels: [36, 44], power: { mode: 'auto', min: 12, max: 20 } }, false),
-    plan: [{ ap_id: '02-aa-00-00-00-10', ap_name: 'Lab bench', band: '5', mode: 'auto', channel: 44, width: 40, power_dbm: 20, dfs_fallback: null, source: 'planner, 3 Dec', actual: { channel: 44, width: 40, max_power_dbm: 20, util: 5, clients: 2 }, status: 'match' }],
+    plan: [{ ap_id: '02-aa-00-00-00-10', ap_name: 'Lab bench', band: '5', mode: 'auto', channel: 44, width: 40, power_dbm: 20, dfs_fallback: null, source: 'planner, 3 Dec', actual: { channel: 44, width: 40, max_power_dbm: 20, util: 0.05, clients: 2 }, status: 'match' }],
     updated_rev: 2,
   }
 }
@@ -232,8 +232,8 @@ export function apExtras(id: string): Partial<APSettingsView> {
     capabilities: { config_change_notify: null, ap_cmd: false, pong2: false },
     radios_detail: hallway
       ? [
-          { dev: 'r0', role: 'access', band: '5', channel: 149, secondary: 0, width: 80, phy: 9, tx_power_dbm: null, max_power_dbm: 17, noise_dbm: -92, util: 18, util_parts: {}, clients: 11, dfs: null, counters: {} },
-          { dev: 'r1', role: 'access', band: '2.4', channel: 1, secondary: 0, width: 20, phy: 9, tx_power_dbm: null, max_power_dbm: 12, noise_dbm: -88, util: 31, util_parts: {}, clients: 4, dfs: null, counters: {} },
+          { dev: 'r0', role: 'access', band: '5', channel: 149, secondary: 0, width: 80, phy: 9, tx_power_dbm: null, max_power_dbm: 17, noise_dbm: -92, util: 0.18, util_parts: {}, clients: 11, dfs: null, counters: {} },
+          { dev: 'r1', role: 'access', band: '2.4', channel: 1, secondary: 0, width: 20, phy: 9, tx_power_dbm: null, max_power_dbm: 12, noise_dbm: -88, util: 0.31, util_parts: {}, clients: 4, dfs: null, counters: {} },
           { dev: 'r2', role: 'scan', band: null, channel: 165, secondary: 0, width: 20, phy: 9, tx_power_dbm: null, max_power_dbm: null, noise_dbm: null, util: 0, util_parts: {}, clients: 0, dfs: null, counters: {} },
         ]
       : [],

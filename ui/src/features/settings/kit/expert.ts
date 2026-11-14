@@ -36,8 +36,13 @@ function matches(pattern: string, path: string) {
   return p.endsWith('*') ? q.startsWith(p.slice(0, -1)) : q === p
 }
 
-/** Every forbidden path, duplicate folded key and warning in a parsed patch. */
-export function checkPatch(scope: ExpertScope, patch: unknown): PatchProblem[] {
+/**
+ * Every forbidden path, duplicate folded key and warning in a parsed patch.
+ * serverForbidden are the server's patterns (GET /api/options/expert), on
+ * top of the built-in list, so the editor matches what the save enforces.
+ */
+export function checkPatch(scope: ExpertScope, patch: unknown, serverForbidden: string[] = []): PatchProblem[] {
+  const patterns = [...FORBIDDEN[scope], ...serverForbidden.filter((p) => !FORBIDDEN[scope].includes(p))]
   const problems: PatchProblem[] = []
   const walk = (node: unknown, path: string, pointer: string) => {
     if (Array.isArray(node)) {
@@ -54,7 +59,7 @@ export function checkPatch(scope: ExpertScope, patch: unknown): PatchProblem[] {
         problems.push({ pointer: childPointer, path: childPath, key, kind: 'duplicate', message: `“${key}” and “${seen.get(folded)}” are the same key to the AP. Keep one.` })
       }
       seen.set(folded, key)
-      const forbidden = FORBIDDEN[scope].find((pattern) => matches(pattern, childPath))
+      const forbidden = patterns.find((pattern) => matches(pattern, childPath))
       if (forbidden) {
         problems.push({ pointer: childPointer, path: childPath, key, kind: 'forbidden', message: forbiddenMessage(scope, forbidden) })
         continue
@@ -85,9 +90,19 @@ export function problemRanges(text: string, problems: PatchProblem[]) {
     })
 }
 
-/** Firmware key names for autocomplete, from the option registry's firmware paths. */
-export function keyCompletions(scope: ExpertScope): string[] {
+/**
+ * Firmware key names for autocomplete: the scope's 0.15 config paths from
+ * the server (GET /api/options/expert) when it has sent them, plus the
+ * option registry's firmware paths.
+ */
+export function keyCompletions(scope: ExpertScope, serverPaths: string[] = []): string[] {
   const words = new Set<string>()
+  for (const path of serverPaths) {
+    for (const segment of path.split('.')) {
+      const name = segment.replace(/\[[^\]]*\]$/, '').replace(/\{\}$/, '')
+      if (name && /^[A-Za-z_$][\w$]*$/.test(name)) words.add(name)
+    }
+  }
   for (const meta of [...Object.values(provisionalOptions), ...Object.values(optionMeta)]) {
     for (const path of meta.firmwarePaths) {
       const isWlan = path.startsWith('WLANs[]')

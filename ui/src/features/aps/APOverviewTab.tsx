@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { APDetail, EventView, RadioView } from '@/gen/api.gen'
+import { apBLEQuery } from '@/api/queries/aps'
 import { siteEventsQuery } from '@/api/queries/events'
 import { Chip } from '@/components/app/StatusChip'
 import { Mono } from '@/components/app/identifiers'
 import { RelativeTime } from '@/components/app/RelativeTime'
 import { SkeletonRows } from '@/components/app/states'
-import { formatBytes } from '@/lib/format'
+import { formatBytes, formatUtil } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Card, Dash, Facts, actionLink } from '@/features/overview/kit/Card'
 import { EventDrawer } from '@/features/events/EventDrawer'
@@ -55,6 +56,7 @@ export function APOverviewTab({ ap, siteId }: { ap: APDetail; siteId: string }) 
   const drift = cfg.applied_timestamp && cfg.desired_timestamp ? cfg.applied_timestamp - cfg.desired_timestamp : 0
   const access = orderRadios(ap.radios_detail).filter((r) => r.role !== 'scan')
   const offline = !ap.connected
+  const ble = useQuery({ ...apBLEQuery(ap.id), enabled: ap.connected, refetchInterval: 60_000, retry: false })
 
   return (
     <div className="grid min-w-0 gap-4 lg:grid-cols-2">
@@ -70,6 +72,19 @@ export function APOverviewTab({ ap, siteId }: { ap: APDetail; siteId: string }) 
               value: h.rw_total_bytes ? <Tone tone={rwFree < 10 ? 'warn' : undefined}>{`${formatBytes(h.rw_available_bytes)} (${rwFree} %)`}</Tone> : <Dash />,
             },
             { label: 'Agent memory', value: h.agent_heap_bytes ? formatBytes(h.agent_heap_bytes) : <Dash />, hidden: !h.agent_heap_bytes },
+            {
+              // Field 38: whether the BLE radio is alive (turning BLE off in AP defaults should stop it).
+              label: 'BLE radio',
+              value: ble.data ? (
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <Chip tone={ble.data.alive ? 'good' : 'idle'}>{ble.data.alive ? 'Alive' : 'Quiet'}</Chip>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {ble.data.tx_adverts} adverts sent{ble.data.errors ? ` · ${ble.data.errors} errors` : ''}
+                  </span>
+                </span>
+              ) : null,
+              hidden: !ble.data,
+            },
           ]}
         />
       </Card>
@@ -171,7 +186,7 @@ export function APOverviewTab({ ap, siteId }: { ap: APDetail; siteId: string }) 
           <ul className="grid gap-2 text-sm tabular-nums">
             {ap.radios.map((r) => (
               <li key={r.band}>
-                {bandName(r.band)} · ch {r.channel}/{r.width || 20} · {r.clients} clients · util {Math.round(r.util)} %
+                {bandName(r.band)} · ch {r.channel}/{r.width || 20} · {r.clients} clients · util {formatUtil(r.util)}
               </li>
             ))}
           </ul>

@@ -96,11 +96,11 @@ export function ChannelBadge({
 /** Segments of radio utilisation (design §5.2 field 31.30), in drawing order. */
 export const utilParts: { key: string; label: string; className: string }[] = [
   { key: 'tx', label: 'Transmit', className: 'bg-chart-2' },
-  { key: 'rx_bss', label: 'Receive (own clients)', className: 'bg-chart-4' },
-  { key: 'rx_other', label: 'Receive (other networks)', className: 'bg-chart-3' },
+  { key: 'rx_in_bss', label: 'Receive (own clients)', className: 'bg-chart-4' },
+  { key: 'rx_other_bss', label: 'Receive (other networks)', className: 'bg-chart-3' },
   { key: 'unknown_wifi', label: 'Other Wi-Fi', className: 'bg-chart-5' },
   { key: 'non_wifi', label: 'Interference', className: 'bg-status-crit' },
-  { key: 'undecodable', label: 'Undecodable', className: 'bg-muted-foreground/60' },
+  { key: 'undecodable_wifi', label: 'Undecodable', className: 'bg-muted-foreground/60' },
 ]
 
 function utilTone(util: number): string {
@@ -110,8 +110,9 @@ function utilTone(util: number): string {
 }
 
 /**
- * Channel utilisation (0–100 %) as a bar with the number beside it. With
- * `parts` it stacks the segments and lists them for screen readers.
+ * Channel utilisation as a bar with the number beside it. `util` and
+ * `parts` are what the API sends: fractions from 0 to 1. With `parts` it
+ * stacks the segments and lists them for screen readers.
  */
 export function UtilBar({
   util,
@@ -124,17 +125,18 @@ export function UtilBar({
   label?: string
   className?: string
 }) {
-  const clamped = Math.max(0, Math.min(100, util || 0))
-  const segments = parts ? utilParts.filter((part) => (parts[part.key] ?? 0) > 0) : []
+  const clamped = Math.max(0, Math.min(100, (util || 0) * 100))
+  const percent = (key: string) => Math.max(0, Math.min(100, (parts?.[key] ?? 0) * 100))
+  const segments = parts ? utilParts.filter((part) => percent(part.key) > 0) : []
   const summary = segments.length
-    ? `${label} ${formatPercent(clamped)}: ${segments.map((part) => `${part.label.toLowerCase()} ${formatPercent(parts![part.key])}`).join(', ')}`
+    ? `${label} ${formatPercent(clamped)}: ${segments.map((part) => `${part.label.toLowerCase()} ${formatPercent(percent(part.key))}`).join(', ')}`
     : `${label} ${formatPercent(clamped)}`
   return (
     <span className={cn('flex min-w-0 items-center gap-2', className)}>
       <span aria-hidden className="flex h-2 min-w-12 flex-1 overflow-hidden rounded-full bg-muted">
         {segments.length ? (
           segments.map((part) => (
-            <span key={part.key} className={cn('h-full', part.className)} style={{ width: `${Math.min(100, parts![part.key])}%` }} />
+            <span key={part.key} className={cn('h-full', part.className)} style={{ width: `${percent(part.key)}%` }} />
           ))
         ) : (
           <span className={cn('h-full rounded-full', utilTone(clamped))} style={{ width: `${clamped}%` }} />

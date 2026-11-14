@@ -96,15 +96,17 @@ export const screenHandlers: HttpHandler[] = [
     const detail = state.details.get(String(params.apId))
     return detail ? HttpResponse.json(detail) : fail(404, 'AP not found.', 'not_found')
   }),
-  http.get('/api/aps/:apId/telemetry', ({ params }) => {
+  // GET /api/aps/$id/log (APLog): the kernel log ring (24.1).
+  http.get('/api/aps/:apId/log', ({ params }) => {
     const detail = state.details.get(String(params.apId))
     if (!detail) return fail(404, 'AP not found.', 'not_found')
     const now = Date.now()
     return HttpResponse.json({
-      kernel_log: detail.connected
+      ap_id: detail.id,
+      lines: detail.connected
         ? [
-            { at: new Date(now - 3600_000).toISOString(), line: 'wl0: link up (wl0.1)' },
-            { at: new Date(now - 1800_000).toISOString(), line: 'br0: port 3(wl1.1) entered forwarding state' },
+            { at: new Date(now - 3600_000).toISOString(), text: 'wl0: link up (wl0.1)' },
+            { at: new Date(now - 1800_000).toISOString(), text: 'br0: port 3(wl1.1) entered forwarding state' },
           ]
         : [],
     })
@@ -159,7 +161,7 @@ export const screenHandlers: HttpHandler[] = [
     const detail = fx.clientDetailFor(mac, state.clients, state.events)
     if (!detail) return fail(404, 'Client not found.', 'not_found')
     const meta = state.meta.get(mac)
-    return HttpResponse.json({ ...detail, meta: meta ?? { alias: '', notes: '' } })
+    return HttpResponse.json({ ...detail, meta: meta ? { mac, ...meta } : null })
   }),
   http.post('/api/sites/:siteId/clients/:mac/:op', ({ params, request }) => {
     const mac = String(params.mac)
@@ -180,8 +182,9 @@ export const screenHandlers: HttpHandler[] = [
   }),
   http.put('/api/clients/:mac/meta', async ({ params, request }) => {
     const body = (await request.json().catch(() => ({}))) as { alias?: string; notes?: string }
-    state.meta.set(String(params.mac), { alias: body.alias ?? '', notes: body.notes ?? '' })
-    return HttpResponse.json({ alias: body.alias ?? '', notes: body.notes ?? '' })
+    const mac = normaliseMac(String(params.mac)) ?? String(params.mac)
+    state.meta.set(mac, { alias: body.alias ?? '', notes: body.notes ?? '' })
+    return HttpResponse.json({ mac, alias: body.alias ?? '', notes: body.notes ?? '' })
   }),
 
   // ---- events ----

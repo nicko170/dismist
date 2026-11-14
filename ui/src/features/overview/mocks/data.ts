@@ -43,8 +43,8 @@ export function baseAPs(): APView[] {
       name: 'Hallway',
       client_count: 15,
       radios: [
-        { band: '2.4', channel: 1, width: 20, clients: 4, util: 31 },
-        { band: '5', channel: 149, width: 80, clients: 11, util: 18 },
+        { band: '2.4', channel: 1, width: 20, clients: 4, util: 0.31 },
+        { band: '5', channel: 149, width: 80, clients: 11, util: 0.18 },
       ],
     }),
     ap({ id: '02-aa-00-00-00-02', name: 'Garage', status: 'offline', connected: false, connected_at: null, last_seen: ago(12 * 60), lan_ip: '192.0.2.22', uptime_seconds: 0 }),
@@ -59,8 +59,8 @@ export function baseAPs(): APView[] {
       firmware: 'apfw-0.15.36000-noro-0000',
       firmware_tested: false,
       radios: [
-        { band: '2.4', channel: 6, width: 20, clients: 1, util: 22 },
-        { band: '5', channel: 36, width: 80, clients: 3, util: 9 },
+        { band: '2.4', channel: 6, width: 20, clients: 1, util: 0.22 },
+        { band: '5', channel: 36, width: 80, clients: 3, util: 0.09 },
       ],
     }),
   ]
@@ -81,7 +81,7 @@ export function detailFor(view: APView): APDetail {
     max_power_dbm: radio.band === '5' ? 17 : 12,
     noise_dbm: radio.band === '5' ? -92 : -88,
     util: radio.util,
-    util_parts: { tx: radio.util * 0.35, rx_bss: radio.util * 0.4, rx_other: radio.util * 0.15, non_wifi: radio.util * 0.05, unknown_wifi: radio.util * 0.05 },
+    util_parts: { tx: radio.util * 0.35, rx_in_bss: radio.util * 0.4, rx_other_bss: radio.util * 0.15, non_wifi: radio.util * 0.05, unknown_wifi: radio.util * 0.05 },
     clients: radio.clients,
     dfs: null,
     counters: (radio.band === '2.4' ? { tx_retries: 41, tx_failed: 2, reinits: 0 } : { tx_retries: 12 }) as Record<string, number>,
@@ -182,8 +182,8 @@ export function detailFor(view: APView): APDetail {
             tx_power_dbm: null,
             max_power_dbm: null,
             noise_dbm: -94,
-            util: 4,
-            util_parts: { rx_other: 3, non_wifi: 1 },
+            util: 0.04,
+            util_parts: { rx_other_bss: 0.03, non_wifi: 0.01 },
             clients: 0,
             dfs: null,
             counters: {},
@@ -455,6 +455,7 @@ export function clientDetailFor(mac: string, clients: ClientView[], events: Even
       : sessions,
     events: events.filter((e) => e.client_mac === mac),
     next_before: null,
+    meta: null,
   }
 }
 
@@ -472,7 +473,7 @@ export function samplesFor(aps: APView[], rangeMs: number, stepMs: number, now =
         ap_id: ap.id,
         connected: true,
         client_count: base,
-        radios: ap.radios.map((r) => ({ band: r.band, channel: r.channel, width: r.width, util: Math.round(r.util * (0.6 + 0.4 * Math.sin(hour))), clients: Math.round(base / 2), max_power_dbm: r.band === '5' ? 17 : 12 })),
+        radios: ap.radios.map((r) => ({ band: r.band, channel: r.channel, width: r.width, util: Number((r.util * (0.6 + 0.4 * Math.sin(hour))).toFixed(3)), clients: Math.round(base / 2), max_power_dbm: r.band === '5' ? 17 : 12 })),
       })
     }
   }
@@ -481,7 +482,7 @@ export function samplesFor(aps: APView[], rangeMs: number, stepMs: number, now =
 
 export function neighbours(): Neighbour[] {
   return [
-    { ssid: 'Neighbour-5G', bssid: '02-cc-00-00-00-01', band: '5', channel: 36, width: 80, rssi: -71, seen_by: '02-aa-00-00-00-01', station_count: 6, util: 22, last_seen: ago(120) },
+    { ssid: 'Neighbour-5G', bssid: '02-cc-00-00-00-01', band: '5', channel: 36, width: 80, rssi: -71, seen_by: '02-aa-00-00-00-01', station_count: 6, util: 0.22, last_seen: ago(120) },
     { ssid: '', bssid: '02-cc-00-00-00-02', band: '2.4', channel: 6, width: 20, rssi: -82, seen_by: '02-aa-00-00-00-01', station_count: null, util: null, last_seen: ago(300) },
   ]
 }

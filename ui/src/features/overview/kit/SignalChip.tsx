@@ -19,14 +19,28 @@ const meta: Record<Signal, { label: string; tone: 'good' | 'info' | 'warn' | 'cr
   poor: { label: 'Poor', tone: 'crit' },
 }
 
-export function SignalChip({ signal, rssi, className }: { signal?: Signal | null; rssi?: number | null; className?: string }) {
+/**
+ * compact: in narrow table columns (below xl) the chip shows the dBm value,
+ * the number operators need; the word stays for screen readers and the
+ * tooltip, and the tone still shows the bucket.
+ */
+export function SignalChip({ signal, rssi, className, compact = false }: { signal?: Signal | null; rssi?: number | null; className?: string; compact?: boolean }) {
   const bucket = signal ?? signalFromRssi(rssi)
   if (!bucket) return null
   const m = meta[bucket] ?? meta.fair
+  const dbm = rssi != null && rssi !== 0 ? `${rssi} dBm` : ''
+  if (compact && dbm) {
+    return (
+      <Chip tone={m.tone} className={className} title={`${m.label} · ${dbm}`}>
+        <span className="max-xl:sr-only">{m.label} · </span>
+        {dbm}
+      </Chip>
+    )
+  }
   return (
     <Chip tone={m.tone} className={className}>
       {m.label}
-      {rssi != null && rssi !== 0 ? ` · ${rssi} dBm` : ''}
+      {dbm ? ` · ${dbm}` : ''}
     </Chip>
   )
 }

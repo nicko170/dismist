@@ -23,7 +23,8 @@ export type SubmitFn<TObject> = (body: unknown, options: MutationOptions) => Pro
 
 export type ImpactState<TObject> =
   | { status: 'idle' }
-  | { status: 'invalid' }
+  /** messages: problems on values no visible field shows (empty: the highlighted fields say it). */
+  | { status: 'invalid'; messages?: string[] }
   | { status: 'loading' }
   | { status: 'ready'; data: MutationResponse<TObject> }
   | { status: 'error'; error: ApiError | Error }
@@ -108,6 +109,39 @@ function storeAck(key: string) {
   } catch {
     // Without storage the form asks again next time.
   }
+}
+
+/** Names of the fields the form renders (registered inputs and Controllers). */
+function mountedFields<V extends FieldValues>(form: UseFormReturn<V>): Set<string> | null {
+  // react-hook-form keeps the mounted field names on control._names.mount
+  // (v7); no public API lists them. Without it, nothing is reported.
+  // oxlint-disable-next-line no-underscore-dangle
+  const names = (form.control as unknown as { _names?: { mount?: Set<string> } })._names?.mount
+  return names instanceof Set ? names : null
+}
+
+/** Whether an issue path is shown by a rendered field (the field itself or a parent composite). */
+function shownBy(path: string, mounted: Set<string>): boolean {
+  const parts = path.split('.')
+  while (parts.length) {
+    if (mounted.has(parts.join('.'))) return true
+    parts.pop()
+  }
+  return false
+}
+
+/**
+ * Client-side validation issues: renders their errors on the fields (the
+ * form validates on touch, so a problem on an untouched field would
+ * otherwise stay invisible) and returns the messages of the issues no
+ * rendered field shows, for the form to say in words.
+ */
+function surfaceIssues<V extends FieldValues>(form: UseFormReturn<V>, issues: { path: PropertyKey[]; message: string }[]): string[] {
+  const paths = [...new Set(issues.map((issue) => issue.path.map(String).join('.')).filter(Boolean))]
+  if (paths.length) void form.trigger(paths as Path<V>[])
+  const mounted = mountedFields(form)
+  if (!mounted) return []
+  return [...new Set(issues.filter((issue) => !shownBy(issue.path.map(String).join('.'), mounted)).map((issue) => issue.message))]
 }
 
 function leafNames(value: unknown, prefix = ''): string[] {
@@ -282,7 +316,7 @@ export function useConfigForm<V extends FieldValues, TObject>(options: UseConfig
     }
     const parsed = schema.safeParse(current)
     if (!parsed.success) {
-      setImpact({ status: 'invalid' })
+      setImpact({ status: 'invalid', messages: surfaceIssues(form, parsed.error.issues) })
       return
     }
     const controller = new AbortController()
@@ -381,11 +415,13 @@ export function useConfigForm<V extends FieldValues, TObject>(options: UseConfig
       form.handleSubmit(
         (vals) => proceed(vals as V),
         (errors) => {
+          const parsed = schema.safeParse(form.getValues())
+          const hidden = parsed.success ? [] : surfaceIssues(form, parsed.error.issues)
           const count = Object.keys(errors).length
-          setFormError([`Check the highlighted field${count === 1 ? '' : 's'}.`])
+          setFormError(hidden.length && hidden.length >= count ? hidden : [`Check the highlighted field${count === 1 ? '' : 's'}.`, ...hidden])
         },
       ),
-    [form, proceed],
+    [form, proceed, schema],
   )
 
   const discard = useCallback(() => {

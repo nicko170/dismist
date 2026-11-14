@@ -29,7 +29,7 @@ import { ccrevFor, recommendationCountQuery, siteViewQuery } from './site'
 // attention?" in one screen. The AP list is the stream-patched site list;
 // the chart is the site sum of the stored samples.
 
-const rangeLabel: Record<HistoryRange, string> = { '1h': '1 h', '24h': '24 h', '7d': '7 d' }
+const rangeLabel: Record<HistoryRange, string> = { '1h': '1 h', '24h': '24 h', '7d': '7 d', '90d': '90 d' }
 
 export function OverviewPage({ siteId, range }: { siteId: string; range: HistoryRange }) {
   const now = useNow()

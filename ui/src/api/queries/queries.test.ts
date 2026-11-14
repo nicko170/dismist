@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { normaliseAPs, normaliseDetail, normaliseNeighbours, normaliseSamples, siteClientSeries } from './aps'
+import { metaOf, normaliseClientDetail } from './clients'
 import { eventFilters, normaliseEventPage } from './events'
 import { normaliseMigration } from './system'
 
@@ -82,5 +83,16 @@ describe('migration report (internal/migrate V2Report)', () => {
     expect(view.report?.objects.map((o) => `${o.scope}:${o.name}`)).toEqual(['site:home', 'wlan:Example', 'ap:ap-1'])
     expect(view.report?.objects[1].lifted).toMatchObject({ security: 'wpa2_wpa3_personal', bssid_index: 1, dtim: 2 })
     expect(view.report?.aps).toEqual([{ id: 'ap-1', name: 'ap-1', verified: true, local_files: 'none', bssid_index: 'predicted', mismatches: [] }])
+  })
+})
+
+describe('client meta (ClientDetail.meta)', () => {
+  it('reads alias and notes from the detail, live alias as a fallback', () => {
+    const detail = normaliseClientDetail({ site_id: 'home', live: null, sessions: [], events: [], meta: { mac: '02-bb-00-00-00-01', alias: 'Kid iPad', notes: 'blocked after 9pm' } })
+    expect(detail.meta).toEqual({ mac: '02-bb-00-00-00-01', alias: 'Kid iPad', notes: 'blocked after 9pm' })
+    expect(metaOf(detail)).toEqual({ alias: 'Kid iPad', notes: 'blocked after 9pm' })
+    const none = normaliseClientDetail({ site_id: 'home', live: { mac: '02-bb-00-00-00-02', alias: 'Phone' }, meta: null })
+    expect(none.meta).toBeNull()
+    expect(metaOf(none)).toEqual({ alias: 'Phone', notes: '' })
   })
 })

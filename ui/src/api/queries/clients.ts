@@ -127,6 +127,10 @@ export function normaliseClientDetail(body: unknown): ClientDetail {
     sessions: normaliseSessions(row.sessions ?? []),
     events: Array.isArray(row.events) ? (row.events as ClientDetail['events']) : [],
     next_before: typeof row.next_before === 'string' ? row.next_before : null,
+    meta:
+      row.meta && typeof row.meta === 'object'
+        ? { mac: str((row.meta as Record<string, unknown>).mac), alias: str((row.meta as Record<string, unknown>).alias), notes: str((row.meta as Record<string, unknown>).notes) }
+        : null,
   }
 }
 
@@ -140,10 +144,10 @@ export const clientQuery = (mac: string, siteId?: string) =>
     refetchInterval: 10_000,
   })
 
-/** Client meta (alias, notes; phase 4) rides on the detail response when the server has it. */
+/** Client meta (alias, notes; phase 4): ClientDetail.meta, null when none is stored. */
 export function metaOf(detail: ClientDetail | undefined): ClientMeta {
-  const raw = (detail as unknown as { meta?: Partial<ClientMeta> } | undefined)?.meta
-  return { alias: raw?.alias ?? detail?.live?.alias ?? '', notes: raw?.notes ?? '' }
+  const stored = detail?.meta
+  return { alias: stored?.alias ?? detail?.live?.alias ?? '', notes: stored?.notes ?? '' }
 }
 
 /** POST …/clients/$mac/block|unblock: a config change (site blocked clients), so dry run first. */

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useFormContext, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -96,7 +96,24 @@ function WlanEditorForm({
     expertLink: view ? { to: `/sites/${encodeURIComponent(siteId)}/wlans/${encodeURIComponent(view.id)}/expert` } : null,
   })
   const [deleting, setDeleting] = useState(false)
-  const [qrOpen, setQrOpen] = useState(dialog === 'qr')
+  // The Wi-Fi QR dialog lives at ?dialog=qr (design §2.5): opening pushes
+  // it so Back closes it; closing pops that entry, or replaces the URL when
+  // the dialog came from a shared link.
+  const router = useRouter()
+  const pushed = useRef(false)
+  const qrOpen = dialog === 'qr'
+  const setQrOpen = (open: boolean) => {
+    if (!view) return
+    const here = `/sites/${encodeURIComponent(siteId)}/wlans/${encodeURIComponent(view.id)}`
+    if (open) {
+      pushed.current = true
+      void navigate({ to: here as never, search: { dialog: 'qr' } as never })
+    } else if (qrOpen) {
+      if (pushed.current) router.history.back()
+      else void navigate({ to: here as never, search: {} as never, replace: true })
+      pushed.current = false
+    }
+  }
 
   const controller = useConfigForm<WlanForm, WLANView>({
     formKey: `wlan:${siteId}:${wlanId ?? 'new'}`,

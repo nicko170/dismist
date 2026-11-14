@@ -11,6 +11,7 @@ import { RelativeTime } from '@/components/app/RelativeTime'
 import { buttonVariants } from '@/components/ui/button'
 import { Segmented } from '@/features/settings/kit/primitives'
 import { cn } from '@/lib/utils'
+import { formatUtil } from '@/lib/format'
 
 // Neighbour scan (design §3.10 "Neighbours", §5.10): a per-band channel
 // histogram with the site's own channels marked, and the neighbour table.
@@ -179,7 +180,7 @@ function NeighbourTable({ list }: { list: Neighbour[] }) {
                 <td className="px-4 py-2.5">{n.seen_by}</td>
                 <td className="hidden px-4 py-2.5 text-right tabular-nums xl:table-cell">
                   {n.station_count != null ? `${n.station_count} clients` : '–'}
-                  {n.util != null ? ` · ${Math.round(n.util * 100)} %` : ''}
+                  {n.util != null ? ` · ${formatUtil(n.util)}` : ''}
                 </td>
                 <td className="hidden px-4 py-2.5 xl:table-cell">
                   <RelativeTime value={n.last_seen} />

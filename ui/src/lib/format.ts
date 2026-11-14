@@ -62,6 +62,16 @@ export function formatPercent(value: number | null | undefined): string {
   return `${value.toFixed(digits)} %`
 }
 
+/**
+ * Channel utilisation as the API reports it (a fraction from 0 to 1:
+ * RadioView.util, util_parts, PlanActual.util, Neighbour.util,
+ * SampleRadio.util) as "31 %".
+ */
+export function formatUtil(fraction: number | null | undefined): string {
+  if (fraction == null || !Number.isFinite(fraction)) return '–'
+  return `${Math.round(fraction * 100)} %`
+}
+
 /** Bits per second in SI steps: "18.1 Mbit/s". */
 export function formatRate(bps: number | null | undefined): string {
   if (bps == null || !Number.isFinite(bps)) return '–'

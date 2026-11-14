@@ -185,7 +185,9 @@ export function toForm(view: WLANView): WlanForm {
     max_clients: view.max_clients ?? null,
     idle_timeout_sec: view.idle_timeout_sec,
     rate_limit: { ...base.rate_limit, ...view.rate_limit },
-    qos_class: view.qos_class ?? 'none',
+    // The server stores "" for no override (migrated and API-created
+    // WLANs); the form's enum has 'none' only.
+    qos_class: view.qos_class || 'none',
     honour_blocklist: view.honour_blocklist ?? true,
     radius: view.radius
       ? {
@@ -242,7 +244,7 @@ function serverInput(rows: ServerRow[]) {
 }
 
 /** The form's "HH:MM-HH:MM, …" per weekday as ScheduleView windows (internal/api). */
-function scheduleInput(schedule: WlanForm['schedule']): ScheduleView {
+function scheduleInput(schedule: WlanForm['schedule']): Omit<ScheduleView, 'off_air'> {
   return {
     enabled: schedule.enabled,
     windows: DAYS.flatMap((day) =>

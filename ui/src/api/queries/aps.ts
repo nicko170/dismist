@@ -1,7 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { keys, stale } from '@/api/keys'
-import type { APDetail, APStatus, APView, MutationResponse, PendingAP } from '@/gen/api.gen'
+import type { APDetail, APLog, APStatus, APTelemetry, APView, MutationResponse, PendingAP } from '@/gen/api.gen'
 
 // AP reads and actions for the monitoring screens (design §3.4, §3.5, §4.9;
 // workstream E). Lists come from one request per site and are patched by the
@@ -222,10 +222,11 @@ export function normaliseSamples(body: unknown): SamplePoint[] {
   return out.toSorted((a, b) => a.at - b.at)
 }
 
-export const RANGES = { '1h': 3600_000, '24h': 86400_000, '7d': 7 * 86400_000 } as const
+// 90 d is served from the hourly rollups (minute samples are kept 30 days).
+export const RANGES = { '1h': 3600_000, '24h': 86400_000, '7d': 7 * 86400_000, '90d': 90 * 86400_000 } as const
 export type HistoryRange = keyof typeof RANGES
-export const STEPS: Record<HistoryRange, string> = { '1h': '1m', '24h': '10m', '7d': '1h' }
-const STEP_MS: Record<HistoryRange, number> = { '1h': 60_000, '24h': 600_000, '7d': 3600_000 }
+export const STEPS: Record<HistoryRange, string> = { '1h': '1m', '24h': '10m', '7d': '1h', '90d': '24h' }
+const STEP_MS: Record<HistoryRange, number> = { '1h': 60_000, '24h': 600_000, '7d': 3600_000, '90d': 86400_000 }
 
 /**
  * The site's client count per step: within a step each AP contributes its
@@ -276,16 +277,25 @@ export const apQuery = (apId: string) =>
     staleTime: stale.live,
   })
 
-/** GET /api/aps/$id/telemetry: only the phase-4 kernel log ring is read from it. */
+/** GET /api/aps/$id/telemetry: only the BLE indicator (APTelemetry.ble, phase 4) is read from it. */
+export const apBLEQuery = (apId: string) =>
+  queryOptions({
+    queryKey: [...apKeys.telemetry(apId), 'ble'] as const,
+    queryFn: async ({ signal }) => {
+      const body = await api.get<Partial<APTelemetry>>(`/api/aps/${encodeURIComponent(apId)}/telemetry`, { signal })
+      return body?.ble ?? null
+    },
+    staleTime: stale.live,
+  })
+
+/** GET /api/aps/$id/log (APLog): the phase-4 kernel log ring, oldest first. */
 export const apKernelLogQuery = (apId: string) =>
   queryOptions({
     queryKey: [...apKeys.telemetry(apId), 'kernel_log'] as const,
     queryFn: async ({ signal }) => {
-      const body = await api.get<{ kernel_log?: unknown }>(`/api/aps/${encodeURIComponent(apId)}/telemetry`, { signal })
-      const rows = Array.isArray(body?.kernel_log) ? body.kernel_log : []
-      return rows.map((row): KernelLogLine =>
-        typeof row === 'string' ? { at: null, line: row } : { at: time((row as KernelLogLine).at), line: str((row as KernelLogLine).line) },
-      )
+      const body = await api.get<Partial<APLog>>(`/api/aps/${encodeURIComponent(apId)}/log`, { signal })
+      const rows = Array.isArray(body?.lines) ? body.lines : []
+      return rows.map((row): KernelLogLine => ({ at: time(row?.at), line: str(row?.text) }))
     },
     staleTime: stale.live,
   })

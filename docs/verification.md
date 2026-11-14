@@ -426,6 +426,9 @@ on a separate test WLAN where it can:
 | Per-device passphrases (Multi-PSK) | Two clients with different passphrases join the same SSID and land on their configured VLANs. |
 | NotModified reply (Q6) | After a controller restart the AP does not re-apply an unchanged config (no "applying config" in the log) and stays in sync. |
 | Reveal passphrase and Wi-Fi QR | The revealed passphrase joins a phone; the QR joins an iPhone; both reveals appear in the audit log. |
+| BLE indicator | AP › Overview › Health shows "BLE radio: Alive" with a rising advert count while BLE is on; after turning BLE off in AP defaults (a config change, so the AP restarts the radio), record whether the AP stops sending field 38 (the row disappears) or keeps sending static counters ("Quiet"). |
+| AP kernel log and neighbours | AP › Events › AP log shows the AP's `dmesg` lines (field 24.1, compare `ssh root@<ap> dmesg | tail`); AP › Radios lists only what this AP's scanning radio heard (`wl -i wl2 scanresults` on the AP), with load in percent. |
+| Finalise (30 days after P2.2) | System › Migration › Finalise: the dry run reports compat 2; the real run clears the legacy fields, System › Database says rollback needs a restore "since rev N", and the AP's served config does not change (finalise compiles nothing). |
 
 ---
 

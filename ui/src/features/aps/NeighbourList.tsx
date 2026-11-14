@@ -8,6 +8,7 @@ import { ErrorState, SkeletonRows } from '@/components/app/states'
 import { ResponsiveList, type Column } from '@/features/overview/kit/ResponsiveList'
 import { SignalChip } from '@/features/overview/kit/SignalChip'
 import { bandName } from './format'
+import { formatUtil } from '@/lib/format'
 
 // Neighbouring BSSs heard by the scanning radio (design §5.10, phase 3).
 // Neighbour SSIDs and BSSIDs stay in the authenticated UI (P7). Reusable for
@@ -20,7 +21,7 @@ export function NeighbourTable({ rows, showSeenBy = true, apNames }: { rows: Nei
     { id: 'chan', header: 'Channel', render: (n) => `${bandName(n.band)} · ${n.channel}${n.width ? `/${n.width}` : ''}` },
     { id: 'rssi', header: 'Signal', render: (n) => <SignalChip rssi={n.rssi} /> },
     ...(showSeenBy ? [{ id: 'seen', header: 'Heard by', priority: 2 as const, render: (n: Neighbour) => apNames?.get(n.seen_by) ?? n.seen_by }] : []),
-    { id: 'util', header: 'Load', priority: 2, render: (n) => [n.station_count != null ? `${n.station_count} stations` : '', n.util != null ? `${Math.round(n.util)} %` : ''].filter(Boolean).join(' · ') || '–' },
+    { id: 'util', header: 'Load', priority: 2, render: (n) => [n.station_count != null ? `${n.station_count} stations` : '', n.util != null ? formatUtil(n.util) : ''].filter(Boolean).join(' · ') || '–' },
     { id: 'last', header: 'Last seen', priority: 3, render: (n) => <RelativeTime value={n.last_seen} /> },
   ]
   return (
@@ -48,7 +49,9 @@ export function NeighbourTable({ rows, showSeenBy = true, apNames }: { rows: Nei
 
 export function APNeighbours({ siteId, apId }: { siteId: string; apId: string }) {
   const query = useQuery({ ...neighboursQuery(siteId, apId), retry: false })
-  const rows = useMemo(() => query.data ?? [], [query.data])
+  // The server filters on ?ap=; the rows are filtered here too, so this
+  // tab never shows what another AP's scanning radio heard.
+  const rows = useMemo(() => (query.data ?? []).filter((n) => !n.seen_by || n.seen_by === apId), [query.data, apId])
   if (query.isPending) return <SkeletonRows rows={2} />
   if (query.isError) {
     const status = (query.error as { status?: number }).status

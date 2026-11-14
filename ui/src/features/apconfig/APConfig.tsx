@@ -42,7 +42,7 @@ export function APConfig({ siteId, apId, view }: { siteId: string; apId: string;
   const base = `/sites/${encodeURIComponent(siteId)}/aps/${encodeURIComponent(apId)}/config`
   return (
     <div className="grid gap-5">
-      <PageHeader title={`${name} config`} />
+      <PageHeader as="h2" title={`${name} config`} />
       <LegacyModeBanner />
       <nav aria-label="Config views" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <ul className="flex w-max gap-1 border-b md:w-auto">

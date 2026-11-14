@@ -6,6 +6,9 @@ import { newWlanForm, presetForm, toForm, toInput } from './form'
 import { caseOnlyDuplicate, wlanSchema } from './schema'
 import { effectivePMF, passphraseError, slotsPerBand } from './security'
 import { wifiPayload } from './WifiQR'
+// GET /api/sites/$id/networks/$id from dismistd on the v0.3.0 production
+// fixture after the schema-2 migration (cmd/dismistd/testdata/v030-production).
+import production from './testdata/production-wlan.json'
 
 const example = networks()[0]
 
@@ -103,6 +106,26 @@ describe('WLAN schema', () => {
     expect(result.success).toBe(false)
     expect(result.error?.issues.find((i) => i.path.join('.') === 'psk')?.message).toBe('Enter a passphrase.')
     expect(schema.safeParse({ ...newWlanForm(), ssid: 'New', psk: 'long enough' }).success).toBe(true)
+  })
+
+  it('edits a WLAN whose stored QoS class is "" (migrated or created through the API)', () => {
+    const migrated: WLANView = { ...example, qos_class: '' }
+    const form = toForm(migrated)
+    expect(form.qos_class).toBe('none')
+    const schema = wlanSchema({ create: false, current: migrated, others })
+    expect(schema.safeParse({ ...form, ssid: 'Example2' }).success).toBe(true)
+    // Sending the form back unchanged changes nothing.
+    expect(mergePatch(form, toForm(migrated))).toBeUndefined()
+  })
+
+  it('edits the migrated production WLAN, whether the view says "none" or the stored ""', () => {
+    for (const qos of ['none', ''] as const) {
+      const view = { ...(production as unknown as WLANView), qos_class: qos }
+      const form = toForm(view)
+      const schema = wlanSchema({ create: false, current: view, others: [] })
+      const result = schema.safeParse({ ...form, ssid: 'Example2' })
+      expect(result.error?.issues ?? []).toEqual([])
+    }
   })
 
   it('keeps a stored passphrase when empty, unless the old mode had none', () => {

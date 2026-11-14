@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api } from '@/api/client'
 import { toast } from 'sonner'
 import { CircleAlert, FileDiff, Loader2, Plus, TriangleAlert } from 'lucide-react'
 import { describeError, isApiError } from '@/api/errors'
 import { keys } from '@/api/keys'
 import type { ExpertPatchView, ExpertScope, MutationOptions } from '@/api/queries/sites'
-import type { DiffEntry, MutationResponse } from '@/gen/api.gen'
+import type { DiffEntry, ExpertVocabulary, MutationResponse } from '@/gen/api.gen'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -52,6 +53,15 @@ function optionLabel(key: string) {
   return hasOption(key) ? getOption(key).label : key
 }
 
+/** GET /api/options/expert?scope=: the scope's firmware paths and the server's forbidden patterns. */
+const vocabularyQuery = (scope: ExpertScope) =>
+  queryOptions({
+    queryKey: ['options', 'expert', scope] as const,
+    queryFn: ({ signal }) => api.get<ExpertVocabulary>('/api/options/expert', { query: { scope }, signal }),
+    staleTime: Infinity,
+    retry: false,
+  })
+
 export function ExpertPatchEditor({ scope, heading, headingLevel = 'h2', view, save, siteId, readOnly, onSaved, legacy }: Props) {
   const queryClient = useQueryClient()
   const saved = useMemo(() => format(view.patch), [view.patch])
@@ -65,7 +75,10 @@ export function ExpertPatchEditor({ scope, heading, headingLevel = 'h2', view, s
   }, [saved])
 
   const parsed = useMemo(() => parsePatch(text), [text])
-  const problems = useMemo(() => (parsed.ok ? checkPatch(scope, parsed.value) : []), [parsed, scope])
+  const vocabulary = useQuery(vocabularyQuery(scope))
+  const serverPaths = vocabulary.data?.paths
+  const serverForbidden = useMemo(() => vocabulary.data?.forbidden ?? [], [vocabulary.data])
+  const problems = useMemo(() => (parsed.ok ? checkPatch(scope, parsed.value, serverForbidden) : []), [parsed, scope, serverForbidden])
   const blocking = problems.filter((p) => p.kind !== 'warning')
   const savedValue = useMemo(() => parsePatch(savedText), [savedText])
   const diff = parsed.ok && savedValue.ok ? leafDiff(savedValue.value, parsed.value) : []
@@ -79,7 +92,7 @@ export function ExpertPatchEditor({ scope, heading, headingLevel = 'h2', view, s
   const [confirm, setConfirm] = useState<string[] | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
   const [insert, setInsert] = useState('')
-  const completions = useMemo(() => keyCompletions(scope), [scope])
+  const completions = useMemo(() => keyCompletions(scope, serverPaths), [scope, serverPaths])
   const insertable = useMemo(() => insertablePaths(scope), [scope])
 
   const body = parsed.ok ? parsed.value : null
@@ -184,7 +197,7 @@ export function ExpertPatchEditor({ scope, heading, headingLevel = 'h2', view, s
         completions={completions}
         check={(t) => {
           const p = parsePatch(t)
-          return p.ok ? problemRanges(t, checkPatch(scope, p.value)) : []
+          return p.ok ? problemRanges(t, checkPatch(scope, p.value, serverForbidden)) : []
         }}
         ariaLabel={heading}
       />

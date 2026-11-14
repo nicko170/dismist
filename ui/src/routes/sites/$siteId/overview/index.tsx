@@ -8,8 +8,8 @@ import { OverviewPage } from '@/features/overview/OverviewPage'
 export const Route = createFileRoute('/sites/$siteId/overview/')({
   // The loader rides in the route's lazy chunk (initial JS budget, design §7.9).
   codeSplitGroupings: [['loader', 'component'], ['notFoundComponent'], ['errorComponent']],
-  validateSearch: (search: Record<string, unknown>): { range?: '1h' | '7d' } =>
-    compact({ range: pickEnum(search.range, ['1h', '7d'] as const) }),
+  validateSearch: (search: Record<string, unknown>): { range?: '1h' | '7d' | '90d' } =>
+    compact({ range: pickEnum(search.range, ['1h', '7d', '90d'] as const) }),
   staticData: { nav: 'overview' },
   loader: ({ context, params }) => {
     void context.queryClient.prefetchQuery(siteAPsQuery(params.siteId))

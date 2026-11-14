@@ -513,8 +513,10 @@ export const configHandlers: HttpHandler[] = [
     })
   }),
   http.get('/api/sites/:siteId/rf/neighbours', ({ params, request }) => {
-    const band = new URL(request.url).searchParams.get('band')
-    return guard() ?? HttpResponse.json(cfg.neighbours(String(params.siteId)).filter((n) => !band || n.band === band))
+    const search = new URL(request.url).searchParams
+    const band = search.get('band')
+    const ap = search.get('ap')
+    return guard() ?? HttpResponse.json(cfg.neighbours(String(params.siteId)).filter((n) => (!band || n.band === band) && (!ap || n.seen_by === ap)))
   }),
 
   // ---- recommendations ----
@@ -713,8 +715,10 @@ export const configHandlers: HttpHandler[] = [
     const body = (await request.json().catch(() => ({}))) as { alias?: string | null; notes?: string }
     if (body.alias && body.alias.length > 64) return invalid({ alias: 'Use at most 64 characters.' })
     const client = data.clients.find((c) => c.mac === params.mac)
-    if (client) client.alias = body.alias ?? null
-    return HttpResponse.json({ alias: body.alias ?? null, notes: body.notes ?? '' })
+    if (client) client.alias = body.alias || null
+    const meta = { mac: String(params.mac), alias: body.alias ?? '', notes: body.notes ?? '' }
+    data.clientMetas.set(String(params.mac), meta)
+    return HttpResponse.json(meta)
   }),
 
   // ---- history ----
@@ -728,8 +732,10 @@ export const configHandlers: HttpHandler[] = [
     return guard() ?? HttpResponse.json(body)
   }),
   http.get('/api/sites/:siteId/changes', ({ request }) => {
-    const before = Number(new URL(request.url).searchParams.get('before') ?? 0)
-    const rows = cfg.changes.filter((c) => !before || c.revision < before)
+    const search = new URL(request.url).searchParams
+    const before = Number(search.get('before') ?? 0)
+    const ap = search.get('ap')
+    const rows = cfg.changes.filter((c) => (!before || c.revision < before) && (!ap || c.affected_aps.some((a) => a.id === ap)))
     const page = rows.slice(0, 20)
     const body: ChangePage = {
       changes: page.map(({ revision, at, actor, kind, endpoint, summary, affected_aps }) => ({ revision, at, actor, kind, endpoint, summary, affected_aps })),

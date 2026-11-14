@@ -150,7 +150,14 @@ export function ImpactNotice<T>({ state }: { state: ImpactState<T> }) {
     case 'idle':
       return null
     case 'invalid':
-      return <span className="text-muted-foreground">Fix the highlighted fields to see the impact</span>
+      return state.messages?.length ? (
+        <span className="inline-flex items-start gap-1.5 text-destructive">
+          <CircleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+          <span>Can’t check the impact: {state.messages.join(' ')}</span>
+        </span>
+      ) : (
+        <span className="text-muted-foreground">Fix the highlighted fields to see the impact</span>
+      )
     case 'loading':
       return (
         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
