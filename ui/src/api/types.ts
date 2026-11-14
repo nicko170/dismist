@@ -4,20 +4,9 @@
 // re-export from '@/gen/api.gen' (or delete this file and update imports);
 // nobody should add a second copy of a shape that the generator emits.
 
-export type ErrorCode =
-  | 'invalid'
-  | 'not_found'
-  | 'conflict'
-  | 'stale'
-  | 'forbidden_path'
-  | 'duplicate_key'
-  | 'experimental_disabled'
-  | 'firmware_rule'
-  | 'secret_required'
-  | 'migration_pending'
-  | 'unverified_command'
-  | 'unauthorized'
-  | 'rate_limited'
+// Every code the server sends, generated from internal/api/errors.go.
+import type { ErrorCode } from '@/gen/api.gen'
+export type { ErrorCode }
 
 /** Every non-2xx response body (design §4.8). */
 export type ErrorBody = {

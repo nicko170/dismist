@@ -1,4 +1,4 @@
-import type { ErrorBody } from './types'
+import type { ErrorBody, ErrorCode } from './types'
 
 // The client turns every failure into an ApiError: HTTP errors carry the
 // server's {error, code, fields} (design §4.8); a dropped connection becomes
@@ -38,19 +38,23 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError
 }
 
-const codeByStatus: Record<number, ClientErrorCode> = {
+// The code a status implies when the body is not the JSON contract (a
+// proxy's or WAF's HTML page, a pre-v1 plain-text handler). Typed against
+// the generated ErrorCode, so a code the server never sends cannot appear.
+// 409 'conflict', not 'stale': a stale If-Match always carries a JSON body.
+const codeByStatus: Partial<Record<number, ErrorCode>> = {
   400: 'invalid',
   401: 'unauthorized',
-  403: 'forbidden_path',
+  403: 'forbidden',
   404: 'not_found',
   409: 'conflict',
-  412: 'stale',
   422: 'invalid',
   429: 'rate_limited',
 }
 
 const messageByCode: Partial<Record<ClientErrorCode, string>> = {
   unauthorized: 'Your session has ended. Sign in to continue.',
+  forbidden: 'The request was refused.',
   not_found: 'That item no longer exists.',
   conflict: 'That conflicts with something that already exists.',
   stale: 'This changed since you opened it.',

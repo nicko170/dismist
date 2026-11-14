@@ -33,6 +33,16 @@ describe('toApiError', () => {
     expect((await toApiError(new Response('', { status: 401 }))).message).toMatch(/session has ended/)
   })
 
+  it('maps a non-JSON 403 to forbidden, never to an expert-patch code', async () => {
+    const error = await toApiError(new Response('<html><h1>403 Forbidden</h1></html>', { status: 403 }))
+    expect(error.code).toBe('forbidden')
+    expect(error.message).toBe('The request was refused.')
+  })
+
+  it('has no fallback code for statuses the server never sends', async () => {
+    expect((await toApiError(new Response('<html>Precondition Failed</html>', { status: 412 }))).code).toBe('invalid')
+  })
+
   it('reads Retry-After on 429', async () => {
     const error = await toApiError(json(429, { error: 'Slow down.', code: 'rate_limited' }, { 'Retry-After': '30' }))
     expect(error.retryAfter).toBe(30)
