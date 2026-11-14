@@ -484,3 +484,91 @@ func planPower(p *planner, apID string) int {
 	}
 	return power
 }
+
+// InitialWithScans is the phase-3 initial assignment (design §3.10
+// "Triggers"): for every Auto band without a valid plan, the channel of
+// least cost by the planner's cost function with no change penalty,
+// holding every other AP fixed. Without any scan data it is Initial.
+func InitialWithScans(in Inputs) []Assignment {
+	anyScan := false
+	for _, scan := range in.Scans {
+		for _, band := range scan.Bands {
+			anyScan = anyScan || len(band.Neighbours) > 0 || len(band.Channels) > 0
+		}
+	}
+	if !anyScan {
+		return Initial(in.Site, in.APs, in.Now)
+	}
+	domain, ok := Domain(in.Site)
+	if !ok || !in.Site.RF.Managed {
+		return nil
+	}
+	aps := append([]model.APRecord(nil), in.APs...)
+	sort.Slice(aps, func(i, j int) bool { return aps[i].ID < aps[j].ID })
+	var result []Assignment
+	for _, band := range Bands {
+		p := &planner{in: in, domain: domain, band: band, ownerOf: map[string]string{},
+			edges: map[string]map[string]int{}, chosen: map[string]int{}, widths: map[string]int{}, current: map[string]int{}}
+		for apID, bssids := range in.OwnBSSIDs {
+			for _, bssid := range bssids {
+				p.ownerOf[strings.ToLower(bssid)] = apID
+			}
+		}
+		var pending []model.APRecord
+		for _, ap := range aps {
+			if !Enabled(in.Site, ap, band) {
+				continue
+			}
+			p.widths[ap.ID] = Width(in.Site, ap, band)
+			if static := Static(ap, band); static != 0 {
+				p.chosen[ap.ID] = static
+				continue
+			}
+			if plan, ok := ap.RFPlan[band]; ok && ValidPlan(in.Site, ap, band, plan) {
+				p.chosen[ap.ID] = plan.Channel
+				continue
+			}
+			pending = append(pending, ap)
+		}
+		for _, ap := range aps {
+			for _, neighbour := range p.neighbours(ap.ID) {
+				owner := p.ownerOf[strings.ToLower(neighbour.BSSID)]
+				if owner == "" || owner == ap.ID {
+					continue
+				}
+				for _, pair := range [][2]string{{ap.ID, owner}, {owner, ap.ID}} {
+					if p.edges[pair[0]] == nil {
+						p.edges[pair[0]] = map[string]int{}
+					}
+					if existing, ok := p.edges[pair[0]][pair[1]]; !ok || neighbour.RSSI > existing {
+						p.edges[pair[0]][pair[1]] = neighbour.RSSI
+					}
+				}
+			}
+		}
+		for _, ap := range pending {
+			best, bestCost := 0, 0.0
+			for _, channel := range AllowedChannels(in.Site, band, p.widths[ap.ID]) {
+				c := p.cost(ap.ID, channel, false)
+				if best == 0 || c < bestCost-1e-9 {
+					best, bestCost = channel, c
+				}
+			}
+			if best == 0 {
+				continue
+			}
+			p.chosen[ap.ID] = best
+			plan := model.PlannedRadio{Channel: best, Width: p.widths[ap.ID], PowerDBm: planPower(p, ap.ID),
+				Source: model.PlanSourceInitial, Reason: "initial assignment (lowest cost)", PlannedAt: in.Now.UTC()}
+			plan.DFSFallback = dfsFallback(in.Site, band, p.widths[ap.ID], best, func(c int) float64 { return p.cost(ap.ID, c, false) })
+			result = append(result, Assignment{APID: ap.ID, Band: band, Plan: plan})
+		}
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].APID != result[j].APID {
+			return result[i].APID < result[j].APID
+		}
+		return result[i].Band < result[j].Band
+	})
+	return result
+}

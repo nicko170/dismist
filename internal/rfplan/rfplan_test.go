@@ -232,3 +232,25 @@ func TestApplyWritesPlans(t *testing.T) {
 		t.Fatalf("valid plans re-assigned: %+v", got)
 	}
 }
+
+func TestInitialWithScansAvoidsHeardAPs(t *testing.T) {
+	site := managedSite()
+	placed := model.APRecord{ID: "a", RFPlan: map[string]model.PlannedRadio{"2.4": {Channel: 1, Width: 20, PowerDBm: 15}, "5": {Channel: 36, Width: 80, PowerDBm: 20}}}
+	joining := model.APRecord{ID: "b"}
+	scans := map[string]model.APScan{"b": scanWith("site", "2.4",
+		model.ScanNeighbour{BSSID: "02:aa:00:00:00:a1", Channel: 1, RSSI: -45},
+		model.ScanNeighbour{BSSID: "02:bb:00:00:00:01", Channel: 6, RSSI: -50})}
+	got := InitialWithScans(Inputs{Site: site, APs: []model.APRecord{placed, joining}, Scans: scans,
+		OwnBSSIDs: map[string][]string{"a": {"02:aa:00:00:00:a1"}}, Now: at})
+	for _, a := range got {
+		if a.APID != "b" {
+			t.Fatalf("moved %s", a.APID)
+		}
+		if a.Band == "2.4" && a.Plan.Channel != 11 {
+			t.Fatalf("2.4 GHz %+v", a.Plan)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("assignments %+v", got)
+	}
+}
