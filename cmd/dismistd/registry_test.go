@@ -238,7 +238,17 @@ func TestCompileFailureServesDeliveredBytesOverTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	delivered, found, err := store.APConfig().Delivered("02-aa-00-00-00-51")
+	// The delivery is recorded after the reply is written, so the AP can
+	// see its config a moment before the store commit lands.
+	var delivered model.DeliveredConfig
+	var found bool
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		delivered, found, err = store.APConfig().Delivered("02-aa-00-00-00-51")
+		if err != nil || found || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if err != nil || !found || !bytes.Equal(delivered.Bytes, first) || delivered.Revision != 2 || delivered.Timestamp != 1794475905 || delivered.At.IsZero() {
 		t.Fatalf("delivery not recorded: %+v %t %v", delivered, found, err)
 	}
