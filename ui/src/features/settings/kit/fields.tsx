@@ -127,8 +127,22 @@ export type OptionState = {
   lockReason: string | null
 }
 
-function isUnset(value: unknown, fallback: unknown) {
-  return value === null || value === undefined || value === '' || deepEqual(value, fallback) || (Array.isArray(value) && value.length === 0)
+/**
+ * Whether an option holds nothing worth showing: empty, its default, false,
+ * an object switched off ({enabled: false, …}) or one whose every leaf is
+ * empty. Experimental options that are unset stay hidden on sites without
+ * experimental options (§4.2).
+ */
+export function isUnset(value: unknown, fallback: unknown): boolean {
+  if (value === null || value === undefined || value === '' || value === false) return true
+  if (fallback !== null && fallback !== undefined && deepEqual(value, fallback)) return true
+  if (Array.isArray(value)) return value.every((v) => isUnset(v, undefined))
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    if (record.enabled === false) return true
+    return Object.values(record).every((v) => isUnset(v, undefined))
+  }
+  return false
 }
 
 export function useOptionState(key: string, options: { disabled?: boolean; value?: unknown } = {}): OptionState {

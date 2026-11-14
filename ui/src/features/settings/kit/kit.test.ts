@@ -143,3 +143,18 @@ describe('validators', () => {
     expect(isTimeRange('8-5')).toBe(false)
   })
 })
+
+describe('experimental visibility', () => {
+  it('treats empty, default and switched-off values as unset', async () => {
+    const { isUnset } = await import('./fields')
+    expect(isUnset(null, null)).toBe(true)
+    expect(isUnset('none', 'none')).toBe(true)
+    expect(isUnset(false, null)).toBe(true)
+    expect(isUnset({ wlan_up: null, wlan_down: '' }, null)).toBe(true)
+    expect(isUnset({ enabled: false, type: 'standard', vlan_ids: '30' }, null)).toBe(true)
+    expect(isUnset({ enabled: false, private: false, keys: [] }, null)).toBe(true)
+    expect(isUnset({ b24: -70, b5: null }, null)).toBe(false)
+    expect(isUnset({ enabled: true }, null)).toBe(false)
+    expect(isUnset('voice', 'none')).toBe(false)
+  })
+})

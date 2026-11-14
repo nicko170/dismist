@@ -320,7 +320,7 @@ const ap: OptionMeta[] = [
   opt('ap', 'name', 'Name', 'text', 'string', { min: 1, max: 64, firmwarePaths: ['Name', 'Hostname'] }),
   opt('ap', 'site_id', 'Site', 'select', 'string', { disruption: 'all_radios_bounce', help: 'Moving the AP replaces its WLANs with the new site’s.' }),
   opt('ap', 'management_ip', 'Pinned source IP', 'ip', 'string', { default: '', help: 'Only accept this AP from this address. Leave empty to accept it from anywhere, for example behind NAT.' }),
-  opt('ap', 'secret', 'AP secret', 'secret_file', 'string', { secret: true, help: 'The AP’s 32-byte EEPROM secret. `dismist ap33 onboard` uploads it for you.' }),
+  opt('ap', 'secret', 'AP secret', 'secret_file', 'string', { secret: true, help: 'The AP’s 32-byte EEPROM secret. The dismist ap33 onboard command uploads it for you.' }),
   opt('ap', 'led_brightness', 'LED brightness', 'slider', 'int', { min: 0, max: 255, firmwarePaths: ['LED.Brightness'] }),
   opt('ap', 'ssh_enabled', 'SSH access', 'segmented', 'bool', { ...adv, enum: [value('inherit', 'Inherit'), value('on', 'On'), value('off', 'Off')], firmwarePaths: ['SSH.Disabled', 'SSH.External'] }),
   opt('ap', 'management', 'Management network', 'management', 'object', { ...exp, phase: 3, disruption: 'stranding_risk', firmwarePaths: ['SVIs[]', 'DNS', 'NTP'] }),

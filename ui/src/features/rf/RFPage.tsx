@@ -116,9 +116,7 @@ function RFContent({ siteId, view }: { siteId: string; view: RFProfileView }) {
           <BandCard band="2.4" view={view} />
           <BandCard band="5" view={view} />
         </div>
-        <Section id="site-radio" title="Scanning radio" collapsible defaultOpen={false} summary="Neighbour and utilisation scans">
-          <OptionField k="site.rf.scanning_radio" />
-        </Section>
+        <ScanningRadioSection />
       </ConfigForm>
 
       <section aria-labelledby="plan-heading" className="grid gap-3">
@@ -144,6 +142,17 @@ function RFContent({ siteId, view }: { siteId: string; view: RFProfileView }) {
       </section>
       {planOpen ? <PlanDialog siteId={siteId} onClose={() => setPlanOpen(false)} /> : null}
     </>
+  )
+}
+
+/** Site-wide scanning radio (experimental): hidden with the option on sites without experimental options. */
+function ScanningRadioSection() {
+  const state = useOptionState('site.rf.scanning_radio')
+  if (state.hidden) return null
+  return (
+    <Section id="site-radio" title="Scanning radio" badges={state.badges} collapsible defaultOpen={false} summary="Neighbour and utilisation scans">
+      <OptionField k="site.rf.scanning_radio" />
+    </Section>
   )
 }
 
@@ -277,7 +286,7 @@ function BandCard({ band, view }: { band: Band; view: RFProfileView }) {
       {band === '5' ? <OptionField k="site.rf.band_5.dfs" /> : null}
       <ChannelsField band={band} valid={valid} width={width} dfs={dfs} />
       <PowerField band={band} />
-      <Section id={`${key}-advanced`} title={advancedTitle} collapsible defaultOpen={false} className="border-dashed bg-transparent" summary="Preamble, airtime fairness, TWT, antennas">
+      <Section id={`${key}-advanced`} title={advancedTitle} collapsible defaultOpen={false} className="border-dashed bg-transparent" summary={band === '2.4' ? 'Preamble, airtime fairness, TWT, antennas' : 'DFS fallback, airtime fairness, TWT, antennas'}>
         {band === '2.4' ? <OptionField k="site.rf.band_24.preamble" /> : <FallbackField width={width} valid={valid} />}
         <OptionField k={`site.rf.${key}.advanced.taf`} />
         <OptionField k={`site.rf.${key}.advanced.twt`} />
