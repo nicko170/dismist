@@ -244,7 +244,8 @@ bands (within the last full frame).
 
 **P1.4 Monitoring.** The Prometheus target is up, fewer than 1,000 series,
 the three Grafana dashboards render the production AP. Alert rules stay off
-on au-syd-0 until the alert-routing question (Q14) is answered.
+in the production cluster until the alert-routing question (Q14) is
+answered.
 
 **P1.5 Second AP joins Home.** There is no Lab site: the second AP is
 onboarded straight into Home with the CLI from a laptop on the LAN.
