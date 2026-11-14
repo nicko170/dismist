@@ -201,13 +201,21 @@ answers as soon as the UI listener is up. The startup probe allows 5 minutes
 (`probes.startupFailureThreshold` × 5 s), enough for a database migration on
 first start. The readiness probe uses `GET /readyz`, which answers 200 once
 the database reads and writes, the AP WSS listener is bound and any
-migration has finished; until then the AP Service sends APs nowhere. Neither
-probe tests AP authentication, so check AP connections in the UI after a
-change.
+migration has finished; until then the AP Service sends APs nowhere. The
+database write behind `/readyz` runs at most every 10 seconds, and the probe
+times out after `probes.readinessTimeoutSeconds` (5). Neither probe tests AP
+authentication, so check AP connections in the UI after a change.
 
 The root filesystem is read-only. An `emptyDir` at `/tmp`
 (`backup.tmpSizeLimit`, 1 GiB by default) holds the copy of the database a
-backup download streams from; keep it larger than `controller.db`.
+backup download streams from; keep it larger than `controller.db`. dismistd
+gets the limit as `-backup-tmp-max` and refuses (507) a download that would
+not fit, because going over it evicts the pod.
+
+Scheduled snapshots go to `/state/backups` on the database volume:
+`backup.interval` (`24h`; `""` turns them off), `backup.keep` (7) and
+`backup.maxBytes` (`""`: 30 % of the volume). `apFeatures` lists protocol
+features on by default for every AP (`-ap-features`; empty: all off).
 
 Before upgrades, restores or file-level backups, stop the pod and wait for it
 to exit. Copy the volume only after the process has stopped. Back up the

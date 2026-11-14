@@ -126,6 +126,10 @@ expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].liv
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.volumes[] | select(.name == "tmp") | .emptyDir.sizeLimit' 1Gi
 expect_eq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].volumeMounts[] | select(.name == "tmp") | .mountPath' /tmp
 expect_arg -backup-tmp-max=1Gi
+expect_arg -backup-interval=24h
+expect_arg -backup-keep=7
+expect_no_arg -backup-max-bytes
+expect_no_arg -ap-features
 expect_eq 'select(.kind == "Deployment") | .spec.template.metadata.annotations | has("prometheus.io/scrape")' false
 
 # monitoring.enabled turns on every part.
@@ -224,6 +228,18 @@ expect_arg -metrics-listen=127.0.0.1:9090
 render_fails port-clash "metrics.port must differ" --set privateSecret.name=private --set metrics.port=8088
 render_fails client-mode "metrics.clients must be" --set privateSecret.name=private --set metrics.clients=all
 render_fails tmp-size "backup.tmpSizeLimit must be a whole number" --set privateSecret.name=private --set backup.tmpSizeLimit=1.5Gi
+render_fails backup-interval "backup.interval must be a Go duration" --set privateSecret.name=private --set backup.interval=1d
+render_fails backup-keep "backup.keep must be a whole number" --set privateSecret.name=private --set backup.keep=0
+render_fails backup-max "backup.maxBytes must be a whole number" --set privateSecret.name=private --set backup.maxBytes=lots
+
+# Backup schedule, retention and size, and default protocol features.
+render backup-tuned --set privateSecret.name=private --set backup.interval=12h --set backup.keep=3 --set backup.maxBytes=600Mi --set 'apFeatures={pong2,file_discard}'
+expect_arg -backup-interval=12h
+expect_arg -backup-keep=3
+expect_arg -backup-max-bytes=600Mi
+expect_arg -ap-features=pong2,file_discard
+render backup-off --set privateSecret.name=private --set backup.interval=
+expect_arg -backup-interval=0
 
 # Scrape annotations expose the listener without a Service.
 render annotations --set privateSecret.name=private --set metrics.scrapeAnnotations=true

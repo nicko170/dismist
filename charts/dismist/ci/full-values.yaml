@@ -12,6 +12,13 @@ apService:
 controller:
   uiHost: dismist.example.com
   trustedProxies: [198.51.100.0/24]
+# Every -backup-* flag and -ap-features, so CI checks dismistd defines them.
+backup:
+  interval: 12h
+  keep: 5
+  maxBytes: 600Mi
+  tmpSizeLimit: 2Gi
+apFeatures: [pong2]
 httpRoute:
   enabled: true
   parentRefs: [{name: public, namespace: gateway, sectionName: https-dismist}]

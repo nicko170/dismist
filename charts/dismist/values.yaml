@@ -257,12 +257,24 @@ metrics:
             app.kubernetes.io/name: prometheus
 
 backup:
+  # Scheduled database snapshots into /state/backups on the database volume
+  # (design §4.1): how often (a Go duration; "" or 0 disables them), how
+  # many to keep, and the most bytes all of them may use together ("" = 30 %
+  # of the volume). A snapshot is skipped when it would leave less than a
+  # quarter of the volume free.
+  interval: 24h
+  keep: 7
+  maxBytes: ""
   # Size limit of the /tmp emptyDir where a backup download is staged
   # (GET /api/system/backup copies the database there, then streams it).
   # Keep it above the database size. dismistd gets it as -backup-tmp-max
   # and refuses (507) a download that would not fit, because going over an
   # emptyDir sizeLimit evicts the pod.
   tmpSizeLimit: 1Gi
+
+# Protocol features on by default for every AP (-ap-features, design §5.7),
+# e.g. [pong2]. Each AP's protocol_features override them. Empty: all off.
+apFeatures: []
 
 probes:
   # The startup probe checks /healthz every 5 s; this many failures (60 = 5

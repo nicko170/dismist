@@ -153,6 +153,19 @@ than by the pod at start.
 
 {{/* The -backup-* flags (design §6.4). */}}
 {{- define "dismist.backupArgs" -}}
+{{- $interval := toString (.Values.backup.interval | default "0") }}
+{{- if not (regexMatch `^(([0-9]+(\.[0-9]+)?(h|m|s|ms))+|0)$` $interval) }}
+{{- fail (printf `backup.interval must be a Go duration such as 24h or 12h30m, or "" to disable snapshots, not %q` $interval) }}
+{{- end }}
+- -backup-interval={{ $interval }}
+{{- $keep := .Values.backup.keep }}
+{{- if not (and (or (kindIs "float64" $keep) (kindIs "int64" $keep) (kindIs "int" $keep)) (ge (float64 $keep) 1.0) (eq (float64 $keep) (float64 (int $keep)))) }}
+{{- fail (printf "backup.keep must be a whole number of at least 1, not %v" $keep) }}
+{{- end }}
+- -backup-keep={{ int $keep }}
+{{- with .Values.backup.maxBytes }}
+- -backup-max-bytes={{ include "dismist.byteSize" (list "backup.maxBytes" .) }}
+{{- end }}
 {{- with .Values.backup.tmpSizeLimit }}
 - -backup-tmp-max={{ include "dismist.byteSize" (list "backup.tmpSizeLimit" .) }}
 {{- end }}
