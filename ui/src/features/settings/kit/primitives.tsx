@@ -183,12 +183,6 @@ export function ConfirmDialog({
   onConfirm: () => void
   confirmText?: string
 }) {
-  const [typed, setTyped] = React.useState({ open, value: '' })
-  // A fresh dialog starts empty: the typed text belongs to one opening.
-  const current = typed.open === open ? typed.value : ''
-  const setValue = (value: string) => setTyped({ open, value })
-  const inputId = React.useId()
-  const blocked = Boolean(confirmText) && current.trim() !== confirmText
   return (
     <AD.Root open={open} onOpenChange={onOpenChange}>
       <AD.Portal>
@@ -201,36 +195,57 @@ export function ConfirmDialog({
             </AD.Description>
           </div>
           {children}
-          {confirmText ? (
-            <div className="grid gap-1.5">
-              <label htmlFor={inputId} className="text-sm">
-                Type <span className="font-mono font-medium">{confirmText}</span> to confirm
-              </label>
-              <input
-                id={inputId}
-                className={inputClass}
-                value={current}
-                onChange={(e) => setValue(e.target.value)}
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                autoComplete="off"
-              />
-            </div>
-          ) : null}
-          <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
-            <AD.Cancel className={buttonVariants({ variant: 'outline' })}>{cancel}</AD.Cancel>
-            <button
-              type="button"
-              className={buttonVariants({ variant: destructive ? 'destructive' : 'default' })}
-              disabled={pending || blocked}
-              onClick={onConfirm}
-            >
-              {pending ? 'Working…' : action}
-            </button>
-          </div>
+          {/* The content unmounts when closed, so the typed confirmation starts empty each time. */}
+          <ConfirmActions action={action} cancel={cancel} destructive={destructive} pending={pending} onConfirm={onConfirm} confirmText={confirmText} />
         </AD.Content>
       </AD.Portal>
     </AD.Root>
+  )
+}
+
+function ConfirmActions({
+  action,
+  cancel,
+  destructive,
+  pending,
+  onConfirm,
+  confirmText,
+}: {
+  action: string
+  cancel: string
+  destructive?: boolean
+  pending?: boolean
+  onConfirm: () => void
+  confirmText?: string
+}) {
+  const [typed, setTyped] = React.useState('')
+  const inputId = React.useId()
+  const blocked = Boolean(confirmText) && typed.trim() !== confirmText
+  return (
+    <>
+      {confirmText ? (
+        <div className="grid gap-1.5">
+          <label htmlFor={inputId} className="text-sm">
+            Type <span className="font-mono font-medium">{confirmText}</span> to confirm
+          </label>
+          <input
+            id={inputId}
+            className={inputClass}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </div>
+      ) : null}
+      <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
+        <AD.Cancel className={buttonVariants({ variant: 'outline' })}>{cancel}</AD.Cancel>
+        <button type="button" className={buttonVariants({ variant: destructive ? 'destructive' : 'default' })} disabled={pending || blocked} onClick={onConfirm}>
+          {pending ? 'Working…' : action}
+        </button>
+      </div>
+    </>
   )
 }

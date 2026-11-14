@@ -82,6 +82,17 @@ export type ConfigFormController<V extends FieldValues, TObject> = {
 }
 
 const ACK_PREFIX = 'dismist.experimental-ack:'
+/** The prefix features/auth/drafts.ts stores drafts under (WS-D). */
+const DRAFT_PREFIX = 'dismist.draft:'
+
+function peekDraft<T>(key: string): T | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_PREFIX + key)
+    return raw ? ((JSON.parse(raw) as { value: T }).value ?? null) : null
+  } catch {
+    return null
+  }
+}
 
 function hasAck(key: string) {
   try {
@@ -202,13 +213,15 @@ export function useConfigForm<V extends FieldValues, TObject>(options: UseConfig
   useDirtyRegistration(formKey, dirty && !readOnly)
   useDraft(formKey, () => form.getValues(), dirty && !readOnly)
 
-  const [draft, setDraft] = useState<V | null>(() => takeDraft<V>(formKey))
+  // Peek (not take) in the initializer: StrictMode runs it twice in development.
+  const [draft, setDraft] = useState<V | null>(() => peekDraft<V>(formKey))
   const resolveDraft = useCallback(
     (restore: boolean) => {
+      takeDraft(formKey)
       if (restore && draft) form.reset(draft, { keepDefaultValues: true })
       setDraft(null)
     },
-    [draft, form],
+    [draft, form, formKey],
   )
 
   const [formError, setFormError] = useState<string[]>([])
