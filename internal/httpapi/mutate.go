@@ -119,6 +119,10 @@ func (s *Server) run(m mutation) (outcome, error) {
 	if err != nil {
 		return outcome{}, err
 	}
+	// The store stamps the revision and every record's updated_rev when it
+	// commits, after the change ran: the views (and the next If-Match)
+	// need the committed state.
+	out.state = s.store.Snapshot()
 	pushes := out.applied.Pushes
 	if m.extraPushes != nil {
 		pushes = append(append([]compile.Push(nil), pushes...), *m.extraPushes...)

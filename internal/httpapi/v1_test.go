@@ -122,6 +122,9 @@ func TestPatchAPConcurrencyAndFeatures(t *testing.T) {
 	if !out.Object.ProtocolFeatures["pong2"] || !out.Object.ProtocolFeatures[FeatureAPCmd] {
 		t.Fatalf("features: %+v", out.Object.ProtocolFeatures)
 	}
+	if out.Object.UpdatedRev != f.updatedRev("ap", homeAP) || out.Revision != f.store.Snapshot().Revision {
+		t.Fatalf("response is not the committed record: updated_rev %d, stored %d", out.Object.UpdatedRev, f.updatedRev("ap", homeAP))
+	}
 	if !f.controls[homeAP].Features().Has(controller.FeaturePong2) {
 		t.Fatal("feature not switched on the control session")
 	}
