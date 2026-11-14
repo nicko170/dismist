@@ -98,8 +98,6 @@ type apSample struct {
 	lastSeen                                                      int64
 }
 
-var apLabels = []string{"site", "ap"}
-
 // newDesc creates a family descriptor and records it for Describe.
 func (c *collector) newDesc(name, help string, labels ...string) *prometheus.Desc {
 	desc := prometheus.NewDesc(name, help, labels, nil)
