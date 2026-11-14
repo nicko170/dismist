@@ -84,28 +84,9 @@ func prepareTrustOverlay(stockDir string, controllerCAs []string, endpoint, outp
 		localCA = append(localCA, '\n')
 	}
 
-	urls := cloudURLSetting.FindAllSubmatch(config, -1)
-	if len(urls) == 0 {
-		return errors.New("unexpected stock cloud endpoint")
-	}
-	for _, match := range urls {
-		stockURL := string(match[1])
-		if stockURL != "wss://ep-terminator.mistsys.net/ws" && stockURL != "wss://ep-terminator${FIPS}.mistsys.net/ws" {
-			return errors.New("unexpected stock cloud endpoint")
-		}
-	}
-	if insecureTrueSetting.Match(config) {
-		return errors.New("stock config disables TLS verification")
-	}
-	localConfig, err := configWithRWRootCerts(string(config))
+	localConfig, err := rewriteCloudINI(config, endpoint)
 	if err != nil {
 		return err
-	}
-	if endpoint != "" {
-		localConfig = cloudURLSetting.ReplaceAllStringFunc(localConfig, func(setting string) string {
-			match := cloudURLSetting.FindStringSubmatchIndex(setting)
-			return setting[:match[2]] + endpoint + setting[match[3]:]
-		})
 	}
 	bundle := make([]byte, 0, len(stockCA)+len(localCA)+2)
 	bundle = append(bundle, bytes.TrimRight(stockCA, " \t\r\n")...)
@@ -145,6 +126,46 @@ func prepareTrustOverlay(stockDir string, controllerCAs []string, endpoint, outp
 	success = true
 	return nil
 }
+
+// rewriteCloudINI turns the firmware's stock cloud.ini into the /rw copy:
+// every rootcerts setting points at the /rw bundle and, when endpoint is
+// set, every [[cloud]] url is replaced by it. It refuses a source whose
+// endpoints are not the stock Mist names or that disables TLS verification,
+// so it never builds on a file it does not understand.
+func rewriteCloudINI(config []byte, endpoint string) (string, error) {
+	if endpoint != "" {
+		if err := checkCloudURL(endpoint); err != nil {
+			return "", err
+		}
+	}
+	urls := cloudURLSetting.FindAllSubmatch(config, -1)
+	if len(urls) == 0 {
+		return "", errors.New("unexpected stock cloud endpoint")
+	}
+	for _, match := range urls {
+		stockURL := string(match[1])
+		if stockURL != stockCloudURL && stockURL != "wss://ep-terminator${FIPS}.mistsys.net/ws" {
+			return "", errors.New("unexpected stock cloud endpoint")
+		}
+	}
+	if insecureTrueSetting.Match(config) {
+		return "", errors.New("stock config disables TLS verification")
+	}
+	localConfig, err := configWithRWRootCerts(string(config))
+	if err != nil {
+		return "", err
+	}
+	if endpoint != "" {
+		localConfig = cloudURLSetting.ReplaceAllStringFunc(localConfig, func(setting string) string {
+			match := cloudURLSetting.FindStringSubmatchIndex(setting)
+			return setting[:match[2]] + endpoint + setting[match[3]:]
+		})
+	}
+	return localConfig, nil
+}
+
+// stockCloudURL is the endpoint a non-FIPS AP33 ships with.
+const stockCloudURL = "wss://ep-terminator.mistsys.net/ws"
 
 // checkCloudURL accepts the WSS endpoint an AP can use: wss scheme, a host,
 // no credentials, query or fragment, and nothing that needs TOML escaping.

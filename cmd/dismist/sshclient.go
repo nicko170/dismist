@@ -314,6 +314,19 @@ func (c *apSSH) Close() error {
 	return err
 }
 
+// RemoteIP is the address the SSH connection reached (the AP's LAN
+// address), without the port.
+func (c *apSSH) RemoteIP() string {
+	host, _, err := net.SplitHostPort(c.client.RemoteAddr().String())
+	if err != nil {
+		return ""
+	}
+	return host
+}
+
+// HostKey is the AP's host key as accepted at connect time.
+func (c *apSSH) HostKey() ssh.PublicKey { return c.hostKey }
+
 // HostKeyFingerprint is the SHA256 fingerprint of the AP's host key.
 func (c *apSSH) HostKeyFingerprint() string {
 	if c.hostKey == nil {
@@ -325,9 +338,38 @@ func (c *apSSH) HostKeyFingerprint() string {
 // Run executes command through the AP's shell, bounded by the command
 // timeout and the output limit.
 func (c *apSSH) Run(ctx context.Context, command string) (remoteResult, error) {
-	if c.commandTimeout > 0 {
+	return c.RunInput(ctx, command, nil)
+}
+
+// RunInput is Run with stdin: the command reads input and then EOF. It is
+// how dismist writes files to the AP (`cat > file`), so file contents never
+// appear in a command line or the AP's process list.
+func (c *apSSH) RunInput(ctx context.Context, command string, input []byte) (remoteResult, error) {
+	stdout := &limitedBuffer{limit: c.maxOutput}
+	result, err := c.run(ctx, command, input, stdout, c.commandTimeout)
+	result.Stdout = stdout.Bytes()
+	return result, err
+}
+
+// Stream runs command and copies its stdout to w, up to limit bytes and
+// within timeout: the /rw backup tarball, which may be larger than the
+// buffered output limit and slower than one ordinary command.
+func (c *apSSH) Stream(ctx context.Context, command string, w io.Writer, limit int64, timeout time.Duration) (remoteResult, error) {
+	out := &limitedWriter{w: w, limit: limit}
+	return c.run(ctx, command, nil, out, timeout)
+}
+
+// exceedable is an output sink that can report it hit its limit.
+type exceedable interface {
+	io.Writer
+	hitLimit() bool
+	setOnExceed(func())
+}
+
+func (c *apSSH) run(ctx context.Context, command string, input []byte, stdout exceedable, timeout time.Duration) (remoteResult, error) {
+	if timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, c.commandTimeout)
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 	session, err := c.client.NewSession()
@@ -335,10 +377,13 @@ func (c *apSSH) Run(ctx context.Context, command string) (remoteResult, error) {
 		return remoteResult{}, fmt.Errorf("open SSH session: %w", err)
 	}
 	defer session.Close()
-	stdout := &limitedBuffer{limit: c.maxOutput, onExceed: func() { _ = session.Close() }}
+	stdout.setOnExceed(func() { _ = session.Close() })
 	stderr := &limitedBuffer{limit: 64 << 10, onExceed: func() { _ = session.Close() }}
 	session.Stdout = stdout
 	session.Stderr = stderr
+	if input != nil {
+		session.Stdin = bytes.NewReader(input)
+	}
 	done := make(chan error, 1)
 	go func() { done <- session.Run(command) }()
 	select {
@@ -347,10 +392,10 @@ func (c *apSSH) Run(ctx context.Context, command string) (remoteResult, error) {
 		_ = session.Close()
 		return remoteResult{}, fmt.Errorf("%q: %w", command, ctx.Err())
 	}
-	if stdout.exceeded || stderr.exceeded {
-		return remoteResult{}, fmt.Errorf("%q: output exceeds the %d byte limit", command, c.maxOutput)
+	if stdout.hitLimit() || stderr.exceeded {
+		return remoteResult{}, fmt.Errorf("%q: output exceeds the byte limit", command)
 	}
-	result := remoteResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}
+	result := remoteResult{Stderr: stderr.Bytes()}
 	if err == nil {
 		return result, nil
 	}
@@ -391,6 +436,37 @@ func (b *limitedBuffer) Write(data []byte) (int, error) {
 func (b *limitedBuffer) Bytes() []byte {
 	return b.buf.Bytes()
 }
+
+func (b *limitedBuffer) hitLimit() bool { return b.exceeded }
+
+func (b *limitedBuffer) setOnExceed(fn func()) { b.onExceed = fn }
+
+// limitedWriter passes output through to w until limit bytes, then fails
+// like limitedBuffer. Like limitedBuffer it must not expose ReadFrom.
+type limitedWriter struct {
+	w        io.Writer
+	limit    int64
+	written  int64
+	exceeded bool
+	onExceed func()
+}
+
+func (l *limitedWriter) Write(data []byte) (int, error) {
+	if l.written+int64(len(data)) > l.limit {
+		if !l.exceeded && l.onExceed != nil {
+			l.onExceed()
+		}
+		l.exceeded = true
+		return 0, fmt.Errorf("command output exceeds %d bytes", l.limit)
+	}
+	n, err := l.w.Write(data)
+	l.written += int64(n)
+	return n, err
+}
+
+func (l *limitedWriter) hitLimit() bool { return l.exceeded }
+
+func (l *limitedWriter) setOnExceed(fn func()) { l.onExceed = fn }
 
 // shellQuote quotes value for a POSIX shell.
 func shellQuote(value string) string {
