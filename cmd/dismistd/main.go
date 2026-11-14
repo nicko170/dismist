@@ -184,7 +184,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	uiHandler, err := operatorHandler(*adminTokenFile, httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock))
+	uiHandler, err := operatorHandler(*adminTokenFile, httpapi.NewWithManager(store, manager, base, *apID, advertisedIP, *uiHost).UseMutationLock(mutationLock), store.Tokens())
 	if err != nil {
 		log.Fatalf("initialize administrator access: %v", err)
 	}

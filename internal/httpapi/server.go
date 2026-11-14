@@ -12,9 +12,11 @@ import (
 	"time"
 
 	webassets "github.com/nicko170/dismist"
+	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
 	"github.com/nicko170/dismist/internal/proxytrust"
+	"github.com/nicko170/dismist/internal/webgate"
 )
 
 type Server struct {
@@ -30,6 +32,7 @@ type Server struct {
 	streamHeartbeat time.Duration
 	streamMaxAge    time.Duration
 	mutationLock    *sync.Mutex
+	tokens          TokenManager
 }
 
 func New(store model.StateStore, control *controller.Server, base []byte, apID string, allowedHosts ...string) *Server {
@@ -43,12 +46,16 @@ func New(store model.StateStore, control *controller.Server, base []byte, apID s
 			hosts[strings.ToLower(strings.TrimSuffix(host, "."))] = true
 		}
 	}
-	return &Server{
+	server := &Server{
 		store: store, control: control, base: append([]byte(nil), base...),
 		apID: apID, web: web, assets: http.FileServer(http.FS(web)), hosts: hosts,
 		streamInterval: time.Second, streamHeartbeat: 15 * time.Second, streamMaxAge: 30 * time.Minute,
 		mutationLock: new(sync.Mutex),
 	}
+	if withTokens, ok := store.(interface{ Tokens() *model.TokenStore }); ok {
+		server.tokens = withTokens.Tokens()
+	}
+	return server
 }
 
 // UseMutationLock coordinates API writes with AP registry activation. Call it
@@ -80,7 +87,13 @@ func (s *Server) controlFor(apID string) *controller.Server {
 
 func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	if !s.allowedHost(request.Host) || !s.allowedOrigin(request) {
+	// Bearer-token requests skip the origin check: browsers never attach a
+	// bearer token on their own, so there is no CSRF exposure (§4.8).
+	viaToken := false
+	if p, ok := webgate.PrincipalFrom(request.Context()); ok && p.Via == api.AuthViaToken {
+		viaToken = true
+	}
+	if !s.allowedHost(request.Host) || (!viaToken && !s.allowedOrigin(request)) {
 		writeAPIError(writer, forbidden("this host or origin is not allowed; use the controller's own address"))
 		return
 	}
@@ -89,6 +102,8 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		defer s.mutationLock.Unlock()
 	}
 	switch {
+	case request.URL.Path == "/api/system/tokens" || strings.HasPrefix(request.URL.Path, "/api/system/tokens/"):
+		s.systemTokens(writer, request)
 	case request.URL.Path == "/api/aps" && request.Method == http.MethodGet:
 		state := s.store.Snapshot()
 		aps := make([]map[string]any, 0, len(state.APs))
