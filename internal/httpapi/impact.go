@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -373,13 +371,4 @@ func (s *Server) pushMode(ap model.APRecord, obs apObs) api.PushMode {
 		return api.PushModeNotify
 	}
 	return api.PushModeReconnect
-}
-
-// sameBytes compares JSON documents ignoring formatting.
-func sameBytes(a, b []byte) bool {
-	var x, y any
-	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
-		return bytes.Equal(a, b)
-	}
-	return sameJSON(x, y)
 }

@@ -57,12 +57,11 @@ func (s *Server) lastKnown(apID string) (lastKnown, bool) {
 
 // apContext is everything the AP views read, gathered once per request.
 type apContext struct {
-	state      model.State
-	pending    []controller.PendingAP
-	delivered  func(apID string) (model.DeliveredConfig, bool)
-	now        time.Time
-	hashKey    []byte
-	withHashes bool
+	state     model.State
+	pending   []controller.PendingAP
+	delivered func(apID string) (model.DeliveredConfig, bool)
+	now       time.Time
+	hashKey   []byte
 }
 
 func (s *Server) apContext(state model.State) apContext {

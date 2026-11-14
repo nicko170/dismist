@@ -774,3 +774,37 @@ func TestStreamV2Deltas(t *testing.T) {
 		t.Fatalf("push: %s", data)
 	}
 }
+
+func TestReconnectPushIsReportedOncePerStream(t *testing.T) {
+	f := newV1Fixture(t)
+	recorder := httptest.NewRecorder()
+	reported := map[string]uint64{}
+	f.server.pushes.track(homeAP, 5, time.Now())
+	live := api.APLive{ID: homeAP, ConfigRevision: 5, AppliedRevision: 4}
+	if err := f.server.reportPush(recorder, recorder, live, reported); err != nil || recorder.Body.Len() != 0 {
+		t.Fatalf("reported before applied: %q", recorder.Body.String())
+	}
+	live.AppliedRevision = 5
+	if err := f.server.reportPush(recorder, recorder, live, reported); err != nil || !strings.Contains(recorder.Body.String(), `"state":"applied"`) {
+		t.Fatalf("applied: %q", recorder.Body.String())
+	}
+	size := recorder.Body.Len()
+	_ = f.server.reportPush(recorder, recorder, live, reported)
+	if recorder.Body.Len() != size {
+		t.Fatal("reported twice")
+	}
+	f.server.pushes.track(homeAP, 6, time.Now())
+	live = api.APLive{ID: homeAP, ConfigRevision: 6, AppliedRevision: 5, LastError: "bad config"}
+	_ = f.server.reportPush(recorder, recorder, live, reported)
+	if !strings.Contains(recorder.Body.String(), `"state":"rejected"`) || !strings.Contains(recorder.Body.String(), "bad config") {
+		t.Fatalf("rejected: %q", recorder.Body.String())
+	}
+	f.server.pushes.track(otherAP, 2, time.Now().Add(-10*time.Minute))
+	_ = f.server.reportPush(recorder, recorder, api.APLive{ID: otherAP, ConfigRevision: 2}, reported)
+	if !strings.Contains(recorder.Body.String(), `"state":"timeout"`) {
+		t.Fatalf("timeout: %q", recorder.Body.String())
+	}
+	if material(api.APLive{ClientCount: 1}) == material(api.APLive{ClientCount: 2}) || material(api.APLive{UptimeSeconds: 1}) != material(api.APLive{UptimeSeconds: 2}) {
+		t.Fatal("material fields")
+	}
+}

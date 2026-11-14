@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -453,5 +452,3 @@ func (s *Server) putClientMeta(writer http.ResponseWriter, request *http.Request
 	}
 	respond(writer, http.StatusOK, meta)
 }
-
-var errNoClient = errors.New("no client")

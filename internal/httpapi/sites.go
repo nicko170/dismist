@@ -596,9 +596,7 @@ func (s *Server) parseSitePatch(state model.State, site model.Site, patch map[st
 	if keys := experimentalKeys(s.registry(), changed); len(keys) > 0 && !experimental {
 		return edit, experimentalDisabled(keys)
 	}
-	keys := make([]string, 0, len(typed))
 	for key := range typed {
-		keys = append(keys, key)
 		if key != "ssh" && key != "rf" {
 			edit.parts = append(edit.parts, key+" changed")
 		} else if key == "rf" {

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"time"
@@ -130,9 +129,6 @@ func liveRecent(ap model.APRecord, activities []controller.ClientActivity) []con
 }
 
 func (s *Server) legacySiteClients(writer http.ResponseWriter, state model.State, siteID string) {
-	type siteClient struct {
-		json.RawMessage
-	}
 	clients := make([]map[string]any, 0)
 	recent := make([]map[string]any, 0)
 	for _, ap := range siteAPs(state, siteID) {
@@ -411,5 +407,3 @@ func legacyFingerprint(site model.Site, aps []model.APRecord, networks []model.N
 	}
 	return sha256.Sum256(raw), nil
 }
-
-var errLegacy = errors.New("legacy")

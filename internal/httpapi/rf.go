@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/nicko170/dismist/internal/api"
 	"github.com/nicko170/dismist/internal/model"
@@ -551,5 +550,3 @@ func (s *Server) neighbours(writer http.ResponseWriter, request *http.Request, p
 	sort.SliceStable(page.Neighbours, func(i, j int) bool { return page.Neighbours[i].RSSI > page.Neighbours[j].RSSI })
 	respond(writer, http.StatusOK, page)
 }
-
-var _ = time.Second

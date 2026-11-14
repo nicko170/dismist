@@ -54,18 +54,6 @@ type outcome struct {
 	dryRun   bool
 }
 
-// applyChange runs a config mutation on one site's state. See run.
-func (s *Server) applyChange(siteID string, change func(*model.State) error) error {
-	_, err := s.run(mutation{sites: []string{siteID}, change: func(state *model.State, _ *model.Tx) error { return change(state) }})
-	return err
-}
-
-// mutate is the phase-0 entry point (no dry run, no history).
-func (s *Server) mutate(sites []string, change func(*model.State, *model.Tx) error) (compile.Applied, error) {
-	out, err := s.run(mutation{sites: sites, change: change})
-	return out.applied, err
-}
-
 // run executes a mutation (design §4.4 "Change detection"): inside one
 // store transaction it edits state, compiles every AP of the affected
 // sites, bumps only the APs whose config changed, appends the history
