@@ -43,7 +43,7 @@ func main() {
 	keyPath := flag.String("tls-key", "data/tls.key", "AP WSS TLS private key path")
 	tlsCheck := flag.Duration("tls-check-interval", time.Minute, "how often to check -tls-cert/-tls-key for a renewed certificate; the daemon exits with status 75 to be restarted with it (0 disables)")
 	uiListen := flag.String("ui-listen", "0.0.0.0:8088", "LAN UI and API listen address")
-	metricsListen := flag.String("metrics-listen", "127.0.0.1:9090", "loopback-only Prometheus metrics listen address (empty disables)")
+	metricsFlags := registerMetricsFlags(flag.CommandLine)
 	uiHost := flag.String("ui-host", "", "optional DNS hostname allowed for the UI and API")
 	trustedProxies := flag.String("trusted-proxies", "", "comma-separated CIDRs of reverse proxies whose X-Forwarded-Proto the UI trusts (loopback is always trusted)")
 	adminTokenFile := flag.String("admin-token-file", "data/admin.token", "private administrator token file (created if missing)")
@@ -256,7 +256,7 @@ func main() {
 		Version: builtVersion, Commit: builtCommit, StartedAt: startedAt, Ready: ready.Ready,
 		APURL: *apURL, WSSListen: listener.Addr().String(), Chain: certificate.Certificate, ExtraCAs: apCAs,
 		TrustedProxies: splitList(*trustedProxies), DBPath: *dbPath,
-		Metrics:   systemMetricsView(*metricsListen),
+		Metrics:   systemMetricsView(metricsFlags),
 		Backups:   backupScheduler,
 		Migration: func() api.MigrationView { return migrationView(store) },
 	})
@@ -266,22 +266,11 @@ func main() {
 	}
 	startup.SetApp(uiHandler)
 	log.Printf("UI API listening on %s", uiListener.Addr())
-	var metricsServer *http.Server
-	if *metricsListen != "" {
-		metricsListener, err := metricsListener(*metricsListen)
-		if err != nil {
-			log.Fatalf("start metrics listener: %v", err)
-		}
-		metricsServer = &http.Server{
-			Handler: metrics.New(store, manager), ReadHeaderTimeout: 10 * time.Second,
-		}
-		go func() {
-			err := metricsServer.Serve(metricsListener)
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				log.Printf("metrics listener stopped: %v", err)
-			}
-		}()
-		log.Printf("Prometheus metrics listening on %s", metricsListener.Addr())
+	metricsServer, err := startMetrics(metricsFlags, metrics.Options{
+		Store: store, Manager: manager, StoreSchema: storeSchema(store), CompileStatus: compileStatus(manager),
+	})
+	if err != nil {
+		log.Fatalf("start metrics listener: %v", err)
 	}
 	backupCtx, stopBackups := context.WithCancel(context.Background())
 	backupsDone := make(chan struct{})

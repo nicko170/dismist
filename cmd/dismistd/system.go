@@ -126,9 +126,8 @@ func splitList(value string) []string {
 	return result
 }
 
-// systemMetricsView describes the metrics listener for the System page.
-// The listener is loopback only and serves IDs only (no names, aggregate
-// client series).
-func systemMetricsView(listen string) api.MetricsView {
-	return api.MetricsView{Listen: listen, Remote: false, Names: false, Clients: api.MetricsClientsAggregate}
+// systemMetricsView describes the metrics listener (the -metrics-* flags)
+// for the System page.
+func systemMetricsView(c *metricsConfig) api.MetricsView {
+	return api.MetricsView{Listen: c.listen, Remote: c.allowRemote, Names: c.names, Clients: api.MetricsClients(c.clients)}
 }
