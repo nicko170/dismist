@@ -79,3 +79,14 @@ type AuthSessionView struct {
 	UserAgent string     `json:"user_agent"`
 	Current   bool       `json:"current"`
 }
+
+// AuthSessionList is GET /api/system/sessions (phase 1).
+type AuthSessionList struct {
+	Sessions []AuthSessionView `json:"sessions"`
+}
+
+// RevokedSessions is DELETE /api/system/sessions/$id and POST
+// /api/system/sessions/revoke-all.
+type RevokedSessions struct {
+	Revoked int `json:"revoked"`
+}

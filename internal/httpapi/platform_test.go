@@ -16,7 +16,6 @@ import (
 	"github.com/nicko170/dismist/internal/controller"
 	"github.com/nicko170/dismist/internal/model"
 	"github.com/nicko170/dismist/internal/proxytrust"
-	"github.com/nicko170/dismist/internal/telemetry"
 )
 
 func platformFixture(t *testing.T) (*Server, *model.BoltStore, *controller.Server) {
@@ -88,16 +87,6 @@ func TestSiteClientInventoryAndAPCountAreExplicitlyEmpty(t *testing.T) {
 	response = request(t, handler, http.MethodGet, "/api/aps", "")
 	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte(`"client_count":0`)) {
 		t.Fatalf("AP count missing: %d %s", response.Code, response.Body.String())
-	}
-}
-
-func TestSiteClientEntryIncludesAPIdentity(t *testing.T) {
-	raw, err := json.Marshal(siteClient{Client: telemetry.Client{MAC: "02:aa:00:00:00:06"}, APID: "ap-a", APName: "Office AP"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Contains(raw, []byte(`"ap_id":"ap-a"`)) || !bytes.Contains(raw, []byte(`"ap_name":"Office AP"`)) {
-		t.Fatalf("site client lacks AP identity: %s", raw)
 	}
 }
 
@@ -202,17 +191,16 @@ func TestSiteCreationRejectsInvalidMetadata(t *testing.T) {
 func TestMovedAPLiveSnapshotExcludesPreviousSiteData(t *testing.T) {
 	movedAt := time.Now().UTC()
 	ap := model.APRecord{ConfigUpdatedAt: movedAt}
-	old := controller.TelemetrySnapshot{LastFull: movedAt.Add(-time.Minute),
-		Events: []controller.ConnectionEvent{{When: movedAt.Add(-time.Minute), Title: "old"}, {When: movedAt.Add(time.Second), Title: "new"}}}
-	if liveTelemetry(ap, controller.Status{Connected: true}, old).LastFull.IsZero() == false {
+	old := apObs{status: obsStatus{Connected: true}, telemetry: obsTelemetry{LastFull: movedAt.Add(-time.Minute)}}
+	if old.fresh(ap.ConfigUpdatedAt) {
 		t.Fatal("old telemetry remained visible")
 	}
-	events := liveEvents(ap, old.Events)
+	events := liveEvents(ap, []controller.ConnectionEvent{{When: movedAt.Add(-time.Minute), Title: "old"}, {When: movedAt.Add(time.Second), Title: "new"}})
 	if len(events) != 1 || events[0].Title != "new" {
 		t.Fatalf("old site event leaked: %+v", events)
 	}
-	old.LastFull = movedAt.Add(time.Second)
-	if liveTelemetry(ap, controller.Status{Connected: true}, old).LastFull.IsZero() {
+	old.telemetry.LastFull = movedAt.Add(time.Second)
+	if !old.fresh(ap.ConfigUpdatedAt) {
 		t.Fatal("new telemetry hidden")
 	}
 }
@@ -220,15 +208,13 @@ func TestMovedAPLiveSnapshotExcludesPreviousSiteData(t *testing.T) {
 func TestLiveSnapshotWaitsForTelemetryAfterAPReconnect(t *testing.T) {
 	now := time.Now().UTC()
 	ap := model.APRecord{ConfigUpdatedAt: now.Add(-time.Hour)}
-	status := controller.Status{Connected: true, ConnectedAt: now}
-	previous := controller.TelemetrySnapshot{LastFast: now.Add(-time.Minute),
-		AssociatedClients: []telemetry.Client{{MAC: "02:aa:00:00:00:02"}}}
-	if got := liveTelemetry(ap, status, previous); len(got.AssociatedClients) != 0 {
-		t.Fatalf("old client remained live after reconnect: %+v", got.AssociatedClients)
+	previous := apObs{status: obsStatus{Connected: true, ConnectedAt: now}, telemetry: obsTelemetry{LastFast: now.Add(-time.Minute)}}
+	if previous.fresh(ap.ConfigUpdatedAt) {
+		t.Fatal("old client remained live after reconnect")
 	}
-	previous.LastFast = now.Add(time.Second)
-	if got := liveTelemetry(ap, status, previous); len(got.AssociatedClients) != 1 {
-		t.Fatalf("fresh client telemetry was hidden: %+v", got.AssociatedClients)
+	previous.telemetry.LastFast = now.Add(time.Second)
+	if !previous.fresh(ap.ConfigUpdatedAt) {
+		t.Fatal("fresh client telemetry was hidden")
 	}
 }
 
@@ -375,11 +361,8 @@ func TestAPInventoryUsesControllerIPAndLiveFirmwarePreference(t *testing.T) {
 	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte(`"management_ip":"127.0.0.1"`)) {
 		t.Fatalf("legacy AP controller IP missing: %d %s", response.Code, response.Body.String())
 	}
-	if got := preferredFirmware("stored-firmware", controller.Status{Firmware: "live-firmware"}); got != "live-firmware" {
+	if got := firstNonEmpty("live-firmware", "stored-firmware"); got != "live-firmware" {
 		t.Fatalf("stale firmware won: %q", got)
-	}
-	if got := preferredFirmware("stored-firmware", controller.Status{}); got != "stored-firmware" {
-		t.Fatalf("stored fallback lost: %q", got)
 	}
 }
 

@@ -10,15 +10,19 @@ import (
 	"strings"
 )
 
-// The two web apps (design §2.4). The legacy app (web/dist) answers at /
-// with its assets under /assets/. The v1 app (ui/dist) is one build with
-// base '/' and every asset under /_ui/; its router picks the basepath at
-// runtime, so in phases 0 and 1 it is served at /next/. serveUI picks the
-// app by path prefix, never by guessing from an asset name.
+// The web apps (design §2.4, from M1). The v1 app (ui/dist) is the
+// default: every client-side route gets its index.html and its assets live
+// under /_ui/. /next and /next/* redirect (301) to the same path without
+// the prefix, so shared phase-0 links keep working. The legacy app
+// (web/dist) is served at /legacy/ until the release that deletes it; its
+// build references /assets/ (base '/') or /legacy/assets/ (base
+// '/legacy/'), and both are served. serveUI picks the app by path prefix,
+// never by guessing from an asset name.
 const (
-	nextPrefix  = "/next"
-	nextAssets  = "/_ui"
-	immutableCC = "public, max-age=31536000, immutable"
+	nextPrefix   = "/next"
+	nextAssets   = "/_ui"
+	legacyPrefix = "/legacy"
+	immutableCC  = "public, max-age=31536000, immutable"
 )
 
 // hashedName matches Vite's content-hashed file names (name-HASH.ext).
@@ -31,29 +35,34 @@ func (s *Server) UseNextUI(files fs.FS) *Server {
 	return s
 }
 
-// serveUI serves the embedded single-page apps for GET and HEAD:
-//   - /_ui/* are the v1 app's files: hashed ones may be cached for good,
-//     the rest (icons, manifest) are revalidated;
-//   - /next and /next/* are the v1 app's client-side routes: its
-//     index.html, revalidated on every load (Cache-Control: no-cache);
-//   - everything else is the legacy app as before: real files as-is
-//     (hashed /assets/ files cached for good), and any path without a file
-//     extension gets its index.html so deep links and reloads work.
-//
-// A missing file with an extension is a 404.
+// serveUI serves the embedded single-page apps for GET and HEAD. A missing
+// file with an extension is a 404.
 func (s *Server) serveUI(writer http.ResponseWriter, request *http.Request) {
 	clean := path.Clean("/" + request.URL.Path)
 	switch {
 	case clean == nextAssets || strings.HasPrefix(clean, nextAssets+"/"):
 		s.serveNextAsset(writer, request, strings.TrimPrefix(clean, "/"))
 	case clean == nextPrefix || strings.HasPrefix(clean, nextPrefix+"/"):
+		target := strings.TrimPrefix(clean, nextPrefix)
+		if target == "" {
+			target = "/"
+		}
+		if request.URL.RawQuery != "" {
+			target += "?" + request.URL.RawQuery
+		}
+		http.Redirect(writer, request, target, http.StatusMovedPermanently)
+	case s.legacyUI && clean == legacyPrefix && !strings.HasSuffix(request.URL.Path, "/"):
+		http.Redirect(writer, request, legacyPrefix+"/", http.StatusMovedPermanently)
+	case s.legacyUI && (clean == legacyPrefix || strings.HasPrefix(clean, legacyPrefix+"/")):
+		s.serveLegacy(writer, request, strings.TrimPrefix(strings.TrimPrefix(clean, legacyPrefix), "/"))
+	case s.legacyUI && strings.HasPrefix(clean, "/assets/"):
+		s.serveLegacy(writer, request, strings.TrimPrefix(clean, "/"))
+	default:
 		if path.Ext(clean) != "" {
 			routeNotFound(writer)
 			return
 		}
 		s.serveNextIndex(writer, request)
-	default:
-		s.serveLegacy(writer, request, strings.TrimPrefix(clean, "/"))
 	}
 }
 
@@ -158,7 +167,7 @@ func (s *Server) serveLegacy(writer http.ResponseWriter, request *http.Request, 
 			if strings.HasPrefix(name, "assets/") {
 				writer.Header().Set("Cache-Control", immutableCC)
 			}
-			s.assets.ServeHTTP(writer, request)
+			http.ServeFileFS(writer, request, s.web, name)
 			return
 		}
 		if path.Ext(name) != "" {
@@ -166,5 +175,15 @@ func (s *Server) serveLegacy(writer http.ResponseWriter, request *http.Request, 
 			return
 		}
 	}
-	http.ServeFileFS(writer, request, s.web, "index.html")
+	raw, err := fs.ReadFile(s.web, "index.html")
+	if err != nil {
+		routeNotFound(writer)
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-cache")
+	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	writer.WriteHeader(http.StatusOK)
+	if request.Method != http.MethodHead {
+		_, _ = writer.Write(raw)
+	}
 }

@@ -40,6 +40,7 @@ func TestSiteStreamEmitsInitialAndSiteChangeWithoutSecrets(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/sites/a/stream", nil)
+	request.Header.Set("Referer", server.URL+"/legacy/")
 	response, err := server.Client().Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +128,9 @@ func TestSiteStreamHeartbeatAndMaximumAge(t *testing.T) {
 	defer server.Close()
 	client := server.Client()
 	client.Timeout = time.Second
-	response, err := client.Get(server.URL + "/api/sites/a/stream")
+	streamRequest, _ := http.NewRequest(http.MethodGet, server.URL+"/api/sites/a/stream", nil)
+	streamRequest.Header.Set("Referer", server.URL+"/legacy/")
+	response, err := client.Do(streamRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,18 +150,18 @@ func TestSiteStreamHeartbeatAndMaximumAge(t *testing.T) {
 
 func TestStreamFingerprintTracksCountersAndMinuteBoundary(t *testing.T) {
 	at := time.Now().UTC().Truncate(time.Minute)
-	base, err := streamFingerprint(model.Site{ID: "a"}, nil, nil, nil,
-		[]streamAP{{ID: "ap-a", FullFrames: 6, FastFrames: 204}}, at.Unix()/60)
+	base, err := legacyFingerprint(model.Site{ID: "a"}, nil, nil, nil,
+		[]legacyStreamAP{{ID: "ap-a", FullFrames: 6, FastFrames: 204}}, at.Unix()/60)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedCounter, err := streamFingerprint(model.Site{ID: "a"}, nil, nil, nil,
-		[]streamAP{{ID: "ap-a", FullFrames: 6, FastFrames: 205}}, at.Unix()/60)
+	changedCounter, err := legacyFingerprint(model.Site{ID: "a"}, nil, nil, nil,
+		[]legacyStreamAP{{ID: "ap-a", FullFrames: 6, FastFrames: 205}}, at.Unix()/60)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedMinute, err := streamFingerprint(model.Site{ID: "a"}, nil, nil, nil,
-		[]streamAP{{ID: "ap-a", FullFrames: 6, FastFrames: 204}}, at.Add(time.Minute).Unix()/60)
+	changedMinute, err := legacyFingerprint(model.Site{ID: "a"}, nil, nil, nil,
+		[]legacyStreamAP{{ID: "ap-a", FullFrames: 6, FastFrames: 204}}, at.Add(time.Minute).Unix()/60)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,14 +180,14 @@ func TestSiteStreamFingerprintIgnoresOtherSiteEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := time.Unix(1794475905, 0).UTC()
-	_, first, found, err := handler.siteStreamSnapshot("a", at)
+	_, first, found, err := handler.legacyStreamSnapshot("a", at)
 	if err != nil || !found {
 		t.Fatalf("initial fingerprint: %v", err)
 	}
 	if err := store.Update(func(state *model.State) error { state.Sites[1].Name = "Other site changed"; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	_, second, found, err := handler.siteStreamSnapshot("a", at)
+	_, second, found, err := handler.legacyStreamSnapshot("a", at)
 	if err != nil || !found || first != second {
 		t.Fatalf("other site changed site A stream: found=%v err=%v", found, err)
 	}

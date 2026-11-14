@@ -44,10 +44,14 @@ func apiFixture(t *testing.T, allowedHosts ...string) (http.Handler, *model.Stor
 	return New(store, control, base, "ap-1", allowedHosts...), store, control
 }
 
+// request calls the API as the legacy app does (its Referer is the page at
+// /legacy/), so these phase-0 tests check the shapes it still reads. v1
+// tests use v1request.
 func request(t *testing.T, handler http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Host = "127.0.0.1:8088"
+	req.Header.Set("Referer", "http://127.0.0.1:8088/legacy/")
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -75,7 +79,7 @@ func TestListsRedactPasswordsAndSecretFiles(t *testing.T) {
 
 func TestServesEmbeddedReactEntry(t *testing.T) {
 	handler, _, _ := apiFixture(t)
-	response := request(t, handler, http.MethodGet, "/", "")
+	response := request(t, handler, http.MethodGet, "/legacy/", "")
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "<div id=\"root\"></div>") {
 		t.Fatalf("React entry missing: %d %s", response.Code, response.Body.String())
 	}
@@ -327,7 +331,7 @@ func TestSiteAdvancedPatchIsAppliedAndPreviewRedactsSecrets(t *testing.T) {
 
 func TestServesSPAForClientRoutesOnly(t *testing.T) {
 	handler, _, _ := apiFixture(t)
-	for _, route := range []string{"/sites/lab/aps/ap-1", "/settings", "/sites/lab/wlans?tab=clients"} {
+	for _, route := range []string{"/legacy/sites/lab/aps/ap-1", "/legacy/settings", "/legacy/sites/lab/wlans?tab=clients"} {
 		response := request(t, handler, http.MethodGet, route, "")
 		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "<div id=\"root\"></div>") {
 			t.Fatalf("deep link %s did not load the app: %d", route, response.Code)

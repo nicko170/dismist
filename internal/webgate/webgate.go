@@ -112,6 +112,10 @@ type Principal struct {
 	TokenName string
 	// Expires is the session expiry (Via "session").
 	Expires time.Time
+	// SessionKey is the stored key of the session (model.SessionKey of the
+	// cookie value; Via "session"). It is the ID /api/system/sessions
+	// lists, never the cookie itself.
+	SessionKey string
 }
 
 // Admin reports whether the principal may write and read admin-only
@@ -139,6 +143,16 @@ func PrincipalFrom(ctx context.Context) (Principal, bool) {
 	return p, ok
 }
 
+// SessionStore persists web sessions so they survive restarts (design
+// §4.1 sessions, phase 1). model.SessionStore implements it.
+type SessionStore interface {
+	Put(key string, record model.SessionRecord) error
+	Get(key string, now time.Time) (model.SessionRecord, error)
+	Touch(key string, lastUsed, expires time.Time) error
+	Delete(key string) error
+	DeleteExpired(now time.Time) (int, error)
+}
+
 // Gate protects the operator API: a session cookie from /auth/login with the
 // administrator token, or an API bearer token (design §4.8). Static UI
 // files pass through so the login page can load.
@@ -151,6 +165,9 @@ type Gate struct {
 	sessions  map[string]time.Time
 	touched   map[string]time.Time // token ID -> last Touch call
 	logins    *loginLimiter
+	store     SessionStore
+	// sessionTouched records the last Touch per session key.
+	sessionTouched map[string]time.Time
 }
 
 // New protects the operator API while allowing the static login UI to load.
@@ -161,8 +178,15 @@ func New(token string, next http.Handler) *Gate {
 	return &Gate{
 		next: next, tokenHash: sha256.Sum256([]byte(token)), now: time.Now,
 		sessions: make(map[string]time.Time), touched: make(map[string]time.Time),
-		logins: newLoginLimiter(),
+		logins: newLoginLimiter(), sessionTouched: make(map[string]time.Time),
 	}
+}
+
+// WithSessions persists sessions in store instead of memory, so a pod
+// restart does not sign everyone out.
+func (g *Gate) WithSessions(store SessionStore) *Gate {
+	g.store = store
+	return g
 }
 
 // WithTokens enables API bearer tokens checked by verifier.
@@ -247,8 +271,8 @@ func (g *Gate) authenticate(request *http.Request) (Principal, authStatus) {
 		g.touch(record.ID)
 		return Principal{Via: api.AuthViaToken, Scope: api.TokenScope(record.Scope), TokenID: record.ID, TokenName: record.Name}, authOK
 	}
-	if expires, ok := g.session(request); ok {
-		return Principal{Via: api.AuthViaSession, Scope: api.TokenScopeAdmin, Expires: expires}, authOK
+	if expires, key, ok := g.session(request); ok {
+		return Principal{Via: api.AuthViaSession, Scope: api.TokenScopeAdmin, Expires: expires, SessionKey: key}, authOK
 	}
 	return Principal{}, authNone
 }
@@ -324,14 +348,27 @@ func (g *Gate) login(writer http.ResponseWriter, request *http.Request) {
 	}
 	id := hex.EncodeToString(random[:])
 	now := g.now()
-	g.mu.Lock()
-	for value, expiry := range g.sessions {
-		if !expiry.After(now) {
-			delete(g.sessions, value)
+	if g.store != nil {
+		if _, err := g.store.DeleteExpired(now); err != nil {
+			log.Printf("prune expired sessions: %v", err)
 		}
+		record := model.SessionRecord{Created: now.UTC(), Expires: now.Add(sessionTTL).UTC(), LastUsed: now.UTC(),
+			UserAgent: truncate(request.UserAgent(), 200), Remote: proxytrust.ClientAddr(request).String()}
+		if err := g.store.Put(model.SessionKey(id), record); err != nil {
+			log.Printf("store session: %v", err)
+			writeError(writer, http.StatusInternalServerError, api.ErrorCodeInternal, "cannot create session", nil)
+			return
+		}
+	} else {
+		g.mu.Lock()
+		for value, expiry := range g.sessions {
+			if !expiry.After(now) {
+				delete(g.sessions, value)
+			}
+		}
+		g.sessions[id] = now.Add(sessionTTL)
+		g.mu.Unlock()
 	}
-	g.sessions[id] = now.Add(sessionTTL)
-	g.mu.Unlock()
 	http.SetCookie(writer, &http.Cookie{
 		Name: cookieName, Value: id, Path: "/", MaxAge: int(sessionTTL.Seconds()),
 		HttpOnly: true, Secure: secureRequest(request), SameSite: http.SameSiteStrictMode,
@@ -345,6 +382,11 @@ func (g *Gate) logout(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if cookie, err := request.Cookie(cookieName); err == nil {
+		if g.store != nil {
+			if err := g.store.Delete(model.SessionKey(cookie.Value)); err != nil && !errors.Is(err, model.ErrNotFound) {
+				log.Printf("delete session: %v", err)
+			}
+		}
 		g.mu.Lock()
 		delete(g.sessions, cookie.Value)
 		g.mu.Unlock()
@@ -356,23 +398,55 @@ func (g *Gate) logout(writer http.ResponseWriter, request *http.Request) {
 	writeJSON(writer, http.StatusOK, map[string]bool{"authenticated": false})
 }
 
-// session returns the expiry of the request's session cookie, if valid.
-func (g *Gate) session(request *http.Request) (time.Time, bool) {
+// session returns the expiry and stored key of the request's session
+// cookie, if valid.
+func (g *Gate) session(request *http.Request) (time.Time, string, bool) {
 	cookie, err := request.Cookie(cookieName)
 	if err != nil || len(cookie.Value) != 64 {
-		return time.Time{}, false
+		return time.Time{}, "", false
+	}
+	key := model.SessionKey(cookie.Value)
+	now := g.now()
+	if g.store != nil {
+		record, err := g.store.Get(key, now)
+		if err != nil {
+			if !errors.Is(err, model.ErrNotFound) {
+				log.Printf("read session: %v", err)
+			}
+			return time.Time{}, "", false
+		}
+		g.mu.Lock()
+		last, seen := g.sessionTouched[key]
+		touch := !seen || now.Sub(last) >= time.Minute
+		if touch {
+			g.sessionTouched[key] = now
+		}
+		g.mu.Unlock()
+		if touch {
+			if err := g.store.Touch(key, now, time.Time{}); err != nil && !errors.Is(err, model.ErrNotFound) {
+				log.Printf("touch session: %v", err)
+			}
+		}
+		return record.Expires, key, true
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	expiry, ok := g.sessions[cookie.Value]
 	if !ok {
-		return time.Time{}, false
+		return time.Time{}, "", false
 	}
-	if !expiry.After(g.now()) {
+	if !expiry.After(now) {
 		delete(g.sessions, cookie.Value)
-		return time.Time{}, false
+		return time.Time{}, "", false
 	}
-	return expiry, true
+	return expiry, key, true
+}
+
+func truncate(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit]
 }
 
 func isWrite(method string) bool {

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"bytes"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
@@ -96,16 +95,9 @@ type backupStore interface {
 	WriteBackup(path string) (int64, error)
 }
 
-// systemResource serves /api/system and /api/system/backup.
-func (s *Server) systemResource(writer http.ResponseWriter, request *http.Request) {
-	switch {
-	case request.URL.Path == "/api/system" && request.Method == http.MethodGet:
-		respond(writer, http.StatusOK, s.systemView())
-	case request.URL.Path == "/api/system/backup" && request.Method == http.MethodGet:
-		s.downloadBackup(writer, request)
-	default:
-		routeNotFound(writer)
-	}
+// systemHandler serves GET /api/system.
+func (s *Server) systemHandler(writer http.ResponseWriter, _ *http.Request, _ params) {
+	respond(writer, http.StatusOK, s.systemView())
 }
 
 func (s *Server) systemView() api.SystemView {
@@ -163,9 +155,7 @@ func (s *Server) systemView() api.SystemView {
 		view.Backup = info.Backups.Status()
 		view.Backup.PreMigration = preMigration
 	}
-	if info.Migration != nil {
-		view.Migration = info.Migration()
-	}
+	view.Migration = s.migrationView()
 	return view
 }
 
@@ -224,29 +214,6 @@ func (s *Server) connectedAPs() int {
 		count++
 	}
 	return count
-}
-
-// onboarding serves GET /api/onboarding (design §3.15): what an AP needs to
-// reach this controller.
-func (s *Server) onboarding(writer http.ResponseWriter, request *http.Request) {
-	if request.URL.Path != "/api/onboarding" || request.Method != http.MethodGet {
-		routeNotFound(writer)
-		return
-	}
-	view := api.OnboardingView{WSSURL: s.system.wssURL(), DNSMode: s.system.DNSMode(), CAPems: []api.CAPem{}}
-	for _, ca := range s.caCertificates() {
-		name := ca.Subject.CommonName
-		if name == "" {
-			name = ca.Subject.String()
-		}
-		view.CAPems = append(view.CAPems, api.CAPem{Name: name, PEM: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.Raw}))})
-	}
-	if ini, err := RenderCloudINI(view.WSSURL); err == nil {
-		view.CloudINI = ini
-	} else {
-		log.Printf("onboarding: cannot render cloud.ini for %q: %v", view.WSSURL, err)
-	}
-	respond(writer, http.StatusOK, view)
 }
 
 // RWRootCerts is the CA bundle path cloud.ini points at: the stock bundle
@@ -315,7 +282,7 @@ func CheckAPURL(raw string) error {
 // database is copied with tx.WriteTo into a private temporary file first
 // and only then streamed, so no bbolt read transaction is open while a slow
 // client downloads. One download runs at a time; admin scope only.
-func (s *Server) downloadBackup(writer http.ResponseWriter, request *http.Request) {
+func (s *Server) downloadBackup(writer http.ResponseWriter, request *http.Request, _ params) {
 	if !requireAdmin(writer, request) {
 		return
 	}
