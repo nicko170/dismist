@@ -196,8 +196,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           go build -o "$RUNNER_TEMP/bin/dismistd" ./cmd/dismistd
           echo "DISMISTD_BIN=$RUNNER_TEMP/bin/dismistd" >>"$GITHUB_ENV"
-          if [ -d tools/fakeap ]; then
-            go build -o "$RUNNER_TEMP/bin/fakeap" ./tools/fakeap
+          # ./tools/fakeap is the library; the command is cmd/fakeap
+          # (building a library with -o writes an archive and exits 0).
+          if [ -d tools/fakeap/cmd/fakeap ]; then
+            go build -o "$RUNNER_TEMP/bin/fakeap" ./tools/fakeap/cmd/fakeap
+            usage=$("$RUNNER_TEMP/bin/fakeap" -h 2>&1 || true)
+            grep -q -- '-url' <<<"$usage" || { echo "::error::fakeap does not run: $usage"; exit 1; }
             echo "FAKEAP_BIN=$RUNNER_TEMP/bin/fakeap" >>"$GITHUB_ENV"
           fi
 
