@@ -517,7 +517,9 @@ func TestTypedChangeDetection(t *testing.T) {
 	}
 }
 
-type memDesired struct{ m map[string]model.DesiredConfig }
+type memDesired struct {
+	m map[string]model.DesiredConfig
+}
 
 func (d *memDesired) Desired(id string) (model.DesiredConfig, bool, error) {
 	v, ok := d.m[id]
