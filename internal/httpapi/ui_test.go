@@ -7,13 +7,22 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	webassets "github.com/nicko170/dismist"
 )
 
+// TestServesNextAppFromEmbeddedStub serves whatever ui/dist holds: the
+// committed stub in the go job, the real build where the UI is built first
+// (release workflow, image, local builds).
 func TestServesNextAppFromEmbeddedStub(t *testing.T) {
 	handler, _, _ := apiFixture(t)
+	embedded, err := fs.ReadFile(webassets.UIAssets, "ui/dist/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, target := range []string{"/next", "/next/", "/next/sites/a/aps", "/next/onboard/register?step=verify"} {
 		response := request(t, handler, http.MethodGet, target, "")
-		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "npm run build") {
+		if response.Code != http.StatusOK || response.Body.String() != string(embedded) {
 			t.Fatalf("%s: %d %q", target, response.Code, response.Body.String())
 		}
 		if got := response.Header().Get("Cache-Control"); got != "no-cache" {
