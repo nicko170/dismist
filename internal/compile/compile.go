@@ -1,7 +1,10 @@
 // Package compile turns stored records into the config JSON an AP runs
-// (design §4.4). In phase 0 compile.AP is exactly the ap-identity compiler
-// (BuildSiteConfig, moved here unchanged); the typed steps, keyed merge,
-// shadowing and validation arrive in phase 2 behind the same signatures.
+// (design §4.4). A schema-1 state (legacy mode) compiles with exactly the
+// ap-identity compiler (BuildSiteConfig); a schema-2 state runs the typed
+// pipeline (pipeline.go): template → site typed → site expert → AP typed
+// → AP expert, WLANs compiled on their own and inserted after, then the
+// protected fields and firmware validation, with the trace and shadow
+// report. State.Schema selects the pipeline.
 //
 // compile.Site adds change detection: which APs' compiled config changed
 // (ignoring Timestamp), so a mutation bumps and pushes only those APs, and

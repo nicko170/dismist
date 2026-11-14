@@ -9,8 +9,8 @@
 // records meta.migration_state {state: "legacy", …} and returns, and
 // dismistd keeps running the legacy compiler.
 //
-// Phase 0 registers no steps; the schema-2 migration (v2.go) arrives in
-// phase 2.
+// Steps registers the schema-2 migration (v2.go); Run also re-runs it when
+// an older binary wrote after it committed (design §4.1 rule 3).
 package migrate
 
 import (
